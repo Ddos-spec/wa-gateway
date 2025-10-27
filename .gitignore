@@ -6,3 +6,4 @@ media/*
 # Environment files
 *.env
 *.env.*
+!backend/.env
