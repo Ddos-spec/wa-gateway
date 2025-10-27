@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import moment from "moment";
@@ -37,25 +37,52 @@ if (env.ALLOWED_ORIGINS.length) {
 }
 
 const allowedOrigins = Array.from(configuredOrigins);
+const defaultOrigin =
+  allowedOrigins[0] ?? "https://ddos-spec.github.io";
+
+const resolveOrigin = (origin?: string | null) => {
+  if (!origin) {
+    return defaultOrigin;
+  }
+
+  if (configuredOrigins.has(origin)) {
+    return origin;
+  }
+
+  if (origin.includes("github.io")) {
+    return origin;
+  }
+
+  return undefined;
+};
+
+const selectOrigin = (origin?: string | null) => resolveOrigin(origin) ?? defaultOrigin;
+
+const applyPreflightHeaders = (c: Context) => {
+  const requestedOrigin = c.req.header("Origin");
+  const allowedOrigin = selectOrigin(requestedOrigin);
+
+  if (allowedOrigin) {
+    c.header("Access-Control-Allow-Origin", allowedOrigin);
+    c.header("Access-Control-Allow-Credentials", "true");
+  }
+
+  c.header(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,DELETE,OPTIONS,PATCH"
+  );
+  c.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type,Authorization,X-Requested-With,Accept"
+  );
+  c.header("Access-Control-Max-Age", "86400");
+  c.header("Vary", "Origin");
+};
 
 app.use(
   "/*",
   cors({
-    origin: (origin) => {
-      if (!origin) {
-        return allowedOrigins;
-      }
-
-      if (configuredOrigins.has(origin)) {
-        return origin;
-      }
-
-      if (origin.includes("github.io")) {
-        return origin;
-      }
-
-      return allowedOrigins;
-    },
+    origin: (origin) => selectOrigin(origin) ?? "",
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
     exposeHeaders: ["Content-Length", "X-Request-Id"],
@@ -63,6 +90,11 @@ app.use(
     credentials: true,
   })
 );
+
+app.options("*", (c) => {
+  applyPreflightHeaders(c);
+  return c.newResponse(null, 204);
+});
 
 app.use(
   "*",
