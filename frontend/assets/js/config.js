@@ -1,33 +1,78 @@
 // API Configuration
-const API_BASE_URL = "https://projek-n8n-wa-gateaway.qk6yxt.easypanel.host";
+const config = {
+  apiUrl: "https://projek-n8n-wa-gateaway.qk6yxt.easypanel.host",
+  endpoints: {
+    login: "/auth/login",
+    register: "/auth/register",
+    sessions: "/session",
+    verify: "/auth/verify",
+    messages: "/message",
+    sendText: "/message/send-text",
+    sendImage: "/message/send-image",
+    sendDocument: "/message/send-document",
+  },
+  timeout: 30000,
+  maxRetries: 3,
+  retryDelay: 1000,
+};
 
-// Helper function to get token
+// Backward compatibility for existing scripts
+const API_BASE_URL = config.apiUrl;
+const API_ENDPOINTS = config.endpoints;
+
 function getToken() {
-    return localStorage.getItem('token');
+  return localStorage.getItem("authToken") ?? localStorage.getItem("token");
 }
 
-// Helper function to check authentication
+function saveToken(token) {
+  localStorage.setItem("authToken", token);
+  localStorage.removeItem("token");
+}
+
+function clearToken() {
+  localStorage.removeItem("authToken");
+  localStorage.removeItem("token");
+}
+
 function checkAuth() {
-    const token = getToken();
-    if (!token) {
-        window.location.href = 'index.html';
-        return false;
-    }
-    return true;
+  const token = getToken();
+  if (!token) {
+    window.location.href = "index.html";
+    return false;
+  }
+  return true;
 }
 
-// Helper function to show toast
 function showToast(type, message) {
-    const toastId = type === 'success' ? 'successToast' : 'errorToast';
-    const messageId = type === 'success' ? 'successMessage' : 'errorMessage';
-    
-    document.getElementById(messageId).textContent = message;
-    const toast = new bootstrap.Toast(document.getElementById(toastId));
+  const toastId = type === "success" ? "successToast" : "errorToast";
+  const messageId = type === "success" ? "successMessage" : "errorMessage";
+
+  const messageElement = document.getElementById(messageId);
+  if (messageElement) {
+    messageElement.textContent = message;
+  }
+
+  const toastElement = document.getElementById(toastId);
+  if (toastElement) {
+    const toast = new bootstrap.Toast(toastElement);
     toast.show();
+  }
 }
 
-// Logout function
 function logout() {
-    localStorage.removeItem('token');
-    window.location.href = 'index.html';
+  clearToken();
+  localStorage.removeItem("username");
+  window.location.href = "index.html";
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    config,
+    getToken,
+    saveToken,
+    clearToken,
+    checkAuth,
+    showToast,
+    logout,
+  };
 }

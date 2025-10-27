@@ -1,32 +1,85 @@
+import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
-import { logger } from "hono/logger";
 import { cors } from "hono/cors";
+import { logger } from "hono/logger";
 import moment from "moment";
+import * as whastapp from "wa-multi-session";
+import { createAuthController } from "./controllers/auth";
+import { createMessageController } from "./controllers/message";
+import { createProfileController } from "./controllers/profile";
+import { createSessionController } from "./controllers/session";
+import { env } from "./env";
 import { globalErrorMiddleware } from "./middlewares/error.middleware";
 import { notFoundMiddleware } from "./middlewares/notfound.middleware";
-import { serve } from "@hono/node-server";
-import { env } from "./env";
-import { createSessionController } from "./controllers/session";
-import * as whastapp from "wa-multi-session";
-import { createMessageController } from "./controllers/message";
 import { CreateWebhookProps } from "./webhooks";
 import { createWebhookMessage } from "./webhooks/message";
 import { createWebhookSession } from "./webhooks/session";
-import { createProfileController } from "./controllers/profile";
-import { serveStatic } from "@hono/node-server/serve-static";
-import { createAuthController } from "./controllers/auth";
 
 const app = new Hono();
 
+const defaultAllowedOrigins = [
+  "https://ddos-spec.github.io",
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:5173",
+];
+
+const configuredOrigins = new Set(defaultAllowedOrigins);
+
+if (env.FRONTEND_URL) {
+  configuredOrigins.add(env.FRONTEND_URL);
+}
+
+if (env.ALLOWED_ORIGINS.length) {
+  env.ALLOWED_ORIGINS.forEach((origin) => configuredOrigins.add(origin));
+}
+
+const allowedOrigins = Array.from(configuredOrigins);
+
 app.use(
-  logger((...params) => {
-    params.map((e) => console.log(`${moment().toISOString()} | ${e}`));
+  "/*",
+  cors({
+    origin: (origin) => {
+      if (!origin) {
+        return allowedOrigins;
+      }
+
+      if (configuredOrigins.has(origin)) {
+        return origin;
+      }
+
+      if (origin.includes("github.io")) {
+        return origin;
+      }
+
+      return allowedOrigins;
+    },
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+    exposeHeaders: ["Content-Length", "X-Request-Id"],
+    maxAge: 86_400,
+    credentials: true,
   })
 );
-app.use(cors());
 
-app.onError(globalErrorMiddleware);
-app.notFound(notFoundMiddleware);
+app.use(
+  "*",
+  logger((...params) => {
+    params.forEach((param) =>
+      console.log(`${moment().toISOString()} | ${param}`)
+    );
+  })
+);
+
+app.get("/", (c) =>
+  c.json({
+    status: "ok",
+    message: "WA Gateway API is running",
+    timestamp: new Date().toISOString(),
+  })
+);
 
 /**
  * serve media message static files
@@ -54,6 +107,9 @@ app.route("/profile", createProfileController());
  * auth routes
  */
 app.route("/auth", createAuthController());
+
+app.notFound(notFoundMiddleware);
+app.onError(globalErrorMiddleware);
 
 const port = env.PORT;
 
