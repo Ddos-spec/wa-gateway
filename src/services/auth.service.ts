@@ -1,4 +1,4 @@
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 import { HTTPException } from "hono/http-exception";
 import jwt from "jsonwebtoken";
 import { env } from "../env";

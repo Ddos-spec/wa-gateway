@@ -30,7 +30,7 @@
     "tsx": "^4.19.2",
     "wa-multi-session": "^3.8.3",
     "zod": "^3.23.8",
-    "bcryptjs": "^2.4.3",
+    "bcrypt": "^5.1.1",
     "jsonwebtoken": "^9.0.2"
   },
   "repository": {
@@ -38,7 +38,11 @@
     "url": "git@github.com:mimamch/wa-gateway.git"
   },
   "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^22.10.1",
-    "@types/qrcode": "^1.5.5"
+    "@types/pg": "^8.10.9",
+    "@types/qrcode": "^1.5.5",
+    "typescript": "^5.3.3"
   }
 }
