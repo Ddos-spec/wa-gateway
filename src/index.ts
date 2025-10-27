@@ -14,6 +14,7 @@ import { createWebhookMessage } from "./webhooks/message";
 import { createWebhookSession } from "./webhooks/session";
 import { createProfileController } from "./controllers/profile";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { createAuthController } from "./controllers/auth";
 
 const app = new Hono();
 
@@ -49,6 +50,10 @@ app.route("/message", createMessageController());
  * profile routes
  */
 app.route("/profile", createProfileController());
+/**
+ * auth routes
+ */
+app.route("/auth", createAuthController());
 
 const port = env.PORT;
 
