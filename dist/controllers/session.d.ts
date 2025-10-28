@@ -1,3 +1,2 @@
-import { Hono } from "hono";
-export declare const createSessionController: () => Hono<import("hono/types").BlankEnv, import("hono/types").BlankSchema, "/">;
+export declare const createSessionController: () => void;
 //# sourceMappingURL=session.d.ts.map

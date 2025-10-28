@@ -15,6 +15,7 @@ import { notFoundMiddleware } from "./middlewares/notfound.middleware.js";
 import { CreateWebhookProps } from "./webhooks/index.js";
 import { createWebhookMessage } from "./webhooks/message.js";
 import { createWebhookSession } from "./webhooks/session.js";
+import { query } from "./lib/postgres.js";
 
 const app = new Hono();
 
@@ -159,8 +160,19 @@ serve(
   }
 );
 
-whastapp.onConnected((session) => {
+whastapp.onConnected(async (session) => {
   console.log(`session: '${session}' connected`);
+  await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
+});
+
+whastapp.onDisconnected(async (session) => {
+  console.log(`session: '${session}' disconnected`);
+  await query("UPDATE sessions SET status = 'offline' WHERE session_name = $1", [session]);
+});
+
+whastapp.onConnecting(async (session) => {
+  console.log(`session: '${session}' connecting`);
+  await query("UPDATE sessions SET status = 'connecting' WHERE session_name = $1", [session]);
 });
 
 // Implement Webhook
@@ -175,16 +187,19 @@ if (env.WEBHOOK_BASE_URL) {
   // session webhook
   const webhookSession = createWebhookSession(webhookProps);
 
-  whastapp.onConnected((session) => {
+  whastapp.onConnected(async (session) => {
     console.log(`session: '${session}' connected`);
+    await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
     webhookSession({ session, status: "connected" });
   });
-  whastapp.onConnecting((session) => {
+  whastapp.onConnecting(async (session) => {
     console.log(`session: '${session}' connecting`);
+    await query("UPDATE sessions SET status = 'connecting' WHERE session_name = $1", [session]);
     webhookSession({ session, status: "connecting" });
   });
-  whastapp.onDisconnected((session) => {
+  whastapp.onDisconnected(async (session) => {
     console.log(`session: '${session}' disconnected`);
+    await query("UPDATE sessions SET status = 'offline' WHERE session_name = $1", [session]);
     webhookSession({ session, status: "disconnected" });
   });
 }
