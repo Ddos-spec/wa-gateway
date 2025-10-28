@@ -143,7 +143,9 @@ app.route("/profile", createProfileController());
 /**
  * auth routes
  */
+console.log("Registering auth routes...");
 app.route("/auth", createAuthController());
+console.log("Auth routes registered.");
 
 app.notFound(notFoundMiddleware);
 app.onError(globalErrorMiddleware);

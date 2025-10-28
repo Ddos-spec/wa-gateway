@@ -45,7 +45,7 @@ export const authenticateUser = async (
     });
   }
 
-  const isPasswordValid = await bcrypt.compare(password, record.password);
+  const isPasswordValid = await bcrypt.compare(password, record.password_hash);
 
   if (!isPasswordValid) {
     throw new HTTPException(401, {
