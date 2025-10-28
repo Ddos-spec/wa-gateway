@@ -112,5 +112,19 @@ export const createSessionController = () => {
     });
   });
 
+  app.get("/:name/status", createKeyMiddleware(), async (c) => {
+    const name = c.req.param("name");
+    const session = whatsapp.getSession(name);
+
+    if (!session) {
+      throw new HTTPException(404, { message: "Session not found" });
+    }
+
+    return c.json({
+      success: true,
+      status: session.status,
+    });
+  });
+
   return app;
 };

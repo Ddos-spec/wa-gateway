@@ -35,7 +35,7 @@ export const createSessionController = () => {
         });
         if (qr) {
             return c.json({
-                qr: qr,
+                qr: await toDataURL(qr),
             });
         }
         return c.json({

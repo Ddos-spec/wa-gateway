@@ -126,7 +126,43 @@ async function updateSessionStatus(sessionId) {
 }
 
 // Create session
-let createSessionPolling = null;
+function pollSessionStatus(sessionName) {
+    const modal = document.getElementById('addSessionModal');
+    let attempts = 0;
+    const maxAttempts = 40; // 40 attempts * 3 seconds = 2 minutes
+
+    const intervalId = setInterval(async () => {
+        attempts++;
+        if (attempts > maxAttempts) {
+            clearInterval(intervalId);
+            showToast('error', 'Waktu tunggu untuk memindai QR habis.');
+            bootstrap.Modal.getInstance(modal)?.hide();
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/${sessionName}/status`, {
+                headers: { 'Authorization': `Bearer ${getToken()}` }
+            });
+
+            if (!response.ok) return; // Don't stop polling on a single server error
+
+            const data = await response.json();
+
+            if (data.success && (data.status === 'connected' || data.status === 'online')) {
+                clearInterval(intervalId);
+                showToast('success', `Sesi '${sessionName}' berhasil terhubung!`);
+                bootstrap.Modal.getInstance(modal)?.hide();
+                loadSessions(); // Refresh the main list
+            }
+        } catch (error) {
+            console.error('Polling status error:', error);
+        }
+    }, 3000); // Poll every 3 seconds
+
+    // Store interval ID on the modal to clear it if closed manually
+    modal.setAttribute('data-polling-interval-id', intervalId);
+}
 
 async function createSession() {
     const sessionName = document.getElementById('sessionName').value.trim();
@@ -151,7 +187,6 @@ async function createSession() {
         };
 
         const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/start`, fetchOptions);
-
         const data = await response.json();
         
         if (response.ok && data.qr) {
@@ -161,8 +196,12 @@ async function createSession() {
             document.getElementById('qrCodeContainer').classList.remove('d-none');
             document.getElementById('qrCodeImage').src = data.qr;
             createBtn.classList.add('d-none');
+
+            // Start polling for connection status
+            pollSessionStatus(sessionName);
+
         } else {
-            showToast('error', data.error || 'Gagal membuat session');
+            showToast('error', data.message || 'Gagal membuat session');
             createBtn.disabled = false;
             createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Session';
         }
@@ -174,49 +213,6 @@ async function createSession() {
     }
 }
 
-// Poll for QR code
-async function pollQRCode(sessionId) {
-    let attempts = 0;
-    const maxAttempts = 60; // 60 attempts = 5 minutes
-    
-    createSessionPolling = setInterval(async () => {
-        attempts++;
-        
-        if (attempts > maxAttempts) {
-            clearInterval(createSessionPolling);
-            showToast('error', 'Timeout menunggu QR Code');
-            bootstrap.Modal.getInstance(document.getElementById('addSessionModal')).hide();
-            loadSessions();
-            return;
-        }
-        
-        try {
-            const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/${sessionId}/qr`, {
-                headers: {
-                    'Authorization': `Bearer ${getToken()}`
-                }
-            });
-            
-            const data = await response.json();
-            
-            if (response.ok && data.success) {
-                if (data.qr) {
-                    // Show QR code
-                    document.getElementById('qrCodeImage').src = data.qr;
-                } else if (data.status === 'connected' || data.status === 'online') {
-                    // Connected!
-                    clearInterval(createSessionPolling);
-                    showToast('success', 'Session berhasil terhubung!');
-                    bootstrap.Modal.getInstance(document.getElementById('addSessionModal')).hide();
-                    loadSessions();
-                }
-            }
-        } catch (error) {
-            console.error('Poll QR code error:', error);
-        }
-    }, 5000); // Poll every 5 seconds
-}
-
 // Reset modal when closed
 document.getElementById('addSessionModal').addEventListener('hidden.bs.modal', () => {
     document.getElementById('sessionName').value = '';
@@ -224,11 +220,13 @@ document.getElementById('addSessionModal').addEventListener('hidden.bs.modal', (
     document.getElementById('qrCodeImage').src = '';
     document.getElementById('createSessionBtn').classList.remove('d-none');
     document.getElementById('createSessionBtn').disabled = false;
-    document.getElementById('createSessionBtn').innerHTML = '<i class="bi bi-plus-circle"></i> Buat Session';
-    
-    if (createSessionPolling) {
-        clearInterval(createSessionPolling);
+    const pollingIntervalId = modal.getAttribute('data-polling-interval-id');
+    if (pollingIntervalId) {
+        clearInterval(parseInt(pollingIntervalId));
+        modal.removeAttribute('data-polling-interval-id');
     }
+
+    if (createSessionPolling) {
 });
 
 // Load sessions on page load
