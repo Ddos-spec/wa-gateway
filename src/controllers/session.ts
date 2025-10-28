@@ -61,6 +61,25 @@ export const createSessionController = () => {
     }
   );
 
+  // Endpoint to get a specific session by name from the DATABASE
+  app.get("/:name", createKeyMiddleware(), async (c) => {
+    const name = c.req.param("name");
+    try {
+      const result = await query("SELECT * FROM sessions WHERE session_name = $1", [name]);
+      if (result.rows.length === 0) {
+        throw new HTTPException(404, { message: "Session not found in database" });
+      }
+      return c.json({
+        success: true,
+        session: result.rows[0],
+      });
+    } catch (error) {
+      console.error(`Error fetching session ${name}:`, error);
+      if (error instanceof HTTPException) throw error;
+      throw new HTTPException(500, { message: "Failed to get session" });
+    }
+  });
+
   // Endpoint to get a specific session's status from the DATABASE
   app.get("/:name/status", createKeyMiddleware(), async (c) => {
     const name = c.req.param("name");
@@ -80,18 +99,73 @@ export const createSessionController = () => {
     }
   });
 
-  // Endpoint to delete a session
-  app.all("/logout", createKeyMiddleware(), async (c) => {
-    const sessionName = c.req.query().session || (await c.req.json()).session || "";
+  // Endpoint to update webhook by name
+  app.put(
+    "/:name/webhook",
+    createKeyMiddleware(),
+    requestValidator(
+      "json",
+      z.object({
+        webhook_url: z.string().url().optional(),
+        webhook_events: z.array(z.string()).optional(),
+      })
+    ),
+    async (c) => {
+      const name = c.req.param("name");
+      const { webhook_url, webhook_events } = c.req.valid("json");
+      try {
+        const result = await query(
+          "UPDATE sessions SET webhook_url = $1, webhook_events = $2, updated_at = CURRENT_TIMESTAMP WHERE session_name = $3 RETURNING *",
+          [webhook_url, JSON.stringify(webhook_events), name]
+        );
+        if (result.rows.length === 0) {
+          throw new HTTPException(404, { message: "Session not found" });
+        }
+        return c.json({ success: true, session: result.rows[0] });
+      } catch (error) {
+        console.error(`Error updating webhook for ${name}:`, error);
+        if (error instanceof HTTPException) throw error;
+        throw new HTTPException(500, { message: "Failed to update webhook" });
+      }
+    }
+  );
+
+  // Endpoint to regenerate API key by name
+  app.post(
+    "/:name/regenerate-key",
+    createKeyMiddleware(),
+    async (c) => {
+      const name = c.req.param("name");
+      try {
+        const newApiKey = crypto.randomBytes(32).toString('hex');
+        const result = await query(
+          "UPDATE sessions SET api_key = $1, updated_at = CURRENT_TIMESTAMP WHERE session_name = $2 RETURNING *",
+          [newApiKey, name]
+        );
+        if (result.rows.length === 0) {
+          throw new HTTPException(404, { message: "Session not found" });
+        }
+        return c.json({ success: true, api_key: newApiKey });
+      } catch (error) {
+        console.error(`Error regenerating API key for ${name}:`, error);
+        if (error instanceof HTTPException) throw error;
+        throw new HTTPException(500, { message: "Failed to regenerate API key" });
+      }
+    }
+  );
+
+  // Endpoint to delete a session by name
+  app.delete("/:name", createKeyMiddleware(), async (c) => {
+    const sessionName = c.req.param("name");
     try {
       // 1. Delete from the library
       await whatsapp.deleteSession(sessionName);
       // 2. Delete from the DATABASE
       await query("DELETE FROM sessions WHERE session_name = $1", [sessionName]);
-      return c.json({ data: "success" });
+      return c.json({ success: true, message: "Session deleted successfully" });
     } catch (error) {
-      console.error(`Error logging out session ${sessionName}:`, error);
-      throw new HTTPException(500, { message: "Failed to logout session" });
+      console.error(`Error deleting session ${sessionName}:`, error);
+      throw new HTTPException(500, { message: "Failed to delete session" });
     }
   });
 
