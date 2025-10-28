@@ -29,6 +29,3 @@ jobs:
         
       - name: Run build
         run: pnpm run build
-        
-  deploy:
-    needs: build
