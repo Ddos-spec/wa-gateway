@@ -13,8 +13,10 @@ export const createSessionController = () => {
 
   // Endpoint to get all sessions from the DATABASE
   app.get("/", createKeyMiddleware(), async (c) => {
+    console.log("Attempting to fetch all sessions.");
     try {
       const result = await query('SELECT * FROM sessions ORDER BY created_at DESC');
+      console.log("Fetched sessions:", result.rows);
       return c.json({
         data: result.rows,
       });

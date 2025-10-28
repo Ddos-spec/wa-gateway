@@ -12,7 +12,7 @@ let pollingInterval = null;
 // Load sessions
 async function loadSessions() {
     try {
-        const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}`, {
+        const response = await fetch(`${config.apiUrl}${config.endpoints.sessions}`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -20,8 +20,8 @@ async function loadSessions() {
         
         const data = await response.json();
         
-        if (response.ok && data.success) {
-            sessions = data.sessions;
+        if (response.ok && data.data) {
+            sessions = data.data;
             renderSessions();
             startStatusPolling();
         } else {
@@ -94,8 +94,7 @@ async function updateAllStatus() {
 // Update single session status
 async function updateSessionStatus(sessionName) {
     try {
-        const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/${sessionName}/status`, {
-            headers: {
+                    const response = await fetch(`${config.apiUrl}${config.endpoints.sessions}/${sessionName}/status`, {            headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
         });
@@ -140,7 +139,7 @@ function pollSessionStatus(sessionName) {
         }
 
         try {
-            const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/${sessionName}/status`, {
+            await fetch(`${config.apiUrl}${config.endpoints.sessions}/${sessionName}/status`, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
 
@@ -184,7 +183,7 @@ async function createSession() {
             body: JSON.stringify({ session: sessionName })
         };
 
-        const response = await fetch(`${API_BASE_URL}/session/start`, fetchOptions);
+        const response = await fetch(`${config.apiUrl}/session/start`, fetchOptions);
         const data = await response.json();
         
         if (response.ok && data.qr) {

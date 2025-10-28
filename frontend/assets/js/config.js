@@ -1,10 +1,10 @@
 // API Configuration
 const config = {
-  apiUrl: "http://localhost:5000/api",
+  apiUrl: "http://localhost:5001",
   endpoints: {
     login: "/auth/login",
     register: "/auth/register",
-    sessions: "/sessions",
+    sessions: "/session",
     verify: "/auth/verify",
     messages: "/message",
     sendText: "/message/send-text",

@@ -120,6 +120,29 @@ router.post('/:name/regenerate-key', authMiddleware, async (req, res) => {
   }
 });
 
+router.post('/:name/test-message', authMiddleware, async (req, res) => {
+  try {
+    const { name } = req.params;
+    const { phone_number, message } = req.body;
+
+    if (!phone_number || !message) {
+      return res.status(400).json({ success: false, error: 'Phone number and message are required' });
+    }
+
+    // Panggil gateway untuk mengirim pesan
+    await axios.post(`${process.env.WA_GATEWAY_URL}/message/send-text`, {
+      session: name,
+      to: phone_number,
+      text: message
+    });
+
+    res.json({ success: true, message: 'Test message sent successfully' });
+  } catch (error) {
+    console.error('Send test message error:', error);
+    res.status(500).json({ success: false, error: 'Failed to send test message' });
+  }
+});
+
 // DELETE SESSION BY NAME
 router.delete('/:name', authMiddleware, async (req, res) => {
   try {
@@ -131,7 +154,7 @@ router.delete('/:name', authMiddleware, async (req, res) => {
     }
     const result = await pool.query('DELETE FROM sessions WHERE session_name = $1', [name]);
     if (result.rowCount === 0) {
-        return res.status(404).json({ error: 'Session not found' });
+        return res.status(404).json({ success: false, error: 'Session not found' });
     }
     res.json({ success: true, message: 'Session deleted successfully' });
   } catch (error) {

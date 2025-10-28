@@ -101,6 +101,13 @@ app.options("*", (c) => {
   return c.newResponse(null, 204);
 });
 
+/**
+ * auth routes
+ */
+console.log("Registering auth routes...");
+app.route("/auth", createAuthController());
+console.log("Auth routes registered.");
+
 app.use(
   "*",
   logger((...params) => {
@@ -162,20 +169,7 @@ serve(
   }
 );
 
-whastapp.onConnected(async (session) => {
-  console.log(`session: '${session}' connected`);
-  await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
-});
 
-whastapp.onDisconnected(async (session) => {
-  console.log(`session: '${session}' disconnected`);
-  await query("UPDATE sessions SET status = 'offline' WHERE session_name = $1", [session]);
-});
-
-whastapp.onConnecting(async (session) => {
-  console.log(`session: '${session}' connecting`);
-  await query("UPDATE sessions SET status = 'connecting' WHERE session_name = $1", [session]);
-});
 
 // Implement Webhook
 if (env.WEBHOOK_BASE_URL) {
@@ -189,22 +183,78 @@ if (env.WEBHOOK_BASE_URL) {
   // session webhook
   const webhookSession = createWebhookSession(webhookProps);
 
-  whastapp.onConnected(async (session) => {
-    console.log(`session: '${session}' connected`);
-    await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
-    webhookSession({ session, status: "connected" });
-  });
-  whastapp.onConnecting(async (session) => {
-    console.log(`session: '${session}' connecting`);
-    await query("UPDATE sessions SET status = 'connecting' WHERE session_name = $1", [session]);
-    webhookSession({ session, status: "connecting" });
-  });
-  whastapp.onDisconnected(async (session) => {
-    console.log(`session: '${session}' disconnected`);
-    await query("UPDATE sessions SET status = 'offline' WHERE session_name = $1", [session]);
-    webhookSession({ session, status: "disconnected" });
-  });
+  // Logika ini akan dipindahkan ke luar blok if
+  // whastapp.onConnected(async (session) => {
+  //   console.log(`session: '${session}' connected`);
+  //   await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
+  //   webhookSession({ session, status: "connected" });
+  // });
+  // whastapp.onConnecting(async (session) => {
+  //   console.log(`session: '${session}' connecting`);
+  //   await query("UPDATE sessions SET status = 'connecting' WHERE session_name = $1", [session]);
+  //   webhookSession({ session, status: "connecting" });
+  // });
+  // whastapp.onDisconnected(async (session) => {
+  //   console.log(`session: '${session}' disconnected`);
+  //   await query("UPDATE sessions SET status = 'offline' WHERE session_name = $1", [session]);
+  //   webhookSession({ session, status: "disconnected" });
+  // });
 }
 // End Implement Webhook
+
+whastapp.onConnected(async (session) => {
+  console.log(`session: '${session}' connected`);
+  try {
+    const sessionInfo = whastapp.getSession(session);
+    if (sessionInfo && sessionInfo.user) {
+      const profileInfo = await whastapp.getProfileInfo({ sessionId: session, jid: sessionInfo.user.id });
+      const waNumber = sessionInfo.user.id.split('@')[0];
+      const profileName = profileInfo?.name || sessionInfo.user.name || null;
+
+      await query(
+        "UPDATE sessions SET status = 'online', wa_number = $1, profile_name = $2 WHERE session_name = $3",
+        [waNumber, profileName, session]
+      );
+
+      if (env.WEBHOOK_BASE_URL) {
+        const webhookSession = createWebhookSession({ baseUrl: env.WEBHOOK_BASE_URL });
+        webhookSession({ session, status: "connected", waNumber, profileName });
+      }
+    } else {
+      await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
+      if (env.WEBHOOK_BASE_URL) {
+        const webhookSession = createWebhookSession({ baseUrl: env.WEBHOOK_BASE_URL });
+        webhookSession({ session, status: "connected" });
+      }
+    }
+  } catch (error) {
+    console.error(`Error getting profile info for session ${session}:`, error);
+    await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
+    if (env.WEBHOOK_BASE_URL) {
+      const webhookSession = createWebhookSession({ baseUrl: env.WEBHOOK_BASE_URL });
+      webhookSession({ session, status: "connected" });
+    }
+  }
+});
+
+whastapp.onConnecting(async (session) => {
+  console.log(`session: '${session}' connecting`);
+  await query("UPDATE sessions SET status = 'connecting' WHERE session_name = $1", [session]);
+  // Jika webhook diaktifkan, panggil juga webhookSession
+  if (env.WEBHOOK_BASE_URL) {
+    const webhookSession = createWebhookSession({ baseUrl: env.WEBHOOK_BASE_URL });
+    webhookSession({ session, status: "connecting" });
+  }
+});
+
+whastapp.onDisconnected(async (session) => {
+  console.log(`session: '${session}' disconnected`);
+  await query("UPDATE sessions SET status = 'offline' WHERE session_name = $1", [session]);
+  // Jika webhook diaktifkan, panggil juga webhookSession
+  if (env.WEBHOOK_BASE_URL) {
+    const webhookSession = createWebhookSession({ baseUrl: env.WEBHOOK_BASE_URL });
+    webhookSession({ session, status: "disconnected" });
+  }
+});
 
 whastapp.loadSessionsFromStorage();

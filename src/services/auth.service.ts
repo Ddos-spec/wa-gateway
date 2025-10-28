@@ -23,12 +23,12 @@ const mapUser = (record: ConfigRow): AuthenticatedUser => ({
   username: record.username,
   createdAt: (() => {
     const dateValue =
-      record.created_at instanceof Date
-        ? record.created_at
-        : new Date(record.created_at);
+      record.updated_at instanceof Date
+        ? record.updated_at
+        : new Date(record.updated_at);
 
     return Number.isNaN(dateValue.getTime())
-      ? String(record.created_at)
+      ? String(record.updated_at)
       : dateValue.toISOString();
   })(),
 });

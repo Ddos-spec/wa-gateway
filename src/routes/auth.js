@@ -4,7 +4,9 @@ import * as jwt from "jsonwebtoken";
 import { env } from "../env";
 import { authenticateUser } from "../services/auth.service";
 const auth = new Hono();
+console.log("Hono instance 'auth' created in src/routes/auth.js");
 auth.post("/login", async (c) => {
+    console.log("Attempting to handle /auth/login request.");
     try {
         const { username, password } = await c.req.json();
         if (!username || !password) {
@@ -71,4 +73,10 @@ auth.get("/verify", async (c) => {
         return c.json({ message: "Invalid token" }, 401);
     }
 });
-export const createAuthRoutes = () => auth;
+
+console.log("'/verify' route defined on 'auth' instance.");
+
+export const createAuthRoutes = () => {
+    console.log("createAuthRoutes called, returning 'auth' instance.");
+    return auth;
+};

@@ -21,7 +21,7 @@ let qrPolling = null;
 // Load session details
 async function loadSessionDetails() {
     try {
-        const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
+        const response = await fetch(`${config.apiUrl}/api/sessions/${sessionId}`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -29,7 +29,7 @@ async function loadSessionDetails() {
         
         const data = await response.json();
         
-        if (response.ok && data.success) {
+        if (response.ok && data.session) {
             session = data.session;
             renderSessionDetails();
             updateStatus();
@@ -75,13 +75,14 @@ function renderSessionDetails() {
 // Update status
 async function updateStatus() {
     try {
-        const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/status`, {
+        const response = await fetch(`${config.apiUrl}/api/sessions/${sessionId}/status`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
         });
         
         const data = await response.json();
+        console.log('Status update:', data);
         
         if (response.ok && data.success) {
             const statusBadge = document.getElementById('statusBadge');
@@ -90,14 +91,17 @@ async function updateStatus() {
             
             if (data.status === 'online' || data.status === 'connected') {
                 statusBadge.classList.add('bg-success');
-                // Hide QR section if online
                 document.getElementById('qrSection').style.display = 'none';
-            } else if (data.status === 'connecting') {
-                statusBadge.classList.add('bg-warning');
+                if (qrPolling) clearInterval(qrPolling);
             } else {
-                statusBadge.classList.add('bg-danger');
-                // Show QR section if offline
+                statusBadge.classList.remove('bg-success');
                 document.getElementById('qrSection').style.display = 'block';
+                if (data.status === 'connecting') {
+                    statusBadge.classList.add('bg-warning');
+                } else {
+                    statusBadge.classList.add('bg-danger');
+                }
+                checkQRCode();
             }
         }
     } catch (error) {
@@ -119,13 +123,14 @@ function startStatusPolling() {
 // Check QR code
 async function checkQRCode() {
     try {
-        const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/qr`, {
+        const response = await fetch(`${config.apiUrl}/api/sessions/${sessionId}/qr`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
         });
         
         const data = await response.json();
+        console.log('QR code check:', data);
         
         if (response.ok && data.success) {
             const qrContainer = document.getElementById('qrCodeContainer');
@@ -133,10 +138,13 @@ async function checkQRCode() {
             if (data.qr) {
                 qrContainer.innerHTML = `<img src="${data.qr}" alt="QR Code" class="img-fluid" style="max-width: 300px;">`;
                 startQRPolling();
-            } else if (data.status === 'connected' || data.status === 'online') {
-                qrContainer.innerHTML = '<p class="text-success"><i class="bi bi-check-circle"></i> Session sudah terhubung</p>';
             } else {
-                qrContainer.innerHTML = '<p class="text-muted">Klik tombol di bawah untuk generate QR Code</p>';
+                if (qrPolling) clearInterval(qrPolling);
+                if (data.status === 'connected' || data.status === 'online') {
+                    qrContainer.innerHTML = '<p class="text-success"><i class="bi bi-check-circle"></i> Session sudah terhubung</p>';
+                } else {
+                    qrContainer.innerHTML = '<p class="text-muted">Klik tombol di bawah untuk generate QR Code</p><button class="btn btn-primary" onclick="checkQRCode()">Generate QR Code</button>';
+                }
             }
         }
     } catch (error) {
@@ -168,7 +176,7 @@ async function regenerateApiKey() {
     }
     
     try {
-        const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/regenerate-key`, {
+        const response = await fetch(`${config.apiUrl}/session/${sessionId}/regenerate-key`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${getToken()}`
@@ -207,7 +215,7 @@ document.getElementById('webhookForm').addEventListener('submit', async (e) => {
     };
     
     try {
-        const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/webhook`, {
+        const response = await fetch(`${config.apiUrl}/session/${sessionId}/webhook`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -237,7 +245,7 @@ document.getElementById('testMessageForm').addEventListener('submit', async (e) 
     const message = document.getElementById('testMessage').value;
     
     try {
-        const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/test-message`, {
+        const response = await fetch(`${config.apiUrl}/sessions/${sessionId}/test-message`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -268,7 +276,7 @@ async function deleteSession() {
     }
     
     try {
-        const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
+        const response = await fetch(`${config.apiUrl}/sessions/${sessionId}`, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${getToken()}`
