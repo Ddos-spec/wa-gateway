@@ -20,10 +20,9 @@ async function loadSessions() {
         
         const data = await response.json();
         
-        if (response.ok && data.success) {
-            sessions = data.sessions;
+        if (response.ok && data.data) {
+            sessions = data.data;
             renderSessions();
-            // Start polling for status updates
             startStatusPolling();
         } else {
             showToast('error', data.error || 'Gagal memuat sessions');
@@ -37,7 +36,8 @@ async function loadSessions() {
 // Render sessions
 function renderSessions() {
     const container = document.getElementById('sessionsList');
-    
+    if (!container) return;
+
     if (sessions.length === 0) {
         container.innerHTML = `
             <div class="col-12 text-center py-5">
@@ -53,17 +53,17 @@ function renderSessions() {
             <div class="card session-card">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">${session.session_name}</h5>
-                        <span class="badge bg-secondary" id="status-${session.id}">Loading...</span>
+                        <h5 class="mb-0">${session.name || 'Unknown Session'}</h5>
+                        <span class="badge bg-secondary" id="status-${session.name}">Loading...</span>
                     </div>
                     <p class="text-muted mb-2">
-                        <i class="bi bi-person"></i> ${session.profile_name || 'Belum terhubung'}
+                        <i class="bi bi-person"></i> ${session.pushName || 'Belum terhubung'}
                     </p>
                     <p class="text-muted mb-3">
-                        <i class="bi bi-phone"></i> ${session.wa_number || '-'}
+                        <i class="bi bi-phone"></i> ${session.number || '-'}
                     </p>
                     <div class="d-grid gap-2">
-                        <a href="detail.html?id=${session.id}" class="btn btn-primary btn-sm">
+                        <a href="detail.html?session=${session.name}" class="btn btn-primary btn-sm">
                             <i class="bi bi-gear"></i> Detail
                         </a>
                     </div>
@@ -75,38 +75,37 @@ function renderSessions() {
 
 // Start status polling
 function startStatusPolling() {
-    // Clear existing interval
     if (pollingInterval) {
         clearInterval(pollingInterval);
     }
-    
-    // Update status immediately
     updateAllStatus();
-    
-    // Poll every 10 seconds
     pollingInterval = setInterval(updateAllStatus, 10000);
 }
 
 // Update all session status
 async function updateAllStatus() {
     for (const session of sessions) {
-        await updateSessionStatus(session.id);
+        if (session.name) { // Only poll if session has a name
+            await updateSessionStatus(session.name);
+        }
     }
 }
 
 // Update single session status
-async function updateSessionStatus(sessionId) {
+async function updateSessionStatus(sessionName) {
     try {
-        const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/${sessionId}/status`, {
+        const response = await fetch(`${API_BASE_URL}/session/${sessionName}/status`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
         });
         
+        if (!response.ok) return;
+
         const data = await response.json();
         
-        if (response.ok && data.success) {
-            const statusBadge = document.getElementById(`status-${sessionId}`);
+        if (data.success) {
+            const statusBadge = document.getElementById(`status-${sessionName}`);
             if (statusBadge) {
                 statusBadge.textContent = data.status;
                 statusBadge.className = 'badge';
@@ -129,7 +128,7 @@ async function updateSessionStatus(sessionId) {
 function pollSessionStatus(sessionName) {
     const modal = document.getElementById('addSessionModal');
     let attempts = 0;
-    const maxAttempts = 40; // 40 attempts * 3 seconds = 2 minutes
+    const maxAttempts = 40; // 2 minutes
 
     const intervalId = setInterval(async () => {
         attempts++;
@@ -141,11 +140,11 @@ function pollSessionStatus(sessionName) {
         }
 
         try {
-            const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/${sessionName}/status`, {
+            const response = await fetch(`${API_BASE_URL}/session/${sessionName}/status`, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
 
-            if (!response.ok) return; // Don't stop polling on a single server error
+            if (!response.ok) return;
 
             const data = await response.json();
 
@@ -153,14 +152,13 @@ function pollSessionStatus(sessionName) {
                 clearInterval(intervalId);
                 showToast('success', `Sesi '${sessionName}' berhasil terhubung!`);
                 bootstrap.Modal.getInstance(modal)?.hide();
-                loadSessions(); // Refresh the main list
+                loadSessions();
             }
         } catch (error) {
             console.error('Polling status error:', error);
         }
-    }, 3000); // Poll every 3 seconds
+    }, 3000);
 
-    // Store interval ID on the modal to clear it if closed manually
     modal.setAttribute('data-polling-interval-id', intervalId);
 }
 
@@ -186,20 +184,15 @@ async function createSession() {
             body: JSON.stringify({ session: sessionName })
         };
 
-        const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/start`, fetchOptions);
+        const response = await fetch(`${API_BASE_URL}/session/start`, fetchOptions);
         const data = await response.json();
         
         if (response.ok && data.qr) {
             showToast('success', 'Session berhasil dibuat! Pindai QR Code di bawah ini.');
-            
-            // Show QR code section
             document.getElementById('qrCodeContainer').classList.remove('d-none');
             document.getElementById('qrCodeImage').src = data.qr;
             createBtn.classList.add('d-none');
-
-            // Start polling for connection status
             pollSessionStatus(sessionName);
-
         } else {
             showToast('error', data.message || 'Gagal membuat session');
             createBtn.disabled = false;
@@ -214,19 +207,21 @@ async function createSession() {
 }
 
 // Reset modal when closed
-document.getElementById('addSessionModal').addEventListener('hidden.bs.modal', () => {
+document.getElementById('addSessionModal').addEventListener('hidden.bs.modal', (event) => {
+    const modal = event.target;
     document.getElementById('sessionName').value = '';
     document.getElementById('qrCodeContainer').classList.add('d-none');
     document.getElementById('qrCodeImage').src = '';
-    document.getElementById('createSessionBtn').classList.remove('d-none');
-    document.getElementById('createSessionBtn').disabled = false;
+    const createBtn = document.getElementById('createSessionBtn');
+    createBtn.classList.remove('d-none');
+    createBtn.disabled = false;
+    createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Session';
+    
     const pollingIntervalId = modal.getAttribute('data-polling-interval-id');
     if (pollingIntervalId) {
         clearInterval(parseInt(pollingIntervalId));
         modal.removeAttribute('data-polling-interval-id');
     }
-
-    if (createSessionPolling) {
 });
 
 // Load sessions on page load
@@ -236,8 +231,5 @@ loadSessions();
 window.addEventListener('beforeunload', () => {
     if (pollingInterval) {
         clearInterval(pollingInterval);
-    }
-    if (createSessionPolling) {
-        clearInterval(createSessionPolling);
     }
 });

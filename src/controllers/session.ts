@@ -10,6 +10,7 @@ export const createSessionController = () => {
   const app = new Hono();
 
   app.get("/", createKeyMiddleware(), async (c) => {
+    console.log('ALL SESSIONS DATA:', whatsapp.getAllSession()); // <-- DEBUG LOG
     return c.json({
       data: whatsapp.getAllSession(),
     });
@@ -116,13 +117,15 @@ export const createSessionController = () => {
     const name = c.req.param("name");
     const session = whatsapp.getSession(name);
 
+    console.log('SESSION OBJECT:', session); // <-- DEBUG LOG
+
     if (!session) {
       throw new HTTPException(404, { message: "Session not found" });
     }
 
     return c.json({
       success: true,
-      status: session.status,
+      status: session ? 'found' : 'not_found', // Temporary status
     });
   });
 

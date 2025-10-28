@@ -8,6 +8,7 @@ import { HTTPException } from "hono/http-exception";
 export const createSessionController = () => {
     const app = new Hono();
     app.get("/", createKeyMiddleware(), async (c) => {
+        console.log('ALL SESSIONS DATA:', whatsapp.getAllSession()); // <-- DEBUG LOG
         return c.json({
             data: whatsapp.getAllSession(),
         });
@@ -84,6 +85,18 @@ export const createSessionController = () => {
         await whatsapp.deleteSession(c.req.query().session || (await c.req.json()).session || "");
         return c.json({
             data: "success",
+        });
+    });
+    app.get("/:name/status", createKeyMiddleware(), async (c) => {
+        const name = c.req.param("name");
+        const session = whatsapp.getSession(name);
+        console.log('SESSION OBJECT:', session); // <-- DEBUG LOG
+        if (!session) {
+            throw new HTTPException(404, { message: "Session not found" });
+        }
+        return c.json({
+            success: true,
+            status: session ? 'found' : 'not_found', // Temporary status
         });
     });
     return app;
