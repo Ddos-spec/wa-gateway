@@ -1,18 +1,31 @@
-import * as whatsapp from "wa-multi-session";
 import { Hono } from "hono";
-import { requestValidator } from "../middlewares/validation.middleware.js";
-import { z } from "zod";
-import { createKeyMiddleware } from "../middlewares/key.middleware.js";
 import { toDataURL } from "qrcode";
-import { HTTPException } from "hono/http-exception";
+import * as whatsapp from "wa-multi-session";
+import { createKeyMiddleware } from "../middlewares/key.middleware.js";
+import { requestValidator } from "../middlewares/validation.middleware.js";
+import { query } from "../lib/postgres.js"; // <-- IMPORT DB QUERY
 
 export const createSessionController = () => {
   const app = new Hono();
 
   app.get("/", createKeyMiddleware(), async (c) => {
-    console.log('ALL SESSIONS DATA:', whatsapp.getAllSession()); // <-- DEBUG LOG
+    const result = await query('SELECT * FROM sessions ORDER BY created_at DESC');
     return c.json({
-      data: whatsapp.getAllSession(),
+      data: result.rows, // <-- USE DATABASE DATA
+    });
+  });
+
+import { z } from "zod";
+import { HTTPException } from "hono/http-exception";
+import crypto from "crypto";
+
+export const createSessionController = () => {
+  const app = new Hono();
+
+  app.get("/", createKeyMiddleware(), async (c) => {
+    const result = await query('SELECT * FROM sessions ORDER BY created_at DESC');
+    return c.json({
+      data: result.rows, // <-- USE DATABASE DATA
     });
   });
 
@@ -27,29 +40,34 @@ export const createSessionController = () => {
     async (c) => {
       const payload = c.req.valid("json");
 
-      const isExist = whatsapp.getSession(payload.session);
-      if (isExist) {
-        throw new HTTPException(400, {
-          message: "Session already exist",
-        });
-      }
-
       const qr = await new Promise<string | null>(async (r) => {
-        await whatsapp.startSession(payload.session, {
-          onConnected() {
-            r(null);
-          },
-          onQRUpdated(qr) {
-            r(qr);
-          },
-        });
+        try {
+          await whatsapp.startSession(payload.session, {
+            onConnected() {
+              r(null);
+            },
+            onQRUpdated(qr) {
+              r(qr);
+            },
+          });
+          // Also save to DB after starting
+          const apiKey = crypto.randomBytes(32).toString('hex');
+          await query(
+            'INSERT INTO sessions (session_name, api_key, status) VALUES ($1, $2, $3) ON CONFLICT (session_name) DO UPDATE SET status = $3',
+            [payload.session, apiKey, 'connecting']
+          );
+        } catch (error) {
+          console.error('Start session error:', error);
+          r(null); // Resolve with null on error
+        }
       });
 
       if (qr) {
-        return c.json({
-          qr: await toDataURL(qr),
-        });
+        return c.json({ qr: await toDataURL(qr) });
       }
+
+      // If already connected and no QR is generated
+      await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [payload.session]);
 
       return c.json({
         data: {
@@ -58,6 +76,7 @@ export const createSessionController = () => {
       });
     }
   );
+
   app.get(
     "/start",
     createKeyMiddleware(),

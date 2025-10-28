@@ -53,17 +53,17 @@ function renderSessions() {
             <div class="card session-card">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">${session.name || 'Unknown Session'}</h5>
-                        <span class="badge bg-secondary" id="status-${session.name}">Loading...</span>
+                        <h5 class="mb-0">${session.session_name}</h5>
+                        <span class="badge bg-secondary" id="status-${session.session_name}">${session.status}</span>
                     </div>
                     <p class="text-muted mb-2">
-                        <i class="bi bi-person"></i> ${session.pushName || 'Belum terhubung'}
+                        <i class="bi bi-person"></i> ${session.profile_name || 'Belum terhubung'}
                     </p>
                     <p class="text-muted mb-3">
-                        <i class="bi bi-phone"></i> ${session.number || '-'}
+                        <i class="bi bi-phone"></i> ${session.wa_number || '-'}
                     </p>
                     <div class="d-grid gap-2">
-                        <a href="detail.html?session=${session.name}" class="btn btn-primary btn-sm">
+                        <a href="detail.html?session=${session.session_name}" class="btn btn-primary btn-sm">
                             <i class="bi bi-gear"></i> Detail
                         </a>
                     </div>
@@ -85,8 +85,8 @@ function startStatusPolling() {
 // Update all session status
 async function updateAllStatus() {
     for (const session of sessions) {
-        if (session.name) { // Only poll if session has a name
-            await updateSessionStatus(session.name);
+        if (session.session_name) {
+            await updateSessionStatus(session.session_name);
         }
     }
 }
