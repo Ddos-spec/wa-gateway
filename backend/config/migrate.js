@@ -7,9 +7,15 @@ async function migrate() {
   try {
     console.log('🔄 Starting database migration...');
     
+    // Drop existing tables to ensure a clean slate
+    await client.query('DROP TABLE IF EXISTS session_logs;');
+    await client.query('DROP TABLE IF EXISTS sessions;');
+    await client.query('DROP TABLE IF EXISTS config;');
+    console.log('✅ Dropped existing tables.');
+
     // Create config table
     await client.query(`
-      CREATE TABLE IF NOT EXISTS config (
+      CREATE TABLE config (
         id SERIAL PRIMARY KEY,
         username VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
@@ -18,40 +24,31 @@ async function migrate() {
     `);
     console.log('✅ Table "config" created');
     
-    // Create sessions table
+    // Create sessions table with STATUS column
     await client.query(`
-      CREATE TABLE IF NOT EXISTS sessions (
+      CREATE TABLE sessions (
         id SERIAL PRIMARY KEY,
-        session_name VARCHAR(255) UNIQUE NOT NULL,
-        api_key VARCHAR(255) UNIQUE NOT NULL,
+        session_name VARCHAR(100) UNIQUE NOT NULL,
+        status VARCHAR(20) DEFAULT 'offline',
+        wa_number VARCHAR(20),
+        profile_name VARCHAR(100),
         webhook_url TEXT,
-        webhook_events JSONB DEFAULT '{
-          "individual": false,
-          "group": false,
-          "from_me": false,
-          "update_status": false,
-          "image": false,
-          "video": false,
-          "audio": false,
-          "sticker": false,
-          "document": false
-        }'::jsonb,
-        profile_name VARCHAR(255),
-        wa_number VARCHAR(50),
+        webhook_events JSONB DEFAULT '{"audio": false, "group": false, "image": false, "video": false, "from_me": true, "document": false, "individual": true, "update_status": true}'::jsonb,
+        api_key VARCHAR(64),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log('✅ Table "sessions" created');
+    console.log('✅ Table "sessions" created with status column');
     
     // Create session_logs table
     await client.query(`
-      CREATE TABLE IF NOT EXISTS session_logs (
+      CREATE TABLE session_logs (
         id SERIAL PRIMARY KEY,
         session_id INTEGER REFERENCES sessions(id) ON DELETE CASCADE,
-        action VARCHAR(100) NOT NULL,
-        details TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        action VARCHAR(50) NOT NULL,
+        details JSONB,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     console.log('✅ Table "session_logs" created');

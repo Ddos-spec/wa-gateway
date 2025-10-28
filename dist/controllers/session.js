@@ -1,117 +1,87 @@
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { toDataURL } from "qrcode";
 import * as whatsapp from "wa-multi-session";
+import { z } from "zod";
+import crypto from "crypto";
 import { createKeyMiddleware } from "../middlewares/key.middleware.js";
 import { requestValidator } from "../middlewares/validation.middleware.js";
-import { query } from "../lib/postgres.js"; // <-- IMPORT DB QUERY
+import { query } from "../lib/postgres.js";
 export const createSessionController = () => {
     const app = new Hono();
+    // Endpoint to get all sessions from the DATABASE
     app.get("/", createKeyMiddleware(), async (c) => {
-        const result = await query('SELECT * FROM sessions ORDER BY created_at DESC');
-        return c.json({
-            data: result.rows, // <-- USE DATABASE DATA
-        });
-    });
-    import { z } from "zod";
-    import { HTTPException } from "hono/http-exception";
-    import crypto from "crypto";
-    export const createSessionController = () => {
-        const app = new Hono();
-        app.get("/", createKeyMiddleware(), async (c) => {
+        try {
             const result = await query('SELECT * FROM sessions ORDER BY created_at DESC');
             return c.json({
-                data: result.rows, // <-- USE DATABASE DATA
+                data: result.rows,
             });
-        });
-        const startSessionSchema = z.object({
-            session: z.string(),
-        });
-        app.post("/start", createKeyMiddleware(), requestValidator("json", startSessionSchema), async (c) => {
-            const payload = c.req.valid("json");
-            const qr = await new Promise(async (r) => {
-                try {
-                    await whatsapp.startSession(payload.session, {
-                        onConnected() {
-                            r(null);
-                        },
-                        onQRUpdated(qr) {
-                            r(qr);
-                        },
-                    });
-                    // Also save to DB after starting
-                    const apiKey = crypto.randomBytes(32).toString('hex');
-                    await query('INSERT INTO sessions (session_name, api_key, status) VALUES ($1, $2, $3) ON CONFLICT (session_name) DO UPDATE SET status = $3', [payload.session, apiKey, 'connecting']);
-                }
-                catch (error) {
-                    console.error('Start session error:', error);
-                    r(null); // Resolve with null on error
-                }
+        }
+        catch (error) {
+            console.error("Error fetching sessions from DB:", error);
+            throw new HTTPException(500, { message: "Failed to fetch sessions" });
+        }
+    });
+    // Endpoint to create a new session
+    app.post("/start", createKeyMiddleware(), requestValidator("json", z.object({ session: z.string() })), async (c) => {
+        const payload = c.req.valid("json");
+        try {
+            // 1. Start the session in the library
+            const qr = await new Promise((resolve) => {
+                whatsapp.startSession(payload.session, {
+                    onConnected: () => resolve(null),
+                    onQRUpdated: (qr) => resolve(qr),
+                });
             });
+            // 2. Save the session to the DATABASE
+            const apiKey = crypto.randomBytes(32).toString('hex');
+            await query('INSERT INTO sessions (session_name, api_key, status) VALUES ($1, $2, $3) ON CONFLICT (session_name) DO UPDATE SET status = $3', [payload.session, 'connecting', apiKey]);
             if (qr) {
                 return c.json({ qr: await toDataURL(qr) });
             }
-            // If already connected and no QR is generated
+            // If already connected (no QR)
             await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [payload.session]);
-            return c.json({
-                data: {
-                    message: "Connected",
-                },
-            });
-        });
-        app.get("/start", createKeyMiddleware(), requestValidator("query", startSessionSchema), async (c) => {
-            const payload = c.req.valid("query");
-            const isExist = whatsapp.getSession(payload.session);
-            if (isExist) {
-                throw new HTTPException(400, {
-                    message: "Session already exist",
-                });
-            }
-            const qr = await new Promise(async (r) => {
-                await whatsapp.startSession(payload.session, {
-                    onConnected() {
-                        r(null);
-                    },
-                    onQRUpdated(qr) {
-                        r(qr);
-                    },
-                });
-            });
-            if (qr) {
-                return c.render(`
-            <div id="qrcode"></div>
-
-            <script type="text/javascript">
-                let qr = '${await toDataURL(qr)}'
-                let image = new Image()
-                image.src = qr
-                document.body.appendChild(image)
-            </script>
-            `);
-            }
-            return c.json({
-                data: {
-                    message: "Connected",
-                },
-            });
-        });
-        app.all("/logout", createKeyMiddleware(), async (c) => {
-            await whatsapp.deleteSession(c.req.query().session || (await c.req.json()).session || "");
-            return c.json({
-                data: "success",
-            });
-        });
-        app.get("/:name/status", createKeyMiddleware(), async (c) => {
-            const name = c.req.param("name");
-            const session = whatsapp.getSession(name);
-            console.log('SESSION OBJECT:', session); // <-- DEBUG LOG
-            if (!session) {
-                throw new HTTPException(404, { message: "Session not found" });
+            return c.json({ message: "Already connected" });
+        }
+        catch (error) {
+            console.error("Error starting session:", error);
+            throw new HTTPException(500, { message: "Failed to start session" });
+        }
+    });
+    // Endpoint to get a specific session's status from the DATABASE
+    app.get("/:name/status", createKeyMiddleware(), async (c) => {
+        const name = c.req.param("name");
+        try {
+            const result = await query("SELECT status FROM sessions WHERE session_name = $1", [name]);
+            if (result.rows.length === 0) {
+                throw new HTTPException(404, { message: "Session not found in database" });
             }
             return c.json({
                 success: true,
-                status: session ? 'found' : 'not_found', // Temporary status
+                status: result.rows[0].status,
             });
-        });
-        return app;
-    };
+        }
+        catch (error) {
+            console.error(`Error fetching status for ${name}:`, error);
+            if (error instanceof HTTPException)
+                throw error;
+            throw new HTTPException(500, { message: "Failed to get session status" });
+        }
+    });
+    // Endpoint to delete a session
+    app.all("/logout", createKeyMiddleware(), async (c) => {
+        const sessionName = c.req.query().session || (await c.req.json()).session || "";
+        try {
+            // 1. Delete from the library
+            await whatsapp.deleteSession(sessionName);
+            // 2. Delete from the DATABASE
+            await query("DELETE FROM sessions WHERE session_name = $1", [sessionName]);
+            return c.json({ data: "success" });
+        }
+        catch (error) {
+            console.error(`Error logging out session ${sessionName}:`, error);
+            throw new HTTPException(500, { message: "Failed to logout session" });
+        }
+    });
+    return app;
 };
