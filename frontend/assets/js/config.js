@@ -1,6 +1,6 @@
 // API Configuration
 const config = {
-  apiUrl: "https://projek-n8n-wa-gateaway.qk6yxt.easypanel.host",
+  apiUrl: "http://localhost:5001",
   endpoints: {
     login: "/auth/login",
     register: "/auth/register",

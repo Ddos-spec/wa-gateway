@@ -2,6 +2,7 @@
   "packageManager": "pnpm@9.0.0",
   "name": "wa-gateway",
   "version": "4.3.2",
+  "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",

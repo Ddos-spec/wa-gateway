@@ -37,6 +37,7 @@ if (env.ALLOWED_ORIGINS.length) {
 }
 
 const allowedOrigins = Array.from(configuredOrigins);
+console.log('Allowed Origins:', allowedOrigins); // <-- DEBUG LOG
 const defaultOrigin =
   allowedOrigins[0] ?? "https://ddos-spec.github.io";
 
@@ -82,7 +83,10 @@ const applyPreflightHeaders = (c: Context) => {
 app.use(
   "/*",
   cors({
-    origin: (origin) => selectOrigin(origin) ?? "",
+    origin: (origin) => {
+      console.log('Incoming request origin:', origin); // <-- DEBUG LOG
+      return selectOrigin(origin) ?? "";
+    },
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
     exposeHeaders: ["Content-Length", "X-Request-Id"],
