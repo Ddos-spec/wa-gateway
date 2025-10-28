@@ -12,7 +12,7 @@ let pollingInterval = null;
 // Load sessions
 async function loadSessions() {
     try {
-        const response = await fetch(`${API_BASE_URL}/sessions`, {
+        const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -97,7 +97,7 @@ async function updateAllStatus() {
 // Update single session status
 async function updateSessionStatus(sessionId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/status`, {
+        const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/${sessionId}/status`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -141,27 +141,26 @@ async function createSession() {
     createBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Membuat...';
     
     try {
-        const response = await fetch(`${API_BASE_URL}/sessions`, {
+        const fetchOptions = {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${getToken()}`
             },
-            body: JSON.stringify({ session_name: sessionName })
-        });
-        
+            body: JSON.stringify({ session: sessionName })
+        };
+
+        const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/start`, fetchOptions);
+
         const data = await response.json();
         
-        if (response.ok && data.success) {
-            showToast('success', 'Session berhasil dibuat');
+        if (response.ok && data.qr) {
+            showToast('success', 'Session berhasil dibuat! Pindai QR Code di bawah ini.');
             
             // Show QR code section
             document.getElementById('qrCodeContainer').classList.remove('d-none');
+            document.getElementById('qrCodeImage').src = data.qr;
             createBtn.classList.add('d-none');
-            
-            // Start polling for QR code
-            const sessionId = data.session.id;
-            pollQRCode(sessionId);
         } else {
             showToast('error', data.error || 'Gagal membuat session');
             createBtn.disabled = false;
@@ -192,7 +191,7 @@ async function pollQRCode(sessionId) {
         }
         
         try {
-            const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/qr`, {
+            const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/${sessionId}/qr`, {
                 headers: {
                     'Authorization': `Bearer ${getToken()}`
                 }
