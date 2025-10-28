@@ -42,11 +42,10 @@ export const createSessionController = () => {
 
         // 2. Save the session to the DATABASE
         const apiKey = crypto.randomBytes(32).toString('hex');
-        await query(
-          'INSERT INTO sessions (session_name, api_key, status) VALUES ($1, $2, $3) ON CONFLICT (session_name) DO UPDATE SET status = $3',
-          [payload.session, 'connecting', apiKey]
-        );
-
+                  await query(
+                    'INSERT INTO sessions (session_name, status, api_key) VALUES ($1, $2, $3) ON CONFLICT (session_name) DO UPDATE SET status = $2',
+                    [payload.session, 'connecting', apiKey]
+                  );
         if (qr) {
           return c.json({ qr: await toDataURL(qr) });
         }

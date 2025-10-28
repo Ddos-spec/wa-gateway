@@ -20,8 +20,8 @@ async function loadSessions() {
         
         const data = await response.json();
         
-        if (response.ok && data.data) {
-            sessions = data.data;
+        if (response.ok && data.success) {
+            sessions = data.sessions;
             renderSessions();
             startStatusPolling();
         } else {
@@ -94,7 +94,7 @@ async function updateAllStatus() {
 // Update single session status
 async function updateSessionStatus(sessionName) {
     try {
-        const response = await fetch(`${API_BASE_URL}/session/${sessionName}/status`, {
+        const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/${sessionName}/status`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -140,7 +140,7 @@ function pollSessionStatus(sessionName) {
         }
 
         try {
-            const response = await fetch(`${API_BASE_URL}/session/${sessionName}/status`, {
+            const response = await fetch(`${API_BASE_URL}${config.endpoints.sessions}/${sessionName}/status`, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
 

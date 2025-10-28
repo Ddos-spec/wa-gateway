@@ -5,7 +5,7 @@ if (!checkAuth()) {
 
 // Get session ID from URL
 const urlParams = new URLSearchParams(window.location.search);
-const sessionId = urlParams.get('id');
+const sessionId = urlParams.get('session');
 
 if (!sessionId) {
     showToast('error', 'Session ID tidak ditemukan');
