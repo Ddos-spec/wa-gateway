@@ -1,11 +1,11 @@
 import bcrypt from "bcrypt";
 import { HTTPException } from "hono/http-exception";
 import jwt from "jsonwebtoken";
-import { env } from "../env";
+import { env } from "../env.js";
 import {
   ConfigRow,
   findConfigByUsername,
-} from "../repositories/config.repository";
+} from "../repositories/config.repository.js";
 
 export type AuthenticatedUser = {
   id: number;

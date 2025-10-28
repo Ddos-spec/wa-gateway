@@ -5,16 +5,16 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import moment from "moment";
 import * as whastapp from "wa-multi-session";
-import { createAuthController } from "./controllers/auth";
-import { createMessageController } from "./controllers/message";
-import { createProfileController } from "./controllers/profile";
-import { createSessionController } from "./controllers/session";
-import { env } from "./env";
-import { globalErrorMiddleware } from "./middlewares/error.middleware";
-import { notFoundMiddleware } from "./middlewares/notfound.middleware";
-import { CreateWebhookProps } from "./webhooks";
-import { createWebhookMessage } from "./webhooks/message";
-import { createWebhookSession } from "./webhooks/session";
+import { createAuthController } from "./controllers/auth.js";
+import { createMessageController } from "./controllers/message.js";
+import { createProfileController } from "./controllers/profile.js";
+import { createSessionController } from "./controllers/session.js";
+import { env } from "./env.js";
+import { globalErrorMiddleware } from "./middlewares/error.middleware.js";
+import { notFoundMiddleware } from "./middlewares/notfound.middleware.js";
+import { CreateWebhookProps } from "./webhooks/index.js";
+import { createWebhookMessage } from "./webhooks/message.js";
+import { createWebhookSession } from "./webhooks/session.js";
 
 const app = new Hono();
 

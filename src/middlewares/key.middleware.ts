@@ -1,6 +1,6 @@
 import { HTTPException } from "hono/http-exception";
 import { createMiddleware } from "hono/factory";
-import { env } from "../env";
+import { env } from "../env.js";
 
 export const createKeyMiddleware = () =>
   createMiddleware(async (c, next) => {

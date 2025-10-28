@@ -1,8 +1,8 @@
 import * as whatsapp from "wa-multi-session";
 import { Hono } from "hono";
-import { requestValidator } from "../middlewares/validation.middleware";
+import { requestValidator } from "../middlewares/validation.middleware.js";
 import { z } from "zod";
-import { createKeyMiddleware } from "../middlewares/key.middleware";
+import { createKeyMiddleware } from "../middlewares/key.middleware.js";
 import { toDataURL } from "qrcode";
 import { HTTPException } from "hono/http-exception";
 

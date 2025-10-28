@@ -1,0 +1,1 @@
+{"version":3,"file":"session.d.ts","sourceRoot":"","sources":["../../src/webhooks/session.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,kBAAkB,EAAiB,MAAM,YAAY,CAAC;AAE/D,KAAK,aAAa,GAAG,WAAW,GAAG,cAAc,GAAG,YAAY,CAAC;AAEjE,KAAK,kBAAkB,GAAG;IACxB,OAAO,EAAE,MAAM,CAAC;IAChB,MAAM,EAAE,aAAa,CAAC;CACvB,CAAC;AAEF,eAAO,MAAM,oBAAoB,UACvB,kBAAkB,aAAmB,kBAAkB,kBAS9D,CAAC"}

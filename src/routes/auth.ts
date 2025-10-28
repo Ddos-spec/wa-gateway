@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import jwt, { JsonWebTokenError, JwtPayload } from "jsonwebtoken";
-import { env } from "../env";
-import { authenticateUser } from "../services/auth.service";
+import * as jwt from "jsonwebtoken";
+import { env } from "../env.js";
+import { authenticateUser } from "../services/auth.service.js";
 
 const auth = new Hono();
 
@@ -40,13 +40,13 @@ auth.get("/verify", async (c) => {
     }
 
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, env.JWT_SECRET);
+        const decoded = (jwt as any).verify(token, env.JWT_SECRET);
 
     if (typeof decoded !== "object" || decoded === null) {
       return c.json({ message: "Invalid token" }, 401);
     }
 
-    const payload = decoded as JwtPayload & {
+            const payload = decoded as any & {
       username?: string;
       sub?: string | number;
     };
@@ -82,7 +82,7 @@ auth.get("/verify", async (c) => {
       },
     });
   } catch (error) {
-    if (error instanceof JsonWebTokenError) {
+                if (error instanceof Error && error.name === "JsonWebTokenError") {
       return c.json({ message: "Invalid token" }, 401);
     }
 

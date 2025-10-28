@@ -1,4 +1,4 @@
-import { query } from "../lib/postgres";
+import { query } from "../lib/postgres.js";
 
 export type ConfigRow = {
   id: number;
@@ -19,5 +19,5 @@ export const findConfigByUsername = async (
     return null;
   }
 
-  return result.rows[0];
+    return result.rows[0] ?? null;
 };

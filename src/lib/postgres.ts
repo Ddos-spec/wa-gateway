@@ -1,5 +1,5 @@
-import { Pool } from "pg";
-import { env } from "../env";
+import { Pool, QueryResultRow } from "pg";
+import { env } from "../env.js";
 
 type GlobalWithPg = typeof globalThis & {
   __pgPool?: Pool;
@@ -19,7 +19,7 @@ if (env.NODE_ENV !== "PRODUCTION") {
 
 export const getPool = () => pool;
 
-export const query = async <T = any>(
+export const query = async <T extends QueryResultRow = any>(
   text: string,
   params?: (string | number | boolean | null | Date)[]
 ) => {
