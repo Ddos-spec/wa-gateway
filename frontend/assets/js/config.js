@@ -3,12 +3,15 @@ const config = {
   // Deteksi base URL secara dinamis
   apiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? "http://localhost:5001"
-    : `${window.location.protocol}//${window.location.host}`,
+    : `${window.location.protocol}//${window.location.hostname}:5001`,
+  backendApiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? "http://localhost:3001"
+    : `${window.location.protocol}//${window.location.hostname}:3001`,
   endpoints: {
-    login: "/auth/login",
-    register: "/auth/register",
+    login: "/api/auth/login",
+    register: "/api/auth/register",
     sessions: "/session",
-    verify: "/auth/verify",
+    verify: "/api/auth/verify",
     messages: "/message",
     sendText: "/message/send-text",
     sendImage: "/message/send-image",
