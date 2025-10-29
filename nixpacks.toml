@@ -3,7 +3,7 @@ nixPkgs = ['nodejs_20', 'pnpm']
 
 [phases.install]
 cmds = [
-  'pnpm install --frozen-lockfile',
+  'pnpm install --no-frozen-lockfile',
   'cd backend && npm install && cd ..'
 ]
 
