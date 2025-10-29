@@ -108,8 +108,8 @@ export const createSessionController = () => {
     requestValidator(
       "json",
       z.object({
-        webhook_url: z.string().url().optional(),
-        webhook_events: z.array(z.string()).optional(),
+        webhook_url: z.string().url().optional().nullable(),
+        webhook_events: z.record(z.boolean()).optional(),
       })
     ),
     async (c) => {
@@ -118,7 +118,7 @@ export const createSessionController = () => {
       try {
         const result = await query(
           "UPDATE sessions SET webhook_url = $1, webhook_events = $2, updated_at = CURRENT_TIMESTAMP WHERE session_name = $3 RETURNING *",
-          [webhook_url, JSON.stringify(webhook_events), name]
+          [webhook_url || null, JSON.stringify(webhook_events || {}), name]
         );
         if (result.rows.length === 0) {
           throw new HTTPException(404, { message: "Session not found" });
