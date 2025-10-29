@@ -1,6 +1,9 @@
 // API Configuration
 const config = {
-  apiUrl: "http://localhost:5001",
+  // Deteksi base URL secara dinamis
+  apiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? "http://localhost:5001"
+    : `${window.location.protocol}//${window.location.host}`,
   endpoints: {
     login: "/auth/login",
     register: "/auth/register",
@@ -10,6 +13,7 @@ const config = {
     sendText: "/message/send-text",
     sendImage: "/message/send-image",
     sendDocument: "/message/send-document",
+    webhooks: "/api/webhooks"
   },
   timeout: 30000,
   maxRetries: 3,
