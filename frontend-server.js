@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.FRONTEND_PORT || 5000;
 
 // Serve static files from frontend directory
-app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static(path.join(__dirname, 'frontend')));
 
 // Serve index.html for all routes (SPA behavior)
 app.get('*', (req, res) => {
