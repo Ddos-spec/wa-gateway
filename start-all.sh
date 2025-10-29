@@ -8,7 +8,7 @@ trap 'kill $(jobs -p) 2>/dev/null' EXIT
 
 # Start frontend server
 echo "▶️  Starting Frontend Server (port 5000)..."
-node frontend-server.js &
+node /app/frontend-server.js &
 FRONTEND_PID=$!
 echo "✅ Frontend started (PID: $FRONTEND_PID)"
 
@@ -17,10 +17,10 @@ sleep 2
 
 # Start backend API
 echo "▶️  Starting Backend API (port 5000)..."
-cd backend
+cd /app/backend
 node server.js &
 BACKEND_PID=$!
-cd ..
+cd /app
 echo "✅ Backend API started (PID: $BACKEND_PID)"
 
 # Wait a bit
@@ -28,14 +28,15 @@ sleep 2
 
 # Start WA Gateway
 echo "▶️  Starting WA Gateway (port 5001)..."
-node dist/index.js &
+node /app/dist/index.js &
 GATEWAY_PID=$!
 echo "✅ WA Gateway started (PID: $GATEWAY_PID)"
 
 echo ""
 echo "🎉 All services started successfully!"
 echo "   Frontend: http://localhost:5000"
-echo "   API: http://localhost:5001"
+echo "   Backend API: http://localhost:5000"
+echo "   WA Gateway: http://localhost:5001"
 echo ""
 
 # Wait for all background processes
