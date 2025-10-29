@@ -24,6 +24,7 @@ app.get('/api/health', (req, res) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/sessions', sessionRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // Log all registered routes
 app._router.stack.forEach(function(r){
