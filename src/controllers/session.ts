@@ -156,6 +156,38 @@ export const createSessionController = () => {
     }
   );
 
+  // Endpoint to pair with phone number
+  app.post(
+    "/pair-phone",
+    createKeyMiddleware(),
+    requestValidator("json", z.object({ 
+      session: z.string(),
+      phone: z.string() 
+    })),
+    async (c) => {
+      const { session, phone } = c.req.valid("json");
+      try {
+        // Start session with phone pairing
+        const result = await whatsapp.startSessionWithPairing(session, phone);
+        
+        // Update database
+        await query(
+          'INSERT INTO sessions (session_name, status, api_key, pairing_method, paired_phone) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (session_name) DO UPDATE SET status = $2, pairing_method = $4, paired_phone = $5',
+          [session, 'connecting', crypto.randomBytes(32).toString('hex'), 'phone', phone]
+        );
+        
+        return c.json({ 
+          success: true, 
+          message: "Pairing code sent to your phone. Please check your WhatsApp.",
+          code: result.code
+        });
+      } catch (error) {
+        console.error("Error pairing with phone:", error);
+        throw new HTTPException(500, { message: "Failed to pair with phone number" });
+      }
+    }
+  );
+
   // Endpoint to delete a session by name
   app.delete("/:name", createKeyMiddleware(), async (c) => {
     const sessionName = c.req.param("name");
