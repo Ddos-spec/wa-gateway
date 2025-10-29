@@ -35,7 +35,7 @@ echo "✅ WA Gateway started (PID: $GATEWAY_PID)"
 echo ""
 echo "🎉 All services started successfully!"
 echo "   Frontend: http://localhost:5000"
-echo "   Backend API: http://localhost:5000"
+echo "   Backend API: http://localhost:3001"
 echo "   WA Gateway: http://localhost:5001"
 echo ""
 
