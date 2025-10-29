@@ -4,6 +4,7 @@ require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
 const sessionRoutes = require('./routes/sessions');
+const webhookRoutes = require('./routes/webhooks');
 
 const app = express();
 
