@@ -47,92 +47,72 @@
                     </div>
                 </div>
 
-                <!-- QR Code Section -->
-                <div class="card mb-4" id="qrSection">
-                    <div class="card-body text-center">
-                        <h5><i class="bi bi-qr-code"></i> QR Code</h5>
-                        <p class="text-muted">Scan QR Code untuk menghubungkan WhatsApp</p>
-                        <div id="qrCodeContainer">
+                <!-- QR Code & Phone Pairing Section -->
+                <div class="card mb-4" id="pairingSection">
+                    <div class="card-body">
+                        <h5><i class="bi bi-qr-code"></i> Hubungkan Session</h5>
+                        
+                        <!-- Tab Navigation -->
+                        <ul class="nav nav-tabs" id="pairingTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="qr-tab" data-bs-toggle="tab" data-bs-target="#qr" type="button">
+                                    <i class="bi bi-qr-code"></i> Scan QR Code
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="phone-tab" data-bs-toggle="tab" data-bs-target="#phone" type="button">
+                                    <i class="bi bi-phone"></i> Pairing Nomor
+                                </button>
+                            </li>
+                        </ul>
+                        
+                        <!-- Tab Content -->
+                        <div class="tab-content p-3" id="pairingTabContent">
+                            <!-- QR Code Tab -->
+                            <div class="tab-pane fade show active" id="qr" role="tabpanel">
+                                <p class="text-muted">Scan QR Code untuk menghubungkan WhatsApp</p>
+                                <div id="qrCodeContainer" class="text-center">
+                                </div>
+                            </div>
+                            
+                            <!-- Phone Pairing Tab -->
+                            <div class="tab-pane fade" id="phone" role="tabpanel">
+                                <p class="text-muted">Hubungkan dengan nomor telepon</p>
+                                <form id="phonePairingForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">Nomor Telepon</label>
+                                        <input type="text" class="form-control" id="pairingPhone" placeholder="0812-3456-789" required>
+                                        <small class="text-muted">Masukkan nomor WhatsApp Anda (format: 0812-3456-789)</small>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary" id="pairPhoneBtn">
+                                        <i class="bi bi-link-45deg"></i> Hubungkan
+                                    </button>
+                                </form>
+                                <div id="pairingCodeContainer" class="mt-3 d-none">
+                                    <div class="alert alert-info">
+                                        <h6>Kode Pairing:</h6>
+                                        <h3 id="pairingCode" class="text-center">-----</h3>
+                                        <p class="small mb-0">Masukkan kode ini di WhatsApp Anda: Linked Devices → Link a Device → Link with Phone Number</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Webhook Configuration -->
+                <!-- Multiple Webhooks Configuration -->
                 <div class="card mb-4">
                     <div class="card-body">
-                        <h5><i class="bi bi-link-45deg"></i> Konfigurasi Webhook</h5>
-                        <form id="webhookForm">
-                            <div class="mb-3">
-                                <label class="form-label">Webhook URL</label>
-                                <input type="url" class="form-control" id="webhookUrl" placeholder="https://yourdomain.com/webhook">
-                            </div>
-                            
-                            <h6 class="mb-3">Webhook Events</h6>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="webhookIndividual">
-                                        <label class="form-check-label" for="webhookIndividual">
-                                            Individual Messages
-                                        </label>
-                                    </div>
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="webhookGroup">
-                                        <label class="form-check-label" for="webhookGroup">
-                                            Group Messages
-                                        </label>
-                                    </div>
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="webhookFromMe">
-                                        <label class="form-check-label" for="webhookFromMe">
-                                            From Me
-                                        </label>
-                                    </div>
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="webhookUpdateStatus">
-                                        <label class="form-check-label" for="webhookUpdateStatus">
-                                            Update Status
-                                        </label>
-                                    </div>
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="webhookImage">
-                                        <label class="form-check-label" for="webhookImage">
-                                            Image
-                                        </label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="webhookVideo">
-                                        <label class="form-check-label" for="webhookVideo">
-                                            Video
-                                        </label>
-                                    </div>
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="webhookAudio">
-                                        <label class="form-check-label" for="webhookAudio">
-                                            Audio
-                                        </label>
-                                    </div>
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="webhookSticker">
-                                        <label class="form-check-label" for="webhookSticker">
-                                            Sticker
-                                        </label>
-                                    </div>
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="webhookDocument">
-                                        <label class="form-check-label" for="webhookDocument">
-                                            Document
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <button type="submit" class="btn btn-primary mt-3">
-                                <i class="bi bi-save"></i> Save Webhook
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5><i class="bi bi-link-45deg"></i> Konfigurasi Webhooks</h5>
+                            <button class="btn btn-primary btn-sm" onclick="addWebhook()">
+                                <i class="bi bi-plus-circle"></i> Tambah Webhook
                             </button>
-                        </form>
+                        </div>
+                        
+                        <div id="webhooksContainer">
+                            <!-- Webhooks will be loaded here -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -183,6 +163,77 @@
                             <i class="bi bi-trash"></i> Hapus Session
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Webhook Modal -->
+    <div class="modal fade" id="webhookModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="webhookModalTitle">Tambah Webhook</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="webhookForm">
+                        <input type="hidden" id="webhookId">
+                        <div class="mb-3">
+                            <label class="form-label">Webhook URL</label>
+                            <input type="url" class="form-control" id="webhookUrl" placeholder="https://yourdomain.com/webhook" required>
+                        </div>
+                        
+                        <h6 class="mb-3">Webhook Events</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="webhookIndividual">
+                                    <label class="form-check-label" for="webhookIndividual">Individual Messages</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="webhookGroup">
+                                    <label class="form-check-label" for="webhookGroup">Group Messages</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="webhookFromMe">
+                                    <label class="form-check-label" for="webhookFromMe">From Me</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="webhookUpdateStatus">
+                                    <label class="form-check-label" for="webhookUpdateStatus">Update Status</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="webhookImage">
+                                    <label class="form-check-label" for="webhookImage">Image</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="webhookVideo">
+                                    <label class="form-check-label" for="webhookVideo">Video</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="webhookAudio">
+                                    <label class="form-check-label" for="webhookAudio">Audio</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="webhookSticker">
+                                    <label class="form-check-label" for="webhookSticker">Sticker</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="webhookDocument">
+                                    <label class="form-check-label" for="webhookDocument">Document</label>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary" onclick="saveWebhook()">
+                        <i class="bi bi-save"></i> Simpan
+                    </button>
                 </div>
             </div>
         </div>
