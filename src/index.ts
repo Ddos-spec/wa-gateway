@@ -208,7 +208,7 @@ whastapp.onConnected(async (session) => {
     const sessionInfo = whastapp.getSession(session);
     if (sessionInfo && sessionInfo.user) {
       const waNumber = sessionInfo.user.id.split('@')[0];
-      const profileName = sessionInfo.user.name || null;
+      const profileName = sessionInfo.user.name || '';
 
       await query(
         "UPDATE sessions SET status = 'online', wa_number = $1, profile_name = $2 WHERE session_name = $3",
