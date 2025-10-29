@@ -156,7 +156,9 @@ export const createSessionController = () => {
     }
   );
 
-  // Endpoint to pair with phone number
+  // Endpoint to pair with phone number  
+  // Note: Phone pairing tergantung pada versi wa-multi-session
+  // Untuk saat ini menggunakan QR code sebagai metode utama
   app.post(
     "/pair-phone",
     createKeyMiddleware(),
@@ -167,23 +169,13 @@ export const createSessionController = () => {
     async (c) => {
       const { session, phone } = c.req.valid("json");
       try {
-        // Start session with phone pairing using correct method signature
-        const pairingCode = await whatsapp.startSessionWithPairingCode({
-          sessionId: session,
-          phoneNumber: phone
-        });
-        
-        // Update database
-        await query(
-          'INSERT INTO sessions (session_name, status, api_key, pairing_method, paired_phone) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (session_name) DO UPDATE SET status = $2, pairing_method = $4, paired_phone = $5',
-          [session, 'connecting', crypto.randomBytes(32).toString('hex'), 'phone', phone]
-        );
-        
+        // Placeholder for phone pairing - akan diimplementasikan saat library support
+        // Sementara ini, redirect ke QR code method
         return c.json({ 
-          success: true, 
-          message: "Pairing code generated. Please enter this code in WhatsApp.",
-          code: pairingCode
-        });
+          success: false, 
+          message: "Phone pairing sedang dalam pengembangan. Silakan gunakan QR Code.",
+          use_qr: true
+        }, 501);
       } catch (error) {
         console.error("Error pairing with phone:", error);
         throw new HTTPException(500, { message: "Failed to pair with phone number" });
