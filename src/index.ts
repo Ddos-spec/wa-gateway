@@ -207,9 +207,8 @@ whastapp.onConnected(async (session) => {
   try {
     const sessionInfo = whastapp.getSession(session);
     if (sessionInfo && sessionInfo.user) {
-      const profileInfo = await whastapp.getProfileInfo({ sessionId: session, jid: sessionInfo.user.id });
       const waNumber = sessionInfo.user.id.split('@')[0];
-      const profileName = profileInfo?.name || sessionInfo.user.name || null;
+      const profileName = sessionInfo.user.name || null;
 
       await query(
         "UPDATE sessions SET status = 'online', wa_number = $1, profile_name = $2 WHERE session_name = $3",
@@ -218,7 +217,7 @@ whastapp.onConnected(async (session) => {
 
       if (env.WEBHOOK_BASE_URL) {
         const webhookSession = createWebhookSession({ baseUrl: env.WEBHOOK_BASE_URL });
-        webhookSession({ session, status: "connected", waNumber, profileName });
+        webhookSession({ session, status: "connected" });
       }
     } else {
       await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
