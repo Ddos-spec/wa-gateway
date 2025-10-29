@@ -49,6 +49,8 @@ EXPOSE 5001 5000
 RUN echo '#!/bin/bash\n\
 set -e\n\
 echo "Starting WA Gateway..."\n\
+# Start frontend server\n\
+cd /app && node frontend-server.js &\n\
 # Start backend dashboard API\n\
 cd /app/backend && node server.js &\n\
 # Start main WA Gateway\n\
