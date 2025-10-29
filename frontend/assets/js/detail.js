@@ -21,13 +21,14 @@ let qrPolling = null;
 // Load session details
 async function loadSessionDetails() {
     try {
-        const response = await fetch(`${config.apiUrl}/api/sessions/${sessionId}`, {
+        const response = await fetch(`${config.apiUrl}/session/${sessionId}`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
         });
         
         const data = await response.json();
+        console.log('Load session details response:', data);
         
         if (response.ok && data.session) {
             session = data.session;
@@ -176,7 +177,7 @@ async function regenerateApiKey() {
     }
     
     try {
-        const response = await fetch(`${config.apiUrl}/session/${sessionId}/regenerate-key`, {
+        const response = await fetch(`${config.apiUrl}/api/sessions/${sessionId}/regenerate-key`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${getToken()}`
@@ -215,7 +216,7 @@ document.getElementById('webhookForm').addEventListener('submit', async (e) => {
     };
     
     try {
-        const response = await fetch(`${config.apiUrl}/session/${sessionId}/webhook`, {
+        const response = await fetch(`${config.apiUrl}/api/sessions/${sessionId}/webhook`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',

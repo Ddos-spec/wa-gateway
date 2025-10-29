@@ -25,6 +25,7 @@ router.get('/', authMiddleware, async (req, res) => {
 router.get('/:name', authMiddleware, async (req, res) => {
   try {
     const { name } = req.params;
+    console.log('Received session name for GET /:name:', name);
     const result = await pool.query('SELECT * FROM sessions WHERE session_name = $1', [name]);
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Session not found' });

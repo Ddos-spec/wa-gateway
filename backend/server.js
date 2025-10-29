@@ -24,6 +24,13 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/sessions', sessionRoutes);
 
+// Log all registered routes
+app._router.stack.forEach(function(r){
+  if (r.route && r.route.path){
+    console.log(r.route.stack[0].method.toUpperCase(), r.route.path)
+  }
+})
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
