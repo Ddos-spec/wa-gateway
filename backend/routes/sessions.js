@@ -65,6 +65,41 @@ router.get('/:name/qr', authMiddleware, async (req, res) => {
   }
 });
 
+// PAIR WITH PHONE NUMBER
+router.post('/:name/pair-phone', authMiddleware, async (req, res) => {
+  try {
+    const { name } = req.params;
+    const { phone_number } = req.body;
+    
+    if (!phone_number) {
+      return res.status(400).json({ success: false, error: 'Phone number is required' });
+    }
+    
+    // Format phone number (remove dashes and spaces, ensure starts with country code)
+    let formattedPhone = phone_number.replace(/[-\s]/g, '');
+    if (formattedPhone.startsWith('0')) {
+      formattedPhone = '62' + formattedPhone.substring(1);
+    }
+    
+    // Call WA Gateway to pair with phone number
+    const response = await axios.post(`${process.env.WA_GATEWAY_URL}/session/pair-phone`, {
+      session: name,
+      phone: formattedPhone
+    });
+    
+    // Update database with pairing method
+    await pool.query(
+      'UPDATE sessions SET pairing_method = $1, paired_phone = $2 WHERE session_name = $3',
+      ['phone', formattedPhone, name]
+    );
+    
+    res.json({ success: true, data: response.data });
+  } catch (error) {
+    console.error('Pair phone error:', error);
+    res.status(500).json({ success: false, error: error.response?.data?.message || 'Failed to pair with phone number' });
+  }
+});
+
 // CREATE NEW SESSION
 router.post('/', authMiddleware, async (req, res) => {
   try {
