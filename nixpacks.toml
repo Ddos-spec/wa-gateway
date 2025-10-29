@@ -1,0 +1,19 @@
+[phases.setup]
+nixPkgs = ['nodejs-20_x', 'pnpm']
+
+[phases.install]
+cmds = [
+  'pnpm install --frozen-lockfile',
+  'cd backend && npm install && cd ..'
+]
+
+[phases.build]
+cmds = [
+  'npx tsc'
+]
+
+[start]
+cmd = 'node frontend-server.js & cd backend && node server.js & node dist/index.js'
+
+[variables]
+NODE_ENV = 'production'

@@ -1,0 +1,11 @@
+{
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "pnpm install && cd backend && npm install && cd .. && npx tsc"
+  },
+  "deploy": {
+    "startCommand": "node frontend-server.js & cd backend && node server.js & node dist/index.js",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
