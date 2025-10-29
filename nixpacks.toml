@@ -9,11 +9,12 @@ cmds = [
 
 [phases.build]
 cmds = [
-  'npx tsc'
+  'npx tsc',
+  'chmod +x start-all.sh'
 ]
 
 [start]
-cmd = 'node frontend-server.js & cd backend && node server.js & node dist/index.js'
+cmd = 'sh start-all.sh'
 
 [variables]
 NODE_ENV = 'production'
