@@ -167,8 +167,11 @@ export const createSessionController = () => {
     async (c) => {
       const { session, phone } = c.req.valid("json");
       try {
-        // Start session with phone pairing using correct method name
-        const pairingCode = await whatsapp.startSessionWithPairingCode(session, phone);
+        // Start session with phone pairing using correct method signature
+        const pairingCode = await whatsapp.startSessionWithPairingCode({
+          sessionId: session,
+          phoneNumber: phone
+        });
         
         // Update database
         await query(
