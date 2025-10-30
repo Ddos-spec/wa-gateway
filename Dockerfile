@@ -45,15 +45,18 @@ RUN mkdir -p /app/media /app/wa_sessions
 # Expose ports
 EXPOSE 5001 5000
 
-# Create start script
-RUN echo '#!/bin/bash\n\
-set -e\n\
-echo "Starting WA Gateway..."\n\
-# Start frontend server\n\
-cd /app && node frontend-server.js &\n\
-# Start backend dashboard API\n\
-cd /app/backend && node server.js &\n\
-# Start main WA Gateway\n\
-cd /app && node dist/index.js' > /app/start.sh && chmod +x /app/start.sh
+# Create a reliable start script
+RUN echo "#!/bin/sh" > /app/start.sh && \
+    echo "set -e" >> /app/start.sh && \
+    echo "echo '--- Starting services ---'" >> /app/start.sh && \
+    echo "node /app/frontend-server.js &" >> /app/start.sh && \
+    echo "node /app/backend/server.js &" >> /app/start.sh && \
+    echo "node /app/dist/index.js &" >> /app/start.sh && \
+    echo "echo '--- Services started, waiting for processes to exit ---'" >> /app/start.sh && \
+    echo "wait -n" >> /app/start.sh
 
+# Make the script executable
+RUN chmod +x /app/start.sh
+
+# Set the command to run the script
 CMD ["/app/start.sh"]
