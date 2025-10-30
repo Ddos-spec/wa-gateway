@@ -205,7 +205,7 @@ if (env.WEBHOOK_BASE_URL) {
 whatsapp.onConnected(async (session) => {
   console.log(`session: '${session}' connected`);
   try {
-    const sessionInfo = whastapp.getSession(session);
+    const sessionInfo = whatsapp.getSession(session);
     if (sessionInfo && sessionInfo.user) {
       const waNumber = sessionInfo.user.id.split('@')[0] || '';
       const profileName = sessionInfo.user.name ?? '';
