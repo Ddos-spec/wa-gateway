@@ -49,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadSessionDetails() {
     try {
         const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionId}`, {
+            headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
         });
@@ -436,7 +437,7 @@ async function saveWebhook() {
 // Toggle webhook
 async function toggleWebhook(webhookId) {
     try {
-        const response = await fetch(`${config.apiUrl}/api/webhooks/${sessionId}/${webhookId}/toggle`, {
+        const response = await fetch(`${config.backendApiUrl}${config.endpoints.webhooks}/${sessionId}/${webhookId}/toggle`, {
             method: 'PATCH',
             headers: {
                 'Authorization': `Bearer ${getToken()}`
@@ -466,7 +467,7 @@ async function deleteWebhook(webhookId) {
     }
     
     try {
-        const response = await fetch(`${config.apiUrl}/api/webhooks/${sessionId}/${webhookId}`, {
+        const response = await fetch(`${config.backendApiUrl}${config.endpoints.webhooks}/${sessionId}/${webhookId}`, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${getToken()}`
