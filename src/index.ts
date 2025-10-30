@@ -4,7 +4,7 @@ import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import moment from "moment";
-import * as whastapp from "wa-multi-session";
+import * as whatsapp from "wa-multi-session";
 import { createAuthController } from "./controllers/auth.js";
 import { createMessageController } from "./controllers/message.js";
 import { createProfileController } from "./controllers/profile.js";
@@ -178,13 +178,13 @@ if (env.WEBHOOK_BASE_URL) {
   };
 
   // message webhook
-  whastapp.onMessageReceived(createWebhookMessage(webhookProps));
+  whatsapp.onMessageReceived(createWebhookMessage(webhookProps));
 
   // session webhook
   const webhookSession = createWebhookSession(webhookProps);
 
   // Logika ini akan dipindahkan ke luar blok if
-  // whastapp.onConnected(async (session) => {
+  // whatsapp.onConnected(async (session) => {
   //   console.log(`session: '${session}' connected`);
   //   await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
   //   webhookSession({ session, status: "connected" });
@@ -202,7 +202,7 @@ if (env.WEBHOOK_BASE_URL) {
 }
 // End Implement Webhook
 
-whastapp.onConnected(async (session) => {
+whatsapp.onConnected(async (session) => {
   console.log(`session: '${session}' connected`);
   try {
     const sessionInfo = whastapp.getSession(session);
@@ -236,8 +236,7 @@ whastapp.onConnected(async (session) => {
   }
 });
 
-whastapp.onConnecting(async (session) => {
-  console.log(`session: '${session}' connecting`);
+whatsapp.onConnecting(async (session) => {
   await query("UPDATE sessions SET status = 'connecting' WHERE session_name = $1", [session]);
   // Jika webhook diaktifkan, panggil juga webhookSession
   if (env.WEBHOOK_BASE_URL) {
@@ -246,8 +245,7 @@ whastapp.onConnecting(async (session) => {
   }
 });
 
-whastapp.onDisconnected(async (session) => {
-  console.log(`session: '${session}' disconnected`);
+whatsapp.onDisconnected(async (session) => {
   await query("UPDATE sessions SET status = 'offline' WHERE session_name = $1", [session]);
   // Jika webhook diaktifkan, panggil juga webhookSession
   if (env.WEBHOOK_BASE_URL) {
@@ -256,4 +254,4 @@ whastapp.onDisconnected(async (session) => {
   }
 });
 
-whastapp.loadSessionsFromStorage();
+whatsapp.loadSessionsFromStorage();
