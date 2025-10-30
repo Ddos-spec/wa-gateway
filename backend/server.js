@@ -1,10 +1,10 @@
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
+import express from 'express';
+import cors from 'cors';
+import 'dotenv/config';
 
-const authRoutes = require('./routes/auth');
-const sessionRoutes = require('./routes/sessions');
-const webhookRoutes = require('./routes/webhooks');
+import authRoutes from './routes/auth.js';
+import sessionRoutes from './routes/sessions.js';
+import webhookRoutes from './routes/webhooks.js';
 
 const app = express();
 

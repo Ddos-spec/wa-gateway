@@ -1,8 +1,8 @@
-const express = require('express');
-const axios = require('axios');
-const { v4: uuidv4 } = require('uuid');
-const pool = require('../config/db');
-const authMiddleware = require('../middleware/auth');
+import express from 'express';
+import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
+import pool from '../config/db.js';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -199,4 +199,4 @@ router.delete('/:name', authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

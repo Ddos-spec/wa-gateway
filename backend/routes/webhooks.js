@@ -1,6 +1,6 @@
-const express = require('express');
-const pool = require('../config/db');
-const authMiddleware = require('../middleware/auth');
+import express from 'express';
+import pool from '../config/db.js';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -183,4 +183,4 @@ router.delete('/:sessionName/:webhookId', authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
