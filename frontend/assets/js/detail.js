@@ -48,8 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Load session details
 async function loadSessionDetails() {
     try {
-        const response = await fetch(`${config.apiUrl}/session/${sessionId}`, {
-            headers: {
+        const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionId}`, {
                 'Authorization': `Bearer ${getToken()}`
             }
         });
@@ -87,7 +86,7 @@ function renderSessionDetails() {
 // Update status
 async function updateStatus() {
     try {
-        const response = await fetch(`${config.apiUrl}/session/${sessionId}/status`, {
+        const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionId}/status`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -236,7 +235,7 @@ document.getElementById('phonePairingForm').addEventListener('submit', async (e)
 // Load webhooks
 async function loadWebhooks() {
     try {
-        const response = await fetch(`${config.apiUrl}/api/webhooks/${sessionId}`, {
+        const response = await fetch(`${config.backendApiUrl}${config.endpoints.webhooks}/${sessionId}`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -401,8 +400,8 @@ async function saveWebhook() {
     
     try {
         const url = webhookId 
-            ? `${config.apiUrl}/api/webhooks/${sessionId}/${webhookId}`
-            : `${config.apiUrl}/api/webhooks/${sessionId}`;
+            ? `${config.backendApiUrl}${config.endpoints.webhooks}/${sessionId}/${webhookId}`
+            : `${config.backendApiUrl}${config.endpoints.webhooks}/${sessionId}`;
         
         const method = webhookId ? 'PUT' : 'POST';
         
@@ -507,7 +506,7 @@ async function regenerateApiKey() {
     }
     
     try {
-        const response = await fetch(`${config.apiUrl}/session/${sessionId}/regenerate-key`, {
+        const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionId}/regenerate-key`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${getToken()}`
@@ -570,7 +569,7 @@ async function deleteSession() {
     }
     
     try {
-        const response = await fetch(`${config.apiUrl}/session/${sessionId}`, {
+        const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionId}`, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${getToken()}`
