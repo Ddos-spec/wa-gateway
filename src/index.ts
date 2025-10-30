@@ -138,7 +138,7 @@ app.use(
 /**
  * session routes
  */
-app.route("/session", createSessionController());
+app.route("/api/session", createSessionController());
 /**
  * message routes
  */

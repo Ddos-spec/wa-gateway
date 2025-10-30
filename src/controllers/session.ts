@@ -187,9 +187,21 @@ export const createSessionController = () => {
   app.delete("/:name", createKeyMiddleware(), async (c) => {
     const sessionName = c.req.param("name");
     try {
-      // 1. Delete from the library
+      // 1. Get session id
+      const sessionResult = await query(
+        'SELECT id FROM sessions WHERE session_name = $1',
+        [sessionName]
+      );
+
+      if (sessionResult.rows.length > 0) {
+        const sessionId = sessionResult.rows[0].id;
+        // 2. Delete associated webhooks from the DATABASE
+        await query("DELETE FROM webhooks WHERE session_id = $1", [sessionId]);
+      }
+      
+      // 3. Delete from the library
       await whatsapp.deleteSession(sessionName);
-      // 2. Delete from the DATABASE
+      // 4. Delete from the DATABASE
       await query("DELETE FROM sessions WHERE session_name = $1", [sessionName]);
       return c.json({ success: true, message: "Session deleted successfully" });
     } catch (error) {
