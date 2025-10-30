@@ -20,8 +20,8 @@ async function loadSessions() {
         
         const data = await response.json();
         
-        if (response.ok && data.data) {
-            sessions = data.data;
+        if (response.ok && data.sessions) {
+            sessions = data.sessions;
             renderSessions();
             startStatusPolling();
         } else {
