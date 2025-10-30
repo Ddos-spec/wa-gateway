@@ -183,7 +183,7 @@ async function createSession() {
             body: JSON.stringify({ session: sessionName })
         };
 
-        const response = await fetch(`${config.apiUrl}/session/start`, fetchOptions);
+        const response = await fetch(`${config.apiUrl}${config.endpoints.sessions}/start`, fetchOptions);
         const data = await response.json();
         
         if (response.ok && data.qr) {
