@@ -1,6 +1,6 @@
 // Check authentication
 if (!checkAuth()) {
-    throw new Error('Not authenticated');
+    window.location.href = 'index.html';
 }
 
 // Set username
@@ -8,6 +8,18 @@ document.getElementById('username').textContent = localStorage.getItem('username
 
 let sessions = [];
 let pollingInterval = null;
+
+// Event listener for pairing method
+document.querySelectorAll('input[name="pairingMethod"]').forEach(elem => {
+    elem.addEventListener('change', function(event) {
+        const phoneInputContainer = document.getElementById('phoneInputContainer');
+        if (event.target.value === 'phone') {
+            phoneInputContainer.classList.remove('d-none');
+        } else {
+            phoneInputContainer.classList.add('d-none');
+        }
+    });
+});
 
 // Load sessions
 async function loadSessions() {
@@ -25,11 +37,11 @@ async function loadSessions() {
             renderSessions();
             startStatusPolling();
         } else {
-            showToast('error', data.error || 'Gagal memuat sessions');
+            showToast('error', data.error || 'Gagal memuat sesi');
         }
     } catch (error) {
         console.error('Load sessions error:', error);
-        showToast('error', 'Terjadi kesalahan saat memuat sessions');
+        showToast('error', 'Terjadi kesalahan saat memuat sesi');
     }
 }
 
@@ -42,7 +54,7 @@ function renderSessions() {
         container.innerHTML = `
             <div class="col-12 text-center py-5">
                 <i class="bi bi-inbox" style="font-size: 80px; color: #ccc;"></i>
-                <p class="text-muted mt-3">Belum ada session. Klik "Tambah Session" untuk memulai.</p>
+                <p class="text-muted mt-3">Belum ada sesi. Klik "Tambah Session" untuk memulai.</p>
             </div>
         `;
         return;
@@ -94,7 +106,8 @@ async function updateAllStatus() {
 // Update single session status
 async function updateSessionStatus(sessionName) {
     try {
-                    const response = await fetch(`${config.apiUrl}${config.endpoints.sessions}/${sessionName}/status`, {            headers: {
+        const response = await fetch(`${config.apiUrl}${config.endpoints.sessions}/${sessionName}/status`, {
+            headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
         });
@@ -123,23 +136,23 @@ async function updateSessionStatus(sessionName) {
     }
 }
 
-// Create session
-function pollSessionStatus(sessionName) {
+// Poll for session connection
+function pollSessionConnection(sessionName) {
     const modal = document.getElementById('addSessionModal');
     let attempts = 0;
-    const maxAttempts = 40; // 2 minutes
+    const maxAttempts = 60; // 3 minutes
 
     const intervalId = setInterval(async () => {
         attempts++;
         if (attempts > maxAttempts) {
             clearInterval(intervalId);
-            showToast('error', 'Waktu tunggu untuk memindai QR habis.');
+            showToast('error', 'Waktu tunggu koneksi habis.');
             bootstrap.Modal.getInstance(modal)?.hide();
             return;
         }
 
         try {
-            await fetch(`${config.apiUrl}${config.endpoints.sessions}/${sessionName}/status`, {
+            const response = await fetch(`${config.apiUrl}${config.endpoints.sessions}/${sessionName}/status`, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
 
@@ -161,60 +174,130 @@ function pollSessionStatus(sessionName) {
     modal.setAttribute('data-polling-interval-id', intervalId);
 }
 
+// Create session
 async function createSession() {
     const sessionName = document.getElementById('sessionName').value.trim();
-    
+    const pairingMethod = document.querySelector('input[name="pairingMethod"]:checked').value;
+
     if (!sessionName) {
-        showToast('error', 'Nama session harus diisi');
+        showToast('error', 'Nama sesi harus diisi');
         return;
     }
-    
+
     const createBtn = document.getElementById('createSessionBtn');
     createBtn.disabled = true;
     createBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Membuat...';
-    
+
     try {
-        const fetchOptions = {
+        // 1. Create session in backend
+        const createResponse = await fetch(`${config.apiUrl}${config.endpoints.sessions}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${getToken()}`
             },
-            body: JSON.stringify({ session: sessionName })
-        };
+            body: JSON.stringify({ session_name: sessionName })
+        });
 
-        const response = await fetch(`${config.apiUrl}${config.endpoints.sessions}/start`, fetchOptions);
-        const data = await response.json();
-        
-        if (response.ok && data.qr) {
-            showToast('success', 'Session berhasil dibuat! Pindai QR Code di bawah ini.');
-            document.getElementById('qrCodeContainer').classList.remove('d-none');
-            document.getElementById('qrCodeImage').src = data.qr;
-            createBtn.classList.add('d-none');
-            pollSessionStatus(sessionName);
-        } else {
-            showToast('error', data.message || 'Gagal membuat session');
-            createBtn.disabled = false;
-            createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Session';
+        const createData = await createResponse.json();
+
+        if (!createResponse.ok) {
+            throw new Error(createData.error || 'Gagal membuat sesi');
         }
+
+        showToast('success', 'Sesi berhasil dibuat! Memulai proses pairing...');
+        document.getElementById('addSessionForm').classList.add('d-none'); // Hide form inputs
+        createBtn.classList.add('d-none'); // Hide create button
+
+        pollSessionConnection(sessionName);
+
+        // 2. Proceed with pairing method
+        if (pairingMethod === 'qr') {
+            document.getElementById('qrCodeContainer').classList.remove('d-none');
+            
+            // Poll for QR code
+            let qrAttempts = 0;
+            const maxQrAttempts = 20; // 1 minute
+            const qrInterval = setInterval(async () => {
+                qrAttempts++;
+                if (qrAttempts > maxQrAttempts) {
+                    clearInterval(qrInterval);
+                    showToast('error', 'Gagal mendapatkan QR code.');
+                    bootstrap.Modal.getInstance(document.getElementById('addSessionModal'))?.hide();
+                    return;
+                }
+                try {
+                    const qrResponse = await fetch(`${config.apiUrl}${config.endpoints.sessions}/${sessionName}/qr`, {
+                        headers: { 'Authorization': `Bearer ${getToken()}` }
+                    });
+                    const qrData = await qrResponse.json();
+                    if (qrResponse.ok && qrData.qr) {
+                        clearInterval(qrInterval);
+                        document.getElementById('qrCodeImage').src = qrData.qr;
+                        document.getElementById('qrSpinner').classList.remove('d-none');
+                    }
+                } catch (e) { /* ignore */ }
+            }, 3000);
+
+        } else if (pairingMethod === 'phone') {
+            const phoneNumber = document.getElementById('phoneNumber').value.trim();
+            if (!phoneNumber) {
+                throw new Error('Nomor telepon harus diisi');
+            }
+
+            document.getElementById('pairingCodeContainer').classList.remove('d-none');
+
+            const pairResponse = await fetch(`${config.apiUrl}${config.endpoints.sessions}/${sessionName}/pair-phone`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${getToken()}`
+                },
+                body: JSON.stringify({ phone_number: phoneNumber })
+            });
+
+            const pairData = await pairResponse.json();
+
+            if (!pairResponse.ok) {
+                throw new Error(pairData.error || 'Gagal melakukan pairing dengan nomor telepon');
+            }
+            
+            // Assuming the gateway returns the code in `data.code`
+            if (pairData.data && pairData.data.code) {
+                 document.getElementById('pairingCode').textContent = pairData.data.code;
+            } else {
+                // If code is not in response, maybe it's sent via webhook or not needed
+                showToast('info', 'Permintaan pairing terkirim. Silakan periksa perangkat Anda.');
+                document.getElementById('pairingCode').textContent = "---";
+            }
+        }
+
     } catch (error) {
         console.error('Create session error:', error);
-        showToast('error', 'Terjadi kesalahan saat membuat session');
+        showToast('error', error.message || 'Terjadi kesalahan saat membuat sesi');
         createBtn.disabled = false;
-        createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Session';
+        createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Sesi';
+        document.getElementById('addSessionForm').classList.remove('d-none');
     }
 }
+
 
 // Reset modal when closed
 document.getElementById('addSessionModal').addEventListener('hidden.bs.modal', (event) => {
     const modal = event.target;
-    document.getElementById('sessionName').value = '';
+    document.getElementById('addSessionForm').reset();
+    document.getElementById('addSessionForm').classList.remove('d-none');
+    
+    document.getElementById('phoneInputContainer').classList.add('d-none');
     document.getElementById('qrCodeContainer').classList.add('d-none');
     document.getElementById('qrCodeImage').src = '';
+    document.getElementById('pairingCodeContainer').classList.add('d-none');
+    document.getElementById('pairingCode').textContent = '';
+
     const createBtn = document.getElementById('createSessionBtn');
     createBtn.classList.remove('d-none');
     createBtn.disabled = false;
-    createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Session';
+    createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Sesi';
     
     const pollingIntervalId = modal.getAttribute('data-polling-interval-id');
     if (pollingIntervalId) {
@@ -223,7 +306,25 @@ document.getElementById('addSessionModal').addEventListener('hidden.bs.modal', (
     }
 });
 
-// Load sessions on page load
+// Logout
+function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+    window.location.href = 'index.html';
+}
+
+// Toast functions
+function showToast(type, message) {
+    const toastId = type === 'success' ? 'successToast' : 'errorToast';
+    const messageId = type === 'success' ? 'successMessage' : 'errorMessage';
+    
+    document.getElementById(messageId).textContent = message;
+    const toastEl = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastEl);
+    toast.show();
+}
+
+// Initial load
 loadSessions();
 
 // Cleanup on page unload
