@@ -12,7 +12,7 @@ let pollingInterval = null;
 // Load sessions
 async function loadSessions() {
     try {
-        const response = await fetch(`${config.apiUrl}/sessions`, {
+        const response = await fetch(`${config.backendApiUrl}/sessions`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -94,7 +94,7 @@ async function updateAllStatus() {
 // Update single session status
 async function updateSessionStatus(sessionName) {
     try {
-        const response = await fetch(`${config.apiUrl}/sessions/${sessionName}/status`, {
+        const response = await fetch(`${config.backendApiUrl}/sessions/${sessionName}/status`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -140,7 +140,7 @@ function pollSessionStatus(sessionName) {
         }
 
         try {
-            const response = await fetch(`${config.apiUrl}/sessions/${sessionName}/status`, {
+            const response = await fetch(`${config.backendApiUrl}/sessions/${sessionName}/status`, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
 
@@ -177,7 +177,7 @@ async function createSession() {
     
     try {
         // 1. Create the session in the backend
-        const createResponse = await fetch(`${config.apiUrl}/sessions`,
+        const createResponse = await fetch(`${config.backendApiUrl}/sessions`,
         {
             method: 'POST',
             headers: {
@@ -210,7 +210,7 @@ async function createSession() {
             }
 
             try {
-                const qrResponse = await fetch(`${config.apiUrl}/sessions/${sessionName}/qr`, {
+                const qrResponse = await fetch(`${config.backendApiUrl}/sessions/${sessionName}/qr`, {
                     headers: { 'Authorization': `Bearer ${getToken()}` }
                 });
                 const qrData = await qrResponse.json();

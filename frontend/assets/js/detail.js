@@ -20,7 +20,7 @@ let statusPolling = null;
 // Load session details
 async function loadSessionDetails() {
     try {
-        const response = await fetch(`${config.apiUrl}/sessions/${sessionId}`, {
+        const response = await fetch(`${config.backendApiUrl}/sessions/${sessionId}`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -58,7 +58,7 @@ function renderSessionDetails() {
 // Update status
 async function updateStatus() {
     try {
-        const response = await fetch(`${config.apiUrl}/sessions/${sessionId}/status`, {
+        const response = await fetch(`${config.backendApiUrl}/sessions/${sessionId}/status`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -103,7 +103,7 @@ async function loadQrCode() {
     `;
 
     try {
-        const response = await fetch(`${config.apiUrl}/sessions/${sessionId}/qr`, {
+        const response = await fetch(`${config.backendApiUrl}/sessions/${sessionId}/qr`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -151,7 +151,7 @@ document.getElementById('testMessageForm').addEventListener('submit', async (e) 
     sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Mengirim...';
     
     try {
-        const response = await fetch(`${config.apiUrl}/sessions/${sessionId}/test-message`, {
+        const response = await fetch(`${config.backendApiUrl}/sessions/${sessionId}/test-message`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -188,7 +188,7 @@ async function regenerateApiKey() {
     }
     
     try {
-        const response = await fetch(`${config.apiUrl}/sessions/${sessionId}/regenerate-key`, {
+        const response = await fetch(`${config.backendApiUrl}/sessions/${sessionId}/regenerate-key`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${getToken()}`
@@ -216,7 +216,7 @@ async function deleteSession() {
     }
     
     try {
-        const response = await fetch(`${config.apiUrl}/sessions/${sessionId}`, {
+        const response = await fetch(`${config.backendApiUrl}/sessions/${sessionId}`, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${getToken()}`
@@ -244,7 +244,7 @@ let webhooks = [];
 // --- Webhook Functions ---
 async function loadWebhooks() {
     try {
-        const response = await fetch(`${config.apiUrl}/webhooks/${sessionId}`, {
+        const response = await fetch(`${config.backendApiUrl}/webhooks/${sessionId}`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         const data = await response.json();
@@ -332,7 +332,7 @@ async function saveWebhook() {
         document: document.getElementById('webhookDocument').checked,
     };
 
-    const endpoint = id ? `${config.apiUrl}/webhooks/${sessionId}/${id}` : `${config.apiUrl}/webhooks/${sessionId}`;
+    const endpoint = id ? `${config.backendApiUrl}/webhooks/${sessionId}/${id}` : `${config.backendApiUrl}/webhooks/${sessionId}`;
     const method = id ? 'PUT' : 'POST';
 
     try {
@@ -359,7 +359,7 @@ async function deleteWebhook(id) {
     if (!confirm('Anda yakin ingin menghapus webhook ini?')) return;
 
     try {
-        const response = await fetch(`${config.apiUrl}/webhooks/${sessionId}/${id}`, {
+        const response = await fetch(`${config.backendApiUrl}/webhooks/${sessionId}/${id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
