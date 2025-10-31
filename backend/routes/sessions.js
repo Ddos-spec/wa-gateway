@@ -3,6 +3,7 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/db.js';
 import authMiddleware from '../middleware/auth.js';
+import fs from 'fs';
 
 const router = express.Router();
 
@@ -53,15 +54,21 @@ router.get('/:name/status', authMiddleware, async (req, res) => {
 });
 
 // GET QR CODE FOR SESSION BY NAME
+import fs from 'fs';
+
 router.post('/:name/qr', authMiddleware, async (req, res) => {
   const { name } = req.params;
-  console.log(`[${name}] Received request for QR code.`);
-  const gatewayUrl = `${process.env.WA_GATEWAY_URL}/session/start`;
-  console.log(`[${name}] Forwarding request to gateway: ${gatewayUrl}`);
+  const logFile = '/app/backend_debug.log';
+  const log = (msg) => fs.appendFileSync(logFile, `[${new Date().toISOString()}] ${msg}\n`);
 
+  log(`[${name}] Received request for QR code.`);
+  
   try {
+    const gatewayUrl = `${process.env.WA_GATEWAY_URL}/session/start`;
+    log(`[${name}] Forwarding request to gateway: ${gatewayUrl}`);
+    
     const response = await axios.post(gatewayUrl, { session: name });
-    console.log(`[${name}] Received response from gateway for QR code:`, response.data);
+    log(`[${name}] Received response from gateway for QR code: ${JSON.stringify(response.data)}`);
     
     if (response.data.qr) {
       res.json({ success: true, qr: response.data.qr });
@@ -69,8 +76,12 @@ router.post('/:name/qr', authMiddleware, async (req, res) => {
       res.json({ success: true, qr: null, message: response.data.message || 'Already connected' });
     }
   } catch (error) {
-    console.error(`[${name}] Error getting QR code from gateway:`, error.response?.data || error.message);
-    res.status(500).json({ success: false, error: error.response?.data?.message || 'Failed to fetch QR code' });
+    log(`[${name}] CRITICAL ERROR getting QR code: ${error.stack}`);
+    if (error.response) {
+      log(`[${name}] Axios response data: ${JSON.stringify(error.response.data)}`);
+      log(`[${name}] Axios response status: ${error.response.status}`);
+    }
+    res.status(500).json({ success: false, error: 'Internal server error during QR code generation.' });
   }
 });
 
@@ -78,29 +89,36 @@ router.post('/:name/qr', authMiddleware, async (req, res) => {
 router.post('/:name/pair-phone', authMiddleware, async (req, res) => {
   const { name } = req.params;
   const { phone_number } = req.body;
-  console.log(`[${name}] Received request to pair with phone number: ${phone_number}`);
+  const logFile = '/app/backend_debug.log';
+  const log = (msg) => fs.appendFileSync(logFile, `[${new Date().toISOString()}] ${msg}\n`);
+
+  log(`[${name}] Received request to pair with phone number: ${phone_number}`);
 
   if (!phone_number) {
     return res.status(400).json({ success: false, error: 'Phone number is required' });
   }
 
   try {
-    console.log(`[${name}] Updating session status to 'pairing'.`);
+    log(`[${name}] Updating session status to 'pairing'.`);
     await pool.query('UPDATE sessions SET status = $1 WHERE session_name = $2', ['pairing', name]);
     
     const gatewayUrl = `${process.env.WA_GATEWAY_URL}/session/pair-phone`;
-    console.log(`[${name}] Forwarding request to gateway: ${gatewayUrl}`);
+    log(`[${name}] Forwarding request to gateway: ${gatewayUrl}`);
     const response = await axios.post(gatewayUrl, {
       session: name,
       phone_number: phone_number
     });
-    console.log(`[${name}] Received response from gateway for phone pairing:`, response.data);
+    log(`[${name}] Received response from gateway for phone pairing: ${JSON.stringify(response.data)}`);
 
     res.json({ success: true, data: response.data });
 
   } catch (error) {
-    console.error(`[${name}] Error pairing with phone number from gateway:`, error.response?.data || error.message);
-    res.status(500).json({ success: false, error: error.response?.data?.message || 'Failed to pair with phone number' });
+    log(`[${name}] CRITICAL ERROR pairing with phone: ${error.stack}`);
+    if (error.response) {
+      log(`[${name}] Axios response data: ${JSON.stringify(error.response.data)}`);
+      log(`[${name}] Axios response status: ${error.response.status}`);
+    }
+    res.status(500).json({ success: false, error: 'Internal server error during phone pairing.' });
   }
 });
 
