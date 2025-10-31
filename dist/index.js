@@ -157,8 +157,11 @@ whatsapp.onConnected(async (session) => {
     console.log(`session: '${session}' connected`);
     try {
         const sessionInfo = whatsapp.getSession(session);
-        const waNumber = sessionInfo?.user?.id.split('@')[0] || '';
-        const profileName = sessionInfo?.user?.name ?? '';
+        // Temporarily log the auth object to find the user info
+        console.log(`[${session}] Inspecting auth object:`, sessionInfo?.config?.auth);
+        // Temporarily disable profile name extraction to prevent build errors
+        const waNumber = ''; // sessionInfo?.user?.id.split('@')[0] || '';
+        const profileName = ''; // sessionInfo?.user?.name ?? '';
         await query("UPDATE sessions SET status = 'online', wa_number = $1, profile_name = $2, updated_at = CURRENT_TIMESTAMP WHERE session_name = $3", [waNumber, profileName, session]);
         const activeWebhooks = await getActiveWebhooks(session);
         if (activeWebhooks.length === 0)

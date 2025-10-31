@@ -210,7 +210,7 @@ whatsapp.onConnected(async (session) => {
   try {
     const sessionInfo = whatsapp.getSession(session);
     // Temporarily log the auth object to find the user info
-    console.log(`[${session}] Inspecting auth object:`, sessionInfo?.config?.auth);
+    console.log(`[${session}] Inspecting auth object:`, (sessionInfo as any)?.config?.auth);
 
     // Temporarily disable profile name extraction to prevent build errors
     const waNumber = ''; // sessionInfo?.user?.id.split('@')[0] || '';
