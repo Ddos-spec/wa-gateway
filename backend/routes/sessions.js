@@ -124,21 +124,7 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// UPDATE WEBHOOK BY NAME
-router.put('/:name/webhook', authMiddleware, async (req, res) => {
-  try {
-    const { name } = req.params;
-    const { webhook_url, webhook_events } = req.body;
-    const result = await pool.query('UPDATE sessions SET webhook_url = $1, webhook_events = $2, updated_at = CURRENT_TIMESTAMP WHERE session_name = $3 RETURNING *', [webhook_url, JSON.stringify(webhook_events), name]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Session not found' });
-    }
-    res.json({ success: true, session: result.rows[0] });
-  } catch (error) {
-    console.error('Update webhook error:', error);
-    res.status(500).json({ success: false, error: 'Failed to update webhook' });
-  }
-});
+
 
 // REGENERATE API KEY BY NAME
 router.post('/:name/regenerate-key', authMiddleware, async (req, res) => {

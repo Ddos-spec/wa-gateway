@@ -323,7 +323,7 @@ async function saveWebhook() {
     const events = {
         individual: document.getElementById('webhookIndividual').checked,
         group: document.getElementById('webhookGroup').checked,
-        fromMe: document.getElementById('webhookFromMe').checked,
+        from_me: document.getElementById('webhookFromMe').checked,
         updateStatus: document.getElementById('webhookUpdateStatus').checked,
         image: document.getElementById('webhookImage').checked,
         video: document.getElementById('webhookVideo').checked,
