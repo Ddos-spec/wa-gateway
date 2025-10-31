@@ -3,28 +3,24 @@ import cors from 'cors';
 import 'dotenv/config';
 
 import authRoutes from './routes/auth.js';
-import sessionRoutes from './routes/sessions.js';
-import webhookRoutes from './routes/webhooks.js';
+import sessionsRouter from './routes/sessions.js';
+import webhooksRouter from './routes/webhooks.js';
+import profileRouter from './routes/profile.js';
 
 const app = express();
+const PORT = process.env.BACKEND_PORT || 3001;
 
-// Middleware
-app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true
-}));
+app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'WA Gateway Dashboard API is running' });
+  res.json({ status: 'ok' });
 });
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/sessions', sessionRoutes);
-app.use('/api/webhooks', webhookRoutes);
+app.use('/api/auth', authRouter);
+app.use('/api/sessions', sessionsRouter);
+app.use('/api/webhooks', webhooksRouter);
+app.use('/api/profile', profileRouter);
 
 // Log all registered routes
 app._router.stack.forEach(function(r){

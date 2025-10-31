@@ -18,6 +18,29 @@ export const createProfileController = () => {
       }),
   });
 
+  app.get('/:name', createKeyMiddleware(), async (c) => {
+    const name = c.req.param("name");
+    const session = whatsapp.getSession(name);
+
+    if (!session) {
+      throw new HTTPException(404, { message: "Session not found" });
+    }
+
+    // The user object is nested inside the socket property, as discovered from research.
+    // We use optional chaining and a type assertion to safely access it.
+    const user = (session as any)?.socket?.user;
+
+    if (!user) {
+      throw new HTTPException(404, { message: "User info not available yet. Please wait a moment." });
+    }
+
+    return c.json({
+      name: user.name,
+      id: user.id,
+      number: user.id?.split(':')[0] || ''
+    });
+  });
+
   app.post(
     "/",
     createKeyMiddleware(),

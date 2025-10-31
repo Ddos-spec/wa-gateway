@@ -77,6 +77,8 @@ function renderSessionDetails() {
     document.getElementById('apiKey').value = session.api_key;
 }
 
+let profileFetched = false; // Flag to prevent multiple fetches
+
 // Update status
 async function updateStatus() {
     try {
@@ -96,9 +98,17 @@ async function updateStatus() {
             if (data.status === 'online' || data.status === 'connected') {
                 statusBadge.classList.add('bg-success');
                 document.getElementById('pairingSection').style.display = 'none';
+
+                // ✅ NEW: Fetch profile info once connected
+                if (!profileFetched) {
+                    fetchProfileInfo();
+                    profileFetched = true; // Set flag to true after fetching
+                }
+
             } else {
                 statusBadge.classList.remove('bg-success');
                 document.getElementById('pairingSection').style.display = 'block';
+                profileFetched = false; // Reset flag when disconnected
                 if (data.status === 'connecting') {
                     statusBadge.classList.add('bg-warning');
                     loadQrCode(); // Attempt to load QR code
@@ -111,6 +121,26 @@ async function updateStatus() {
         }
     } catch (error) {
         console.error('Update status error:', error);
+    }
+}
+
+// ✅ NEW: Function to fetch profile info
+async function fetchProfileInfo() {
+    try {
+        const response = await fetch(`${config.backendApiUrl}/api/profile/${sessionId}`, {
+            headers: {
+                'Authorization': `Bearer ${getToken()}`
+            }
+        });
+        const data = await response.json();
+        if (response.ok) {
+            document.getElementById('profileName').textContent = data.name || 'Nama tidak tersedia';
+            document.getElementById('waNumber').textContent = data.number || '-';
+        } else {
+            console.error('Failed to fetch profile info:', data.message);
+        }
+    } catch (error) {
+        console.error('Fetch profile info error:', error);
     }
 }
 
