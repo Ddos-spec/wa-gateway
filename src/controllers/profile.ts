@@ -6,9 +6,7 @@ import { createKeyMiddleware } from "../middlewares/key.middleware.js";
 import { HTTPException } from "hono/http-exception";
 
 /**
- * ✅ IMPROVEMENT: Centralized response format utility
- * Prinsip: DRY + Consistency
- * Benefit: Semua response punya format yang sama
+ * ✅ Response format utilities
  */
 const successResponse = (data: any) => ({
   success: true,
@@ -22,22 +20,32 @@ const errorResponse = (message: string, details?: any) => ({
 });
 
 /**
- * ✅ IMPROVEMENT: Extract user info dengan retry mechanism
- * Prinsip: Resilience + Separation of Concerns
+ * ✅ FIXED: Dramatically increased retry window based on research
+ * Reference: User info can take up to 2-3 minutes to be fully available
  * 
- * Based on research: User info might not be available immediately after connection
- * Reference: https://github.com/pedroslopez/whatsapp-web.js/issues/268
+ * @param session - WhatsApp session object
+ * @param options - Retry configuration
+ * @returns User info or null if not available
  */
 async function extractUserInfo(
   session: any,
-  options: { maxRetries?: number; retryDelay?: number } = {}
+  options: { 
+    maxRetries?: number; 
+    initialDelay?: number;
+    maxDelay?: number;
+  } = {}
 ): Promise<{ name: string; id: string; number: string } | null> {
-  const { maxRetries = 3, retryDelay = 1000 } = options;
+  const { 
+    maxRetries = 8,        // ✅ Increased from 3 to 8
+    initialDelay = 500,    // ✅ Start with shorter delay
+    maxDelay = 3000        // ✅ Cap at 3 seconds
+  } = options;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const user = session?.socket?.user;
 
     if (user && user.id) {
+      console.log(`✅ User info extracted on attempt ${attempt}`);
       return {
         name: user.name || "Unknown",
         id: user.id,
@@ -45,18 +53,20 @@ async function extractUserInfo(
       };
     }
 
-    // ✅ Jangan retry di attempt terakhir
+    // ✅ Exponential backoff: 500ms -> 1s -> 2s -> 3s (capped)
     if (attempt < maxRetries) {
-      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      const delay = Math.min(initialDelay * Math.pow(2, attempt - 1), maxDelay);
+      console.log(`⏳ Attempt ${attempt}/${maxRetries}: User info not ready, retrying in ${delay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
+  console.log(`❌ Failed to extract user info after ${maxRetries} attempts`);
   return null;
 }
 
 /**
- * ✅ IMPROVEMENT: Check session status lebih robust
- * Prinsip: Single Responsibility + Explicit over Implicit
+ * ✅ Session validation
  */
 function validateSession(sessionId: string) {
   const session = whatsapp.getSession(sessionId);
@@ -67,9 +77,6 @@ function validateSession(sessionId: string) {
     });
   }
 
-  // ✅ Optional: Check if session is actually connected
-  // Based on research, connection state bisa dicek tapi nggak 100% reliable
-  // Kita tetep return session dan let caller handle availability check
   return session;
 }
 
@@ -77,7 +84,7 @@ export const createProfileController = () => {
   const app = new Hono();
 
   /**
-   * ✅ Schema untuk POST endpoint (get profile dari target)
+   * ✅ Schema untuk POST endpoint
    */
   const getProfileSchema = z.object({
     session: z.string(),
@@ -90,7 +97,9 @@ export const createProfileController = () => {
 
   /**
    * ✅ GET /:name - Get profile info dari session yang logged in
-   * Endpoint ini dipanggil frontend untuk dapetin info user yang login
+   * 
+   * IMPORTANT: This endpoint will try for ~15 seconds total before giving up
+   * Total retry time: 500ms + 1s + 2s + 3s + 3s + 3s + 3s + 3s ≈ 18.5 seconds
    */
   app.get("/:name", createKeyMiddleware(), async (c) => {
     const name = c.req.param("name");
@@ -98,35 +107,34 @@ export const createProfileController = () => {
     try {
       const session = validateSession(name);
 
-      // ✅ Try to extract user info dengan retry
+      // ✅ Try with extended timeout
       const userInfo = await extractUserInfo(session, {
-        maxRetries: 3,
-        retryDelay: 1000,
+        maxRetries: 8,
+        initialDelay: 500,
+        maxDelay: 3000,
       });
 
       if (!userInfo) {
-        // ✅ Return consistent error format
+        // ✅ Return 503 dengan hint untuk retry
         return c.json(
           errorResponse(
-            "User info not available yet. Please wait a moment and try again.",
+            "User info not available. Session might still be initializing.",
             {
-              hint: "Session might be connecting. Try again in a few seconds.",
-              retry_after: 5, // Suggest retry after 5 seconds
+              hint: "This usually happens right after QR scan. The session needs a moment to fully initialize.",
+              retry_after: 10,
+              max_wait_time: "2-3 minutes after QR scan",
             }
           ),
-          503 // Service Unavailable - more appropriate than 404
+          503
         );
       }
 
-      // ✅ Return consistent success format
       return c.json(successResponse(userInfo));
     } catch (error) {
-      // ✅ Handle HTTPException yang di-throw dari validateSession
       if (error instanceof HTTPException) {
         return c.json(errorResponse(error.message), error.status);
       }
 
-      // ✅ Handle unexpected errors
       console.error("Get profile error:", error);
       return c.json(
         errorResponse("Internal server error", {
@@ -138,8 +146,84 @@ export const createProfileController = () => {
   });
 
   /**
+   * ✅ GET /:name/quick - Quick check tanpa retry
+   * Endpoint ini untuk frontend polling - fast fail, let frontend handle retry
+   */
+  app.get("/:name/quick", createKeyMiddleware(), async (c) => {
+    const name = c.req.param("name");
+
+    try {
+      const session = validateSession(name);
+
+      // ✅ Single attempt, no retry
+      const user = session?.socket?.user;
+
+      if (user && user.id) {
+        return c.json(
+          successResponse({
+            name: user.name || "Unknown",
+            id: user.id,
+            number: user.id?.split(":")[0] || "",
+          })
+        );
+      }
+
+      // ✅ Fast fail - let frontend retry
+      return c.json(
+        errorResponse("User info not ready yet", {
+          hint: "Session is still initializing. Frontend should retry.",
+        }),
+        503
+      );
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        return c.json(errorResponse(error.message), error.status);
+      }
+
+      return c.json(errorResponse("Internal server error"), 500);
+    }
+  });
+
+  /**
+   * ✅ GET /:name/status - Check session status with minimal info
+   */
+  app.get("/:name/status", createKeyMiddleware(), async (c) => {
+    const name = c.req.param("name");
+
+    try {
+      const session = validateSession(name);
+      const user = session?.socket?.user;
+
+      return c.json(
+        successResponse({
+          session_id: name,
+          is_ready: !!(user && user.id),
+          has_user_info: !!user,
+          user_info: user && user.id ? {
+            name: user.name || "Unknown",
+            id: user.id,
+            number: user.id?.split(":")[0] || "",
+          } : null,
+        })
+      );
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        return c.json(
+          successResponse({
+            session_id: name,
+            is_ready: false,
+            has_user_info: false,
+            user_info: null,
+          })
+        );
+      }
+
+      return c.json(errorResponse("Failed to check session status"), 500);
+    }
+  });
+
+  /**
    * ✅ POST / - Get profile info dari target number/group
-   * Endpoint ini untuk cek profile orang lain
    */
   app.post(
     "/",
@@ -149,10 +233,8 @@ export const createProfileController = () => {
       try {
         const payload = c.req.valid("json");
 
-        // ✅ Validate session exists
         validateSession(payload.session);
 
-        // ✅ Check if target is registered
         const isRegistered = await whatsapp.isExist({
           sessionId: payload.session,
           to: payload.target,
@@ -168,7 +250,6 @@ export const createProfileController = () => {
           );
         }
 
-        // ✅ Get profile info
         const profileData = await whatsapp.getProfileInfo({
           sessionId: payload.session,
           target: payload.target,
@@ -195,95 +276,46 @@ export const createProfileController = () => {
     }
   );
 
-  /**
-   * ✅ NEW: GET /:name/status - Check session status
-   * Endpoint tambahan buat frontend cek apakah session ready
-   * Prinsip: Explicit over Implicit
-   */
-  app.get("/:name/status", createKeyMiddleware(), async (c) => {
-    const name = c.req.param("name");
-
-    try {
-      const session = validateSession(name);
-
-      // Quick check tanpa retry
-      const userInfo = await extractUserInfo(session, {
-        maxRetries: 1,
-        retryDelay: 0,
-      });
-
-      return c.json(
-        successResponse({
-          session_id: name,
-          is_ready: !!userInfo,
-          user_info: userInfo,
-        })
-      );
-    } catch (error) {
-      if (error instanceof HTTPException) {
-        return c.json(
-          successResponse({
-            session_id: name,
-            is_ready: false,
-            user_info: null,
-          })
-        );
-      }
-
-      return c.json(
-        errorResponse("Failed to check session status"),
-        500
-      );
-    }
-  });
-
   return app;
 };
 
 /**
  * ============================================
- * 🎯 USAGE EXAMPLES dari Frontend
+ * 🎯 RECOMMENDED FRONTEND USAGE PATTERNS
  * ============================================
  * 
- * 1. Get logged-in user profile:
- *    GET /api/profile/:sessionId
- *    Response:
- *    {
- *      "success": true,
- *      "name": "John Doe",
- *      "id": "628123456789:1@s.whatsapp.net",
- *      "number": "628123456789"
- *    }
+ * PATTERN 1: Use GET /:name with long timeout (simple but blocks)
+ * - Single request, backend handles retry
+ * - Takes 15-20 seconds if not ready
+ * - Good for: Initial page load after QR scan
  * 
- * 2. Error when not ready:
- *    {
- *      "success": false,
- *      "message": "User info not available yet...",
- *      "details": {
- *        "hint": "Session might be connecting...",
- *        "retry_after": 5
- *      }
- *    }
+ * PATTERN 2: Use GET /:name/quick with frontend polling (recommended)
+ * - Fast fail (~instant response)
+ * - Frontend controls retry frequency
+ * - Good for: Status polling, better UX
  * 
- * 3. Check session status:
- *    GET /api/profile/:sessionId/status
- *    Response:
- *    {
- *      "success": true,
- *      "session_id": "test-session",
- *      "is_ready": true,
- *      "user_info": { ... }
- *    }
+ * PATTERN 3: Use GET /:name/status to check readiness first
+ * - Check if ready before fetching
+ * - Prevents unnecessary calls
+ * - Good for: Conditional UI rendering
  * 
- * 4. Get target profile:
- *    POST /api/profile
- *    Body: {
- *      "session": "test-session",
- *      "target": "628123456789@s.whatsapp.net"
- *    }
- *    Response:
- *    {
- *      "success": true,
- *      "profile": { ... }
- *    }
+ * Example implementation in frontend:
+ * 
+ * ```javascript
+ * async function waitForProfile(sessionId, maxAttempts = 20) {
+ *   for (let i = 0; i < maxAttempts; i++) {
+ *     const data = await fetch(`/api/profile/${sessionId}/quick`);
+ *     
+ *     if (data.success) {
+ *       return data; // Got it!
+ *     }
+ *     
+ *     // Exponential backoff: 2s, 4s, 6s, ..., max 10s
+ *     const delay = Math.min(2000 * (i + 1), 10000);
+ *     await sleep(delay);
+ *   }
+ *   
+ *   throw new Error('Timeout waiting for profile');
+ * }
+ * ```
  */
