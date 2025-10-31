@@ -1,4 +1,4 @@
-'''window.onerror = function(message, source, lineno, colno, error) {
+window.onerror = function(message, source, lineno, colno, error) {
     const errorContainer = document.getElementById('error-container');
     const errorDetails = document.getElementById('error-details');
     if (errorContainer && errorDetails) {
@@ -588,5 +588,3 @@ window.addEventListener('beforeunload', () => {
     if (statusPolling) clearInterval(statusPolling);
 });
 
-
-''
