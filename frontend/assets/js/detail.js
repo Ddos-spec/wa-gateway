@@ -376,48 +376,7 @@ async function deleteWebhook(id) {
     }
 }
 
-// --- Phone pairing functions ---
-document.getElementById('phonePairingForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const phoneInput = document.getElementById('pairingPhone');
-    const phoneNumber = phoneInput.value.replace(/[-\s]/g, '');
-    const pairBtn = document.getElementById('pairPhoneBtn');
-
-    if (!phoneNumber) {
-        showToast('error', 'Nomor telepon harus diisi');
-        return;
-    }
-
-    pairBtn.disabled = true;
-    pairBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Menghubungkan...';
-
-    try {
-        const response = await fetch(`${config.apiUrl}/sessions/${sessionId}/pair-phone`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getToken()}`
-            },
-            body: JSON.stringify({ phone_number: phoneNumber })
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.code) {
-            showToast('success', 'Kode pairing berhasil dibuat!');
-            document.getElementById('pairingCodeContainer').classList.remove('d-none');
-            document.getElementById('pairingCode').textContent = data.code;
-        } else {
-            throw new Error(data.error || 'Gagal membuat kode pairing');
-        }
-    } catch (error) {
-        console.error('Phone pairing error:', error);
-        showToast('error', error.message);
-    } finally {
-        pairBtn.disabled = false;
-        pairBtn.innerHTML = '<i class="bi bi-link-45deg"></i> Hubungkan';
-    }
-});
+// --- Phone pairing functions will be added here later ---
 
 
 // Utility functions

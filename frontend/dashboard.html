@@ -57,50 +57,17 @@
                         <div class="mb-3">
                             <label class="form-label">Nama Session</label>
                             <input type="text" class="form-control" id="sessionName" placeholder="misal: mysession" required>
-                            <small class="text-muted">Gunakan huruf kecil tanpa spasi.</small>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Metode Pairing</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="pairingMethod" id="qrMethod" value="qr" checked>
-                                <label class="form-check-label" for="qrMethod">
-                                    Gunakan QR Code
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="pairingMethod" id="phoneMethod" value="phone">
-                                <label class="form-check-label" for="phoneMethod">
-                                    Gunakan Nomor Telepon
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="mb-3 d-none" id="phoneInputContainer">
-                            <label for="phoneNumber" class="form-label">Nomor Telepon</label>
-                            <input type="text" class="form-control" id="phoneNumber" placeholder="misal: 6281234567890">
-                            <small class="text-muted">Gunakan format internasional (misal: 62812...)</small>
+                            <small class="text-muted">Gunakan huruf kecil tanpa spasi</small>
                         </div>
                         
                         <div id="qrCodeContainer" class="text-center d-none">
-                            <p class="text-muted">Pindai QR Code untuk menghubungkan:</p>
+                            <p class="text-muted">Scan QR Code untuk menghubungkan:</p>
                             <img id="qrCodeImage" src="" alt="QR Code" class="img-fluid" style="max-width: 300px;">
-                            <div class="mt-3" id="qrSpinner">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <p class="mt-2">Menunggu pemindaian QR Code...</p>
-                            </div>
-                        </div>
-
-                        <div id="pairingCodeContainer" class="text-center d-none">
-                            <p class="text-muted">Masukkan kode berikut di perangkat WhatsApp Anda:</p>
-                            <h3 class="display-4" id="pairingCode"></h3>
                             <div class="mt-3">
                                 <div class="spinner-border text-primary" role="status">
                                     <span class="visually-hidden">Loading...</span>
                                 </div>
-                                <p class="mt-2">Menunggu koneksi...</p>
+                                <p class="mt-2">Menunggu scan QR Code...</p>
                             </div>
                         </div>
                     </form>

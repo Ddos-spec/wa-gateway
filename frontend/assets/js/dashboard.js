@@ -9,18 +9,6 @@ document.getElementById('username').textContent = localStorage.getItem('username
 let sessions = [];
 let pollingInterval = null;
 
-// Event listener for pairing method
-document.querySelectorAll('input[name="pairingMethod"]').forEach(elem => {
-    elem.addEventListener('change', function(event) {
-        const phoneInputContainer = document.getElementById('phoneInputContainer');
-        if (event.target.value === 'phone') {
-            phoneInputContainer.classList.remove('d-none');
-        } else {
-            phoneInputContainer.classList.add('d-none');
-        }
-    });
-});
-
 // Load sessions
 async function loadSessions() {
     try {
@@ -137,16 +125,16 @@ async function updateSessionStatus(sessionName) {
 }
 
 // Poll for session connection
-function pollSessionConnection(sessionName) {
+function pollSessionStatus(sessionName) {
     const modal = document.getElementById('addSessionModal');
     let attempts = 0;
-    const maxAttempts = 60; // 3 minutes
+    const maxAttempts = 40; // 2 minutes
 
     const intervalId = setInterval(async () => {
         attempts++;
         if (attempts > maxAttempts) {
             clearInterval(intervalId);
-            showToast('error', 'Waktu tunggu koneksi habis.');
+            showToast('error', 'Waktu tunggu untuk memindai QR habis.');
             bootstrap.Modal.getInstance(modal)?.hide();
             return;
         }
@@ -177,20 +165,20 @@ function pollSessionConnection(sessionName) {
 // Create session
 async function createSession() {
     const sessionName = document.getElementById('sessionName').value.trim();
-    const pairingMethod = document.querySelector('input[name="pairingMethod"]:checked').value;
-
+    
     if (!sessionName) {
-        showToast('error', 'Nama sesi harus diisi');
+        showToast('error', 'Nama session harus diisi');
         return;
     }
-
+    
     const createBtn = document.getElementById('createSessionBtn');
     createBtn.disabled = true;
     createBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Membuat...';
-
+    
     try {
-        // 1. Create session in backend
-        const createResponse = await fetch(`${config.apiUrl}/sessions`, {
+        // 1. Create the session in the backend
+        const createResponse = await fetch(`${config.apiUrl}/sessions`,
+        {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -202,99 +190,59 @@ async function createSession() {
         const createData = await createResponse.json();
 
         if (!createResponse.ok) {
-            throw new Error(createData.error || 'Gagal membuat sesi');
+            throw new Error(createData.error || 'Gagal membuat session');
         }
 
-        showToast('success', 'Sesi berhasil dibuat! Memulai proses pairing...');
-        document.getElementById('addSessionForm').classList.add('d-none'); // Hide form inputs
-        createBtn.classList.add('d-none'); // Hide create button
+        // 2. Start polling for the QR code
+        document.getElementById('qrCodeContainer').classList.remove('d-none');
+        createBtn.classList.add('d-none');
+        pollSessionStatus(sessionName); // Start polling for connection status
 
-        pollSessionConnection(sessionName);
+        let qrAttempts = 0;
+        const maxQrAttempts = 20; // Poll for 1 minute
+        const qrInterval = setInterval(async () => {
+            qrAttempts++;
+            if (qrAttempts > maxQrAttempts) {
+                clearInterval(qrInterval);
+                showToast('error', 'Gagal mendapatkan QR code. Silakan coba lagi.');
+                bootstrap.Modal.getInstance(document.getElementById('addSessionModal'))?.hide();
+                return;
+            }
 
-        // 2. Proceed with pairing method
-        if (pairingMethod === 'qr') {
-            document.getElementById('qrCodeContainer').classList.remove('d-none');
-            
-            // Poll for QR code
-            let qrAttempts = 0;
-            const maxQrAttempts = 20; // 1 minute
-            const qrInterval = setInterval(async () => {
-                qrAttempts++;
-                if (qrAttempts > maxQrAttempts) {
+            try {
+                const qrResponse = await fetch(`${config.apiUrl}/sessions/${sessionName}/qr`, {
+                    headers: { 'Authorization': `Bearer ${getToken()}` }
+                });
+                const qrData = await qrResponse.json();
+                if (qrResponse.ok && qrData.qr) {
                     clearInterval(qrInterval);
-                    showToast('error', 'Gagal mendapatkan QR code.');
-                    bootstrap.Modal.getInstance(document.getElementById('addSessionModal'))?.hide();
-                    return;
+                    showToast('success', 'Session berhasil dibuat! Pindai QR Code di bawah ini.');
+                    document.getElementById('qrCodeImage').src = qrData.qr;
                 }
-                try {
-                    const qrResponse = await fetch(`${config.apiUrl}/sessions/${sessionName}/qr`, {
-                        headers: { 'Authorization': `Bearer ${getToken()}` }
-                    });
-                    const qrData = await qrResponse.json();
-                    if (qrResponse.ok && qrData.qr) {
-                        clearInterval(qrInterval);
-                        document.getElementById('qrCodeImage').src = qrData.qr;
-                        document.getElementById('qrSpinner').classList.remove('d-none');
-                    }
-                } catch (e) { /* ignore */ }
-            }, 3000);
-
-        } else if (pairingMethod === 'phone') {
-            const phoneNumber = document.getElementById('phoneNumber').value.trim();
-            if (!phoneNumber) {
-                throw new Error('Nomor telepon harus diisi');
+            } catch (error) {
+                // Ignore polling errors, keep trying
+                console.error('QR poll error:', error);
             }
-
-            document.getElementById('pairingCodeContainer').classList.remove('d-none');
-
-            const pairResponse = await fetch(`${config.apiUrl}/sessions/${sessionName}/pair-phone`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${getToken()}`
-                },
-                body: JSON.stringify({ phone_number: phoneNumber })
-            });
-
-            const pairData = await pairResponse.json();
-
-            if (!pairResponse.ok) {
-                throw new Error(pairData.error || 'Gagal melakukan pairing dengan nomor telepon');
-            }
-            
-            if (pairData.code) {
-                 document.getElementById('pairingCode').textContent = pairData.code;
-            } else {
-                throw new Error('Tidak ada kode pairing yang diterima');
-            }
-        }
+        }, 3000);
 
     } catch (error) {
         console.error('Create session error:', error);
-        showToast('error', error.message || 'Terjadi kesalahan saat membuat sesi');
+        showToast('error', error.message || 'Terjadi kesalahan saat membuat session');
         createBtn.disabled = false;
-        createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Sesi';
-        document.getElementById('addSessionForm').classList.remove('d-none');
+        createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Session';
     }
 }
-
 
 // Reset modal when closed
 document.getElementById('addSessionModal').addEventListener('hidden.bs.modal', (event) => {
     const modal = event.target;
-    document.getElementById('addSessionForm').reset();
-    document.getElementById('addSessionForm').classList.remove('d-none');
-    
-    document.getElementById('phoneInputContainer').classList.add('d-none');
+    document.getElementById('sessionName').value = '';
     document.getElementById('qrCodeContainer').classList.add('d-none');
     document.getElementById('qrCodeImage').src = '';
-    document.getElementById('pairingCodeContainer').classList.add('d-none');
-    document.getElementById('pairingCode').textContent = '';
-
     const createBtn = document.getElementById('createSessionBtn');
     createBtn.classList.remove('d-none');
     createBtn.disabled = false;
-    createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Sesi';
+    createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Session';
     
     const pollingIntervalId = modal.getAttribute('data-polling-interval-id');
     if (pollingIntervalId) {
