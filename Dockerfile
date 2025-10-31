@@ -49,9 +49,14 @@ EXPOSE 5001 5000
 RUN echo "#!/bin/sh" > /app/start.sh && \
     echo "set -e" >> /app/start.sh && \
     echo "echo '--- Starting services ---'" >> /app/start.sh && \
-    echo "node /app/frontend-server.js &" >> /app/start.sh && \
-    echo "node /app/backend/server.js &" >> /app/start.sh && \
+    echo "echo 'Starting WA Gateway...'" >> /app/start.sh && \
     echo "node /app/dist/index.js &" >> /app/start.sh && \
+    echo "sleep 5" >> /app/start.sh && \
+    echo "echo 'Starting Backend Server...'" >> /app/start.sh && \
+    echo "node /app/backend/server.js &" >> /app/start.sh && \
+    echo "sleep 5" >> /app/start.sh && \
+    echo "echo 'Starting Frontend Server...'" >> /app/start.sh && \
+    echo "node /app/frontend-server.js &" >> /app/start.sh && \
     echo "echo '--- Services started, waiting for processes to exit ---'" >> /app/start.sh && \
     echo "wait -n" >> /app/start.sh
 
