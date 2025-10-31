@@ -26,7 +26,7 @@ export const createSessionController = () => {
     }
   });
 
-  // Endpoint to create a new session
+  // Endpoint to create a new session or get QR
   app.post(
     "/start",
     createKeyMiddleware(),
@@ -34,7 +34,10 @@ export const createSessionController = () => {
     async (c) => {
       const payload = c.req.valid("json");
       try {
-        // 1. Start the session in the library
+        // 1. Check if session exists in DB
+        const dbSession = await query("SELECT * FROM sessions WHERE session_name = $1", [payload.session]);
+
+        // 2. Start the session in the library
         const qr = await new Promise<string | null>((resolve) => {
           whatsapp.startSession(payload.session, {
             onConnected: () => resolve(null),
@@ -42,18 +45,26 @@ export const createSessionController = () => {
           });
         });
 
-        // 2. Save the session to the DATABASE
-        const apiKey = crypto.randomBytes(32).toString('hex');
-                  await query(
-                    'INSERT INTO sessions (session_name, status, api_key) VALUES ($1, $2, $3) ON CONFLICT (session_name) DO UPDATE SET status = $2',
-                    [payload.session, 'connecting', apiKey]
-                  );
+        // 3. Save/Update the session to the DATABASE
+        if (dbSession.rows.length === 0) {
+          const apiKey = crypto.randomBytes(32).toString('hex');
+          await query(
+            'INSERT INTO sessions (session_name, status, api_key) VALUES ($1, $2, $3)',
+            [payload.session, 'connecting', apiKey]
+          );
+        } else {
+          await query(
+            'UPDATE sessions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE session_name = $2',
+            ['connecting', payload.session]
+          );
+        }
+                  
         if (qr) {
           return c.json({ qr: await toDataURL(qr) });
         }
 
         // If already connected (no QR)
-        await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [payload.session]);
+        await query("UPDATE sessions SET status = 'online', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [payload.session]);
         return c.json({ message: "Already connected" });
 
       } catch (error) {
@@ -157,8 +168,6 @@ export const createSessionController = () => {
   );
 
   // Endpoint to pair with phone number  
-  // Note: Phone pairing tergantung pada versi wa-multi-session
-  // Untuk saat ini menggunakan QR code sebagai metode utama
   app.post(
     "/pair-phone",
     createKeyMiddleware(),
@@ -169,8 +178,7 @@ export const createSessionController = () => {
     async (c) => {
       const { session, phone } = c.req.valid("json");
       try {
-        // Placeholder for phone pairing - akan diimplementasikan saat library support
-        // Sementara ini, redirect ke QR code method
+        // Return 501 Not Implemented, as requested by frontend logic
         return c.json({ 
           success: false, 
           message: "Phone pairing sedang dalam pengembangan. Silakan gunakan QR Code.",

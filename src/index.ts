@@ -12,9 +12,9 @@ import { createSessionController } from "./controllers/session.js";
 import { env } from "./env.js";
 import { globalErrorMiddleware } from "./middlewares/error.middleware.js";
 import { notFoundMiddleware } from "./middlewares/notfound.middleware.js";
-import { CreateWebhookProps } from "./webhooks/index.js";
-import { createWebhookMessage } from "./webhooks/message.js";
-import { createWebhookSession } from "./webhooks/session.js";
+import { CreateWebhookProps, webhookClient } from "./webhooks/index.js";
+import { createWebhookMessage, WebhookMessageBody } from "./webhooks/message.js";
+import { createWebhookSession, WebhookSessionBody } from "./webhooks/session.js";
 import { query } from "./lib/postgres.js";
 
 const app = new Hono();
@@ -135,122 +135,122 @@ app.use(
   })
 );
 
-/**
- * session routes
- */
-app.route("/api/session", createSessionController());
-/**
- * message routes
- */
-app.route("/message", createMessageController());
-/**
- * profile routes
- */
-app.route("/profile", createProfileController());
-/**
- * auth routes
- */
-console.log("Registering auth routes...");
-app.route("/auth", createAuthController());
-console.log("Auth routes registered.");
+// --- NEW WEBHOOK LOGIC ---
 
-app.notFound(notFoundMiddleware);
-app.onError(globalErrorMiddleware);
-
-const port = env.PORT;
-
-serve(
-  {
-    fetch: app.fetch,
-    port,
-  },
-  (info) => {
-    console.log(`Server is running on http://localhost:${info.port}`);
+// Helper function to get active webhooks for a session
+const getActiveWebhooks = async (sessionName: string) => {
+  try {
+    const sessionResult = await query("SELECT id FROM sessions WHERE session_name = $1", [sessionName]);
+    if (sessionResult.rows.length === 0) {
+      return [];
+    }
+    const sessionId = sessionResult.rows[0].id;
+    
+    const webhooksResult = await query(
+      "SELECT * FROM webhooks WHERE session_id = $1 AND is_active = true",
+      [sessionId]
+    );
+    
+    return webhooksResult.rows;
+  } catch (error) {
+    console.error(`Error fetching webhooks for ${sessionName}:`, error);
+    return [];
   }
-);
+};
 
+// Helper function to dispatch webhooks
+const dispatchWebhook = (webhook: any, body: WebhookMessageBody | WebhookSessionBody, eventType: string) => {
+  try {
+    const events = typeof webhook.webhook_events === 'string' 
+      ? JSON.parse(webhook.webhook_events) 
+      : webhook.webhook_events;
 
+    if (events[eventType]) {
+      webhookClient.post(webhook.webhook_url, body).catch(err => 
+        console.error(`Failed to send webhook to ${webhook.webhook_url}:`, err.message)
+      );
+    }
+  } catch (e) {
+    console.error(`Error parsing webhook events for ${webhook.webhook_url}:`, e);
+  }
+};
 
-// Implement Webhook
-if (env.WEBHOOK_BASE_URL) {
-  const webhookProps: CreateWebhookProps = {
-    baseUrl: env.WEBHOOK_BASE_URL,
-  };
+// --- WHATSAPP EVENT LISTENERS ---
 
-  // message webhook
-  whatsapp.onMessageReceived(createWebhookMessage(webhookProps));
+whatsapp.onMessageReceived(async (message) => {
+  if (message.key.fromMe || message.key.remoteJid?.includes("broadcast"))
+    return;
 
-  // session webhook
-  const webhookSession = createWebhookSession(webhookProps);
+  const activeWebhooks = await getActiveWebhooks(message.sessionId);
+  if (activeWebhooks.length === 0) return;
 
-  // Logika ini akan dipindahkan ke luar blok if
-  // whatsapp.onConnected(async (session) => {
-  //   console.log(`session: '${session}' connected`);
-  //   await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
-  //   webhookSession({ session, status: "connected" });
-  // });
-  // whastapp.onConnecting(async (session) => {
-  //   console.log(`session: '${session}' connecting`);
-  //   await query("UPDATE sessions SET status = 'connecting' WHERE session_name = $1", [session]);
-  //   webhookSession({ session, status: "connecting" });
-  // });
-  // whastapp.onDisconnected(async (session) => {
-  //   console.log(`session: '${session}' disconnected`);
-  //   await query("UPDATE sessions SET status = 'offline' WHERE session_name = $1", [session]);
-  //   webhookSession({ session, status: "disconnected" });
-  // });
-}
-// End Implement Webhook
+  // Create the webhook body
+  const webhookBody = await createWebhookMessage(message);
+  if (!webhookBody) return;
+
+  // Dispatch to all interested webhooks
+  for (const webhook of activeWebhooks) {
+    let eventType = 'individual'; // Default
+    if (message.key.remoteJid?.includes('@g.us')) eventType = 'group';
+    if (webhookBody.media.image) eventType = 'image';
+    if (webhookBody.media.video) eventType = 'video';
+    if (webhookBody.media.audio) eventType = 'audio';
+    if (webhookBody.media.document) eventType = 'document';
+    // Note: sticker event type is missing from original logic, add if needed
+    
+    dispatchWebhook(webhook, webhookBody, eventType);
+  }
+});
 
 whatsapp.onConnected(async (session) => {
   console.log(`session: '${session}' connected`);
   try {
     const sessionInfo = whatsapp.getSession(session);
-    if (sessionInfo && sessionInfo.user) {
-      const waNumber = sessionInfo.user.id.split('@')[0] || '';
-      const profileName = sessionInfo.user.name ?? '';
+    const waNumber = sessionInfo?.user?.id.split('@')[0] || '';
+    const profileName = sessionInfo?.user?.name ?? '';
 
-      await query(
-        "UPDATE sessions SET status = 'online', wa_number = $1, profile_name = $2 WHERE session_name = $3",
-        [waNumber, profileName, session]
-      );
+    await query(
+      "UPDATE sessions SET status = 'online', wa_number = $1, profile_name = $2, updated_at = CURRENT_TIMESTAMP WHERE session_name = $3",
+      [waNumber, profileName, session]
+    );
 
-      if (env.WEBHOOK_BASE_URL) {
-        const webhookSession = createWebhookSession({ baseUrl: env.WEBHOOK_BASE_URL });
-        webhookSession({ session, status: "connected" });
-      }
-    } else {
-      await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
-      if (env.WEBHOOK_BASE_URL) {
-        const webhookSession = createWebhookSession({ baseUrl: env.WEBHOOK_BASE_URL });
-        webhookSession({ session, status: "connected" });
-      }
+    const activeWebhooks = await getActiveWebhooks(session);
+    if (activeWebhooks.length === 0) return;
+
+    const body = { session, status: "connected" } as WebhookSessionBody;
+    for (const webhook of activeWebhooks) {
+      dispatchWebhook(webhook, body, 'update_status');
     }
+
   } catch (error) {
     console.error(`Error getting profile info for session ${session}:`, error);
-    await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
-    if (env.WEBHOOK_BASE_URL) {
-      const webhookSession = createWebhookSession({ baseUrl: env.WEBHOOK_BASE_URL });
-      webhookSession({ session, status: "connected" });
-    }
+    await query("UPDATE sessions SET status = 'online', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [session]);
   }
 });
 
 whatsapp.onConnecting(async (session) => {
-  await query("UPDATE sessions SET status = 'connecting' WHERE session_name = $1", [session]);
-  // Jika webhook diaktifkan, panggil juga webhookSession
-  if (env.WEBHOOK_BASE_URL) {
-    const webhookSession = createWebhookSession({ baseUrl: env.WEBHOOK_BASE_URL });
-    webhookSession({ session, status: "connecting" });
+  console.log(`session: '${session}' connecting`);
+  await query("UPDATE sessions SET status = 'connecting', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [session]);
+  
+  const activeWebhooks = await getActiveWebhooks(session);
+  if (activeWebhooks.length === 0) return;
+
+  const body = { session, status: "connecting" } as WebhookSessionBody;
+  for (const webhook of activeWebhooks) {
+    dispatchWebhook(webhook, body, 'update_status');
   }
 });
 
 whatsapp.onDisconnected(async (session) => {
-  await query("UPDATE sessions SET status = 'offline' WHERE session_name = $1", [session]);
-  // Jika webhook diaktifkan, panggil juga webhookSession
-  if (env.WEBHOOK_BASE_URL) {
-    const webhookSession = createWebhookSession({ baseUrl: env.WEBHOOK_BASE_URL });
-    webhookSession({ session, status: "disconnected" });
+  console.log(`session: '${session}' disconnected`);
+  await query("UPDATE sessions SET status = 'offline', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [session]);
+  
+  const activeWebhooks = await getActiveWebhooks(session);
+  if (activeWebhooks.length === 0) return;
+
+  const body = { session, status: "disconnected" } as WebhookSessionBody;
+  for (const webhook of activeWebhooks) {
+    dispatchWebhook(webhook, body, 'update_status');
   }
 });
 

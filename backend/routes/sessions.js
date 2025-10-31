@@ -57,16 +57,20 @@ router.get('/:name/qr', authMiddleware, async (req, res) => {
   try {
     const { name } = req.params;
     
-    // FIX: Panggil gateway menggunakan POST /session/start sesuai spek Hono API
-    // Bukan GET /session/start?session=...
+    // FIX: Panggil gateway menggunakan POST /session/start
     const response = await axios.post(`${process.env.WA_GATEWAY_URL}/session/start`, 
       { session: name }
     );
     
-    res.json({ success: true, qr: response.data.qr || null });
+    // Kirim QR jika ada, atau status jika sudah terhubung
+    if (response.data.qr) {
+      res.json({ success: true, qr: response.data.qr });
+    } else {
+      res.json({ success: true, qr: null, message: response.data.message || 'Already connected' });
+    }
   } catch (error) {
-    console.error('Get QR code error:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to fetch QR code' });
+    console.error('Get QR code error:', error.response?.data || error.message);
+    res.status(500).json({ success: false, error: error.response?.data?.message || 'Failed to fetch QR code' });
   }
 });
 
@@ -80,25 +84,14 @@ router.post('/:name/pair-phone', authMiddleware, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Phone number is required' });
     }
     
-    // Format phone number (remove dashes and spaces, ensure starts with country code)
-    let formattedPhone = phone_number.replace(/[-\s]/g, '');
-    if (formattedPhone.startsWith('0')) {
-      formattedPhone = '62' + formattedPhone.substring(1);
-    }
-    
-    // Call WA Gateway to pair with phone number
-    const response = await axios.post(`${process.env.WA_GATEWAY_URL}/session/pair-phone`, {
-      session: name,
-      phone: formattedPhone
+    // FIX: Langsung kembalikan error 501/not implemented
+    // Karena gateway (src/controllers/session.ts) mengembalikan 501
+    return res.status(501).json({ 
+      success: false, 
+      error: "Phone pairing sedang dalam pengembangan. Silakan gunakan QR Code.",
+      use_qr: true 
     });
-    
-    // Update database with pairing method
-    await pool.query(
-      'UPDATE sessions SET pairing_method = $1, paired_phone = $2 WHERE session_name = $3',
-      ['phone', formattedPhone, name]
-    );
-    
-    res.json({ success: true, data: response.data });
+
   } catch (error) {
     console.error('Pair phone error:', error);
     res.status(500).json({ success: false, error: error.response?.data?.message || 'Failed to pair with phone number' });
@@ -117,10 +110,15 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Session name already exists' });
     }
     const apiKey = generateApiKey();
-    const result = await pool.query('INSERT INTO sessions (session_name, api_key, status) VALUES ($1, $2, $3) RETURNING *', [session_name, apiKey, 'connecting']);
+    // FIX: Default status harusnya 'connecting' atau 'offline'
+    const result = await pool.query(
+      'INSERT INTO sessions (session_name, api_key, status) VALUES ($1, $2, $3) RETURNING *', 
+      [session_name, apiKey, 'offline']
+    );
     
-    // Trigger gateway in background
-    axios.get(`${process.env.WA_GATEWAY_URL}/session/start?session=${session_name}`).catch(err => console.error('Gateway trigger failed:', err.message));
+    // FIX: Hapus trigger gateway dari sini.
+    // Frontend (dashboard.js) akan memanggil /:name/qr setelah ini,
+    // yang akan memicu /session/start di gateway.
     
     res.status(201).json({ success: true, session: result.rows[0] });
   } catch (error) {
@@ -155,9 +153,17 @@ router.post('/:name/test-message', authMiddleware, async (req, res) => {
     if (!phone_number || !message) {
       return res.status(400).json({ success: false, error: 'Phone number and message are required' });
     }
+    
+    // Dapatkan API Key dari session
+    const sessionResult = await pool.query('SELECT api_key FROM sessions WHERE session_name = $1', [name]);
+    if (sessionResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Session not found' });
+    }
+    const apiKey = sessionResult.rows[0].api_key;
 
     // Panggil gateway untuk mengirim pesan
-    await axios.post(`${process.env.WA_GATEWAY_URL}/message/send-text`, {
+    // Gateway Hono menggunakan 'key' sebagai query param atau header, bukan auth bearer
+    await axios.post(`${process.env.WA_GATEWAY_URL}/message/send-text?key=${apiKey}`, {
       session: name,
       to: phone_number,
       text: message
@@ -165,8 +171,8 @@ router.post('/:name/test-message', authMiddleware, async (req, res) => {
 
     res.json({ success: true, message: 'Test message sent successfully' });
   } catch (error) {
-    console.error('Send test message error:', error);
-    res.status(500).json({ success: false, error: 'Failed to send test message' });
+    console.error('Send test message error:', error.response?.data || error.message);
+    res.status(500).json({ success: false, error: error.response?.data?.message || 'Failed to send test message' });
   }
 });
 
@@ -174,14 +180,22 @@ router.post('/:name/test-message', authMiddleware, async (req, res) => {
 router.delete('/:name', authMiddleware, async (req, res) => {
   try {
     const { name } = req.params;
+    
+    // FIX: Panggil endpoint DELETE di gateway, bukan /logout
+    // Ini akan memicu logika delete yang sudah diupdate di gateway (termasuk delete webhooks)
     try {
-      await axios.get(`${process.env.WA_GATEWAY_URL}/session/logout?session=${name}`);
+      await axios.delete(`${process.env.WA_GATEWAY_URL}/session/${name}`);
     } catch (error) {
-      console.error('Failed to logout session on wa-gateway:', error.message);
+      // Abaikan error jika session sudah tidak ada di gateway, tapi log
+      console.error('Failed to logout session on wa-gateway (might be already offline):', error.message);
     }
+    
+    // Hapus dari database backend
+    // Relasi CASCADE di DB akan otomatis menghapus webhooks dan logs
     const result = await pool.query('DELETE FROM sessions WHERE session_name = $1', [name]);
+    
     if (result.rowCount === 0) {
-        return res.status(404).json({ success: false, error: 'Session not found' });
+        return res.status(404).json({ success: false, error: 'Session not found in DB' });
     }
     res.json({ success: true, message: 'Session deleted successfully' });
   } catch (error) {

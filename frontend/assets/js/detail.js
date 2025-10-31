@@ -103,6 +103,7 @@ async function loadQrCode() {
     `;
 
     try {
+        // FIX: Backend route is GET, not POST
         const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionId}/qr`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
@@ -116,6 +117,9 @@ async function loadQrCode() {
                 <img src="${data.qr}" alt="QR Code" class="img-fluid" style="max-width: 300px;">
                 <p class="mt-2 text-muted">Pindai QR code dengan WhatsApp</p>
             `;
+        } else if (response.ok && !data.qr) {
+             // Already connected, do nothing, updateStatus will handle it
+             qrContainer.innerHTML = `<p class="text-success">Sudah terhubung. Status akan segera update.</p>`;
         } else {
             throw new Error(data.error || 'Gagal memuat QR Code');
         }
@@ -267,15 +271,24 @@ function renderWebhooks() {
     }
     container.innerHTML = webhooks.map((webhook, index) => `
         <div class="card mb-2">
-            <div class="card-body p-2">
+            <div class="card-body p-3">
                 <div class="d-flex justify-content-between align-items-center">
-                    <div>
+                    <div style="flex-grow: 1; min-width: 0;">
                         <p class="mb-0 fw-bold text-break">${webhook.webhook_url}</p>
                         <small class="text-muted">Events: ${getWebhookEventsText(webhook.webhook_events)}</small>
                     </div>
-                    <div class="btn-group">
-                        <button class="btn btn-sm btn-outline-secondary" onclick="editWebhook(${webhook.id})"><i class="bi bi-pencil"></i></button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteWebhook(${webhook.id})"><i class="bi bi-trash"></i></button>
+                    <div class="d-flex align-items-center" style="flex-shrink: 0; margin-left: 1rem;">
+                        <div class="form-check form-switch me-3">
+                            <input class="form-check-input" type="checkbox" role="switch" 
+                                   id="toggle-${webhook.id}" 
+                                   ${webhook.is_active ? 'checked' : ''} 
+                                   onchange="toggleWebhook(this, ${webhook.id})">
+                            <label class="form-check-label" for="toggle-${webhook.id}">${webhook.is_active ? 'On' : 'Off'}</label>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-secondary" onclick="editWebhook(${webhook.id})"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteWebhook(${webhook.id})"><i class="bi bi-trash"></i></button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -286,6 +299,7 @@ function renderWebhooks() {
 function getWebhookEventsText(events) {
     try {
         const parsed = typeof events === 'string' ? JSON.parse(events) : events;
+        if (!parsed || typeof parsed !== 'object') return 'invalid format';
         const enabled = Object.keys(parsed).filter(k => parsed[k]);
         return enabled.length > 0 ? enabled.join(', ') : 'none';
     } catch (e) {
@@ -309,10 +323,16 @@ function editWebhook(id) {
     document.getElementById('webhookId').value = webhook.id;
     document.getElementById('webhookUrl').value = webhook.webhook_url;
 
-    const events = typeof webhook.webhook_events === 'string' ? JSON.parse(webhook.webhook_events) : webhook.webhook_events;
-    for (const key in events) {
-        const check = document.getElementById(`webhook${key.charAt(0).toUpperCase() + key.slice(1)}`);
-        if (check) check.checked = events[key];
+    try {
+        const events = typeof webhook.webhook_events === 'string' ? JSON.parse(webhook.webhook_events) : webhook.webhook_events;
+        if (events && typeof events === 'object') {
+            for (const key in events) {
+                const check = document.getElementById(`webhook${key.charAt(0).toUpperCase() + key.slice(1)}`);
+                if (check) check.checked = events[key];
+            }
+        }
+    } catch (e) {
+        console.error('Error parsing webhook events:', e);
     }
     new bootstrap.Modal(document.getElementById('webhookModal')).show();
 }
@@ -324,7 +344,7 @@ async function saveWebhook() {
         individual: document.getElementById('webhookIndividual').checked,
         group: document.getElementById('webhookGroup').checked,
         from_me: document.getElementById('webhookFromMe').checked,
-        updateStatus: document.getElementById('webhookUpdateStatus').checked,
+        update_status: document.getElementById('webhookUpdateStatus').checked, // Renamed from webhookUpdateStatus
         image: document.getElementById('webhookImage').checked,
         video: document.getElementById('webhookVideo').checked,
         audio: document.getElementById('webhookAudio').checked,
@@ -373,6 +393,43 @@ async function deleteWebhook(id) {
     } catch (error) {
         console.error('Delete webhook error:', error);
         showToast('error', 'Terjadi kesalahan');
+    }
+}
+
+// NEW: Toggle Webhook Function
+async function toggleWebhook(checkbox, id) {
+    const label = checkbox.nextElementSibling;
+    const originalLabel = label.textContent;
+    label.textContent = '...';
+    checkbox.disabled = true;
+
+    try {
+        const response = await fetch(`${config.backendApiUrl}${config.endpoints.webhooks}/${sessionId}/${id}/toggle`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+            const newStatus = data.webhook.is_active;
+            showToast('success', `Webhook ${newStatus ? 'diaktifkan' : 'dinonaktifkan'}`);
+            // Update local data
+            const webhookIndex = webhooks.findIndex(w => w.id === id);
+            if (webhookIndex > -1) {
+                webhooks[webhookIndex].is_active = newStatus;
+            }
+            label.textContent = newStatus ? 'On' : 'Off';
+        } else {
+            showToast('error', data.error || 'Gagal mengubah status');
+            checkbox.checked = !checkbox.checked; // Revert
+            label.textContent = originalLabel;
+        }
+    } catch (error) {
+        console.error('Toggle webhook error:', error);
+        showToast('error', 'Terjadi kesalahan');
+        checkbox.checked = !checkbox.checked; // Revert
+        label.textContent = originalLabel;
+    } finally {
+        checkbox.disabled = false;
     }
 }
 
@@ -469,11 +526,27 @@ document.getElementById('phonePairingForm').addEventListener('submit', async (e)
 function copyApiKey() {
     const apiKeyInput = document.getElementById('apiKey');
     apiKeyInput.select();
-    navigator.clipboard.writeText(apiKeyInput.value).then(() => {
-        showToast('success', 'API Key berhasil disalin');
-    }).catch(() => {
+    
+    // Fallback for environments where navigator.clipboard is not available
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(apiKeyInput.value).then(() => {
+                showToast('success', 'API Key berhasil disalin');
+            }).catch(() => {
+                showToast('error', 'Gagal menyalin API Key');
+            });
+        } else {
+            // Use execCommand as a fallback
+            if (document.execCommand('copy')) {
+                showToast('success', 'API Key berhasil disalin (fallback)');
+            } else {
+                showToast('error', 'Gagal menyalin API Key (fallback)');
+            }
+        }
+    } catch (e) {
+        console.error('Copy error', e);
         showToast('error', 'Gagal menyalin API Key');
-    });
+    }
 }
 
 
