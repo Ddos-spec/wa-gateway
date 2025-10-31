@@ -14,7 +14,7 @@ import { globalErrorMiddleware } from "./middlewares/error.middleware.js";
 import { notFoundMiddleware } from "./middlewares/notfound.middleware.js";
 import { CreateWebhookProps, webhookClient } from "./webhooks/index.js";
 import { createWebhookMessage, WebhookMessageBody } from "./webhooks/message.js";
-import { createWebhookSession, WebhookSessionBody } from "./webhooks/session.js";
+import { WebhookSessionBody } from "./webhooks/session.js";
 import { query } from "./lib/postgres.js";
 
 const app = new Hono();
