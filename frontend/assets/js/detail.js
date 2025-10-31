@@ -390,11 +390,7 @@ function copyApiKey() {
     });
 }
 
-function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    window.location.href = 'index.html';
-}
+
 
 function showToast(type, message) {
     // Implementation of showToast

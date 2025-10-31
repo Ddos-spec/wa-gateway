@@ -251,12 +251,7 @@ document.getElementById('addSessionModal').addEventListener('hidden.bs.modal', (
     }
 });
 
-// Logout
-function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    window.location.href = 'index.html';
-}
+
 
 // Toast functions
 function showToast(type, message) {
