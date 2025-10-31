@@ -57,7 +57,7 @@ router.get('/:name/status', authMiddleware, async (req, res) => {
 router.post('/:name/qr', authMiddleware, async (req, res) => {
   const { name } = req.params;
   console.log(`[${name}] Received request for QR code.`);
-  const gatewayUrl = `${process.env.WA_GATEWAY_URL}/session/start`;
+  const gatewayUrl = `http://localhost:5001/session/start`;
   console.log(`[${name}] Forwarding request to gateway: ${gatewayUrl}`);
 
   try {
@@ -118,7 +118,7 @@ router.post('/:name/pair-phone', authMiddleware, async (req, res) => {
     console.log(`[${name}] Updating session status to 'pairing'.`);
     await pool.query('UPDATE sessions SET status = $1 WHERE session_name = $2', ['pairing', name]);
     
-    const gatewayUrl = `${process.env.WA_GATEWAY_URL}/session/pair-phone`;
+    const gatewayUrl = `http://localhost:5001/session/pair-phone`;
     console.log(`[${name}] Forwarding request to gateway: ${gatewayUrl}`);
     const response = await axios.post(gatewayUrl, {
       session: name,
@@ -199,7 +199,7 @@ router.post('/:name/test-message', authMiddleware, async (req, res) => {
 
     // Panggil gateway untuk mengirim pesan
     // Gateway Hono menggunakan 'key' sebagai query param atau header, bukan auth bearer
-    await axios.post(`${process.env.WA_GATEWAY_URL}/message/send-text?key=${apiKey}`, {
+    await axios.post(`http://localhost:5001/message/send-text?key=${apiKey}`, {
       session: name,
       to: phone_number,
       text: message
@@ -220,7 +220,7 @@ router.delete('/:name', authMiddleware, async (req, res) => {
     // FIX: Panggil endpoint DELETE di gateway, bukan /logout
     // Ini akan memicu logika delete yang sudah diupdate di gateway (termasuk delete webhooks)
     try {
-      await axios.delete(`${process.env.WA_GATEWAY_URL}/session/${name}`);
+      await axios.delete(`http://localhost:5001/session/${name}`);
     } catch (error) {
       // Abaikan error jika session sudah tidak ada di gateway, tapi log
       console.error('Failed to logout session on wa-gateway (might be already offline):', error.message);
