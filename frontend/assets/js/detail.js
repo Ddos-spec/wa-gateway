@@ -116,30 +116,58 @@ function renderSessionDetails() {
     document.getElementById('apiKey').value = session.api_key;
 }
 
-// ✅ IMPROVEMENT: Fetch profile info dengan better error handling
-async function fetchProfileInfo() {
+// ✅ IMPROVED: Smart polling dengan exponential backoff
+async function fetchProfileInfo(attemptCount = 0) {
+    const MAX_ATTEMPTS = 20; // Max 20 attempts
+    const MAX_DELAY = 10000; // Max 10 seconds delay
+    
     try {
-        const data = await apiRequest(`${config.backendApiUrl}/api/profile/${sessionId}`);
+        // ✅ Use /quick endpoint untuk fast response
+        const data = await apiRequest(`${config.backendApiUrl}/api/profile/${sessionId}/quick`);
         
-        // Update UI dengan data profil
+        // ✅ Check success flag
+        if (!data.success) {
+            throw new Error(data.message || 'Failed to get profile');
+        }
+        
+        // ✅ Success! Update UI
         document.getElementById('profileName').textContent = data.name || 'Nama tidak tersedia';
         document.getElementById('waNumber').textContent = data.number || '-';
         
-        console.log('Profile info loaded successfully');
+        console.log('✅ Profile info loaded successfully on attempt', attemptCount + 1);
+        
+        // ✅ Optional: Show success toast after multiple retries
+        if (attemptCount > 3) {
+            showToast('success', 'Profil berhasil dimuat!');
+        }
     } catch (error) {
-        console.error('Fetch profile info error:', error);
+        console.log(`⏳ Attempt ${attemptCount + 1}/${MAX_ATTEMPTS}: Profile not ready yet`);
         
-        // Jangan ganggu user dengan toast kalo profile fetch gagal
-        // Karena ini bukan critical error
-        // Status masih bisa update lewat polling
-        
-        // Optional: Bisa retry setelah beberapa detik
-        if (error.status !== 404) {
+        // ✅ Check if we should retry
+        if (error.status === 503 && attemptCount < MAX_ATTEMPTS && profileFetched) {
+            // ✅ Exponential backoff: 2s, 4s, 6s, 8s, 10s (capped)
+            const delay = Math.min(2000 * (attemptCount + 1), MAX_DELAY);
+            console.log(`   Retrying in ${delay / 1000}s...`);
+            
             setTimeout(() => {
-                if (profileFetched) { // Only retry if still considered "fetched" state
-                    fetchProfileInfo();
+                if (profileFetched) {
+                    fetchProfileInfo(attemptCount + 1);
                 }
-            }, 10000); // Retry after 10 seconds
+            }, delay);
+        } else if (attemptCount >= MAX_ATTEMPTS) {
+            // ✅ Give up after max attempts
+            console.error('❌ Failed to fetch profile after', MAX_ATTEMPTS, 'attempts');
+            showToast('warning', 'Profil belum tersedia. Akan dicoba lagi nanti.');
+            
+            // ✅ Final retry setelah 30 detik
+            setTimeout(() => {
+                if (profileFetched) {
+                    fetchProfileInfo(0); // Reset counter
+                }
+            }, 30000);
+        } else {
+            // ✅ Non-503 error (404, 500, etc) - stop retrying
+            console.error('Fetch profile info error:', error);
         }
     }
 }
@@ -161,7 +189,8 @@ async function updateStatus() {
                 // ✅ Fetch profile info once connected (dengan flag prevention)
                 if (!profileFetched) {
                     profileFetched = true;
-                    fetchProfileInfo();
+                    // ✅ Start smart polling (attempt counter starts at 0)
+                    fetchProfileInfo(0);
                 }
             } else {
                 statusBadge.classList.remove('bg-success');
@@ -210,10 +239,10 @@ async function loadQrCode() {
             // Already connected
             qrContainer.innerHTML = `<p class="text-success">Sudah terhubung. Status akan segera update.</p>`;
             
-            // ✅ Trigger profile fetch jika belum
+            // ✅ Trigger profile fetch jika belum (attempt counter starts at 0)
             if (!profileFetched) {
                 profileFetched = true;
-                fetchProfileInfo();
+                fetchProfileInfo(0);
             }
         }
     } catch (error) {
