@@ -12,7 +12,8 @@ let pollingInterval = null;
 // Load sessions
 async function loadSessions() {
     try {
-        const response = await fetch(`${config.backendApiUrl}/sessions`, {
+        // FIX: Menggunakan config.endpoints.sessions
+        const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -94,7 +95,8 @@ async function updateAllStatus() {
 // Update single session status
 async function updateSessionStatus(sessionName) {
     try {
-        const response = await fetch(`${config.backendApiUrl}/sessions/${sessionName}/status`, {
+        // FIX: Menggunakan config.endpoints.sessions
+        const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionName}/status`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -140,7 +142,8 @@ function pollSessionStatus(sessionName) {
         }
 
         try {
-            const response = await fetch(`${config.backendApiUrl}/sessions/${sessionName}/status`, {
+            // FIX: Menggunakan config.endpoints.sessions
+            const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionName}/status`, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
 
@@ -177,7 +180,8 @@ async function createSession() {
     
     try {
         // 1. Create the session in the backend
-        const createResponse = await fetch(`${config.backendApiUrl}/sessions`,
+        // FIX: Menggunakan config.endpoints.sessions
+        const createResponse = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}`,
         {
             method: 'POST',
             headers: {
@@ -210,7 +214,8 @@ async function createSession() {
             }
 
             try {
-                const qrResponse = await fetch(`${config.backendApiUrl}/sessions/${sessionName}/qr`, {
+                // FIX: Menggunakan config.endpoints.sessions
+                const qrResponse = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionName}/qr`, {
                     headers: { 'Authorization': `Bearer ${getToken()}` }
                 });
                 const qrData = await qrResponse.json();
