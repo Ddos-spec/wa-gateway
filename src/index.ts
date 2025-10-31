@@ -208,20 +208,13 @@ whatsapp.onMessageReceived(async (message) => {
 whatsapp.onConnected(async (session) => {
   console.log(`session: '${session}' connected`);
   try {
-    // Based on research, user info is available on session.socket.user after connection
-    const sessionInfo = whatsapp.getSession(session);
-
-    // Use optional chaining for safety. The `as any` is used to bypass potential incorrect type definitions.
-    const waNumber = (sessionInfo as any)?.socket?.user?.id?.split(':')[0] || '';
-    const profileName = (sessionInfo as any)?.socket?.user?.name ?? '';
-
-    console.log(`[${session}] Extracted waNumber: ${waNumber}, profileName: ${profileName}`);
-
+    // The onConnected event should ONLY be responsible for setting the status
+    // and triggering webhooks. Profile info is now handled by the /profile endpoint.
     await query(
-      "UPDATE sessions SET status = 'online', wa_number = $1, profile_name = $2, updated_at = CURRENT_TIMESTAMP WHERE session_name = $3",
-      [waNumber, profileName, session]
+      "UPDATE sessions SET status = 'online', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1",
+      [session]
     );
-    console.log(`[${session}] Successfully updated DB with profile info.`);
+    console.log(`[${session}] Successfully updated DB status to online.`);
 
     const activeWebhooks = await getActiveWebhooks(session);
     if (activeWebhooks.length === 0) return;
@@ -230,10 +223,8 @@ whatsapp.onConnected(async (session) => {
     for (const webhook of activeWebhooks) {
       dispatchWebhook(webhook, body, 'update_status');
     }
-
   } catch (error) {
-    console.error(`Error getting profile info for session ${session}:`, error);
-    await query("UPDATE sessions SET status = 'online', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [session]);
+    console.error(`[${session}] Error in onConnected handler:`, error);
   }
 });
 
