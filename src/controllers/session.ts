@@ -34,15 +34,58 @@ export const createSessionController = () => {
     async (c) => {
       const payload = c.req.valid("json");
       try {
+        console.log(`[${payload.session}] Starting session...`);
+        
         // 1. Check if session exists in DB
         const dbSession = await query("SELECT * FROM sessions WHERE session_name = $1", [payload.session]);
 
         // 2. Start the session in the library
-        const qr = await new Promise<string | null>((resolve) => {
-          whatsapp.startSession(payload.session, {
-            onConnected: () => resolve(null),
-            onQRUpdated: (qr) => resolve(qr),
-          });
+        const qr = await new Promise<string | null>((resolve, reject) => {
+          try {
+            whatsapp.startSession(payload.session, {
+              onConnected: async () => {
+                console.log(`[${payload.session}] Connected!`);
+                // ✅ FIX: Update status to online when connected
+                try {
+                  await query(
+                    "UPDATE sessions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE session_name = $2",
+                    ['online', payload.session]
+                  );
+                } catch (dbError) {
+                  console.error(`[${payload.session}] Failed to update status to online:`, dbError);
+                }
+                resolve(null);
+              },
+              onQRUpdated: async (qr) => {
+                console.log(`[${payload.session}] QR Code updated`);
+                // ✅ FIX: Update status to connecting when QR is generated
+                try {
+                  await query(
+                    "UPDATE sessions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE session_name = $2",
+                    ['connecting', payload.session]
+                  );
+                } catch (dbError) {
+                  console.error(`[${payload.session}] Failed to update status to connecting:`, dbError);
+                }
+                resolve(qr);
+              },
+              onDisconnected: async () => {
+                console.log(`[${payload.session}] Disconnected`);
+                // ✅ FIX: Update status to offline when disconnected
+                try {
+                  await query(
+                    "UPDATE sessions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE session_name = $2",
+                    ['offline', payload.session]
+                  );
+                } catch (dbError) {
+                  console.error(`[${payload.session}] Failed to update status to offline:`, dbError);
+                }
+              },
+            });
+          } catch (error) {
+            console.error(`[${payload.session}] Error starting session:`, error);
+            reject(error);
+          }
         });
 
         // 3. Save/Update the session to the DATABASE
@@ -52,23 +95,21 @@ export const createSessionController = () => {
             'INSERT INTO sessions (session_name, status, api_key) VALUES ($1, $2, $3)',
             [payload.session, 'connecting', apiKey]
           );
-        } else {
-          await query(
-            'UPDATE sessions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE session_name = $2',
-            ['connecting', payload.session]
-          );
+          console.log(`[${payload.session}] Created new session in DB`);
         }
                   
         if (qr) {
-          return c.json({ qr: await toDataURL(qr) });
+          const qrDataURL = await toDataURL(qr);
+          console.log(`[${payload.session}] Returning QR code`);
+          return c.json({ qr: qrDataURL });
         }
 
         // If already connected (no QR)
-        await query("UPDATE sessions SET status = 'online', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [payload.session]);
+        console.log(`[${payload.session}] Already connected, no QR needed`);
         return c.json({ message: "Already connected" });
 
       } catch (error) {
-        console.error("Error starting session:", error);
+        console.error(`[${payload.session}] Error starting session:`, error);
         throw new HTTPException(500, { message: "Failed to start session" });
       }
     }

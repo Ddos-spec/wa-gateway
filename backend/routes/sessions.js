@@ -64,14 +64,43 @@ router.post('/:name/qr', authMiddleware, async (req, res) => {
     const response = await axios.post(gatewayUrl, { session: name });
     console.log(`[${name}] Received response from gateway for QR code:`, response.data);
     
+    // FIX: Check if response has qr field
     if (response.data.qr) {
-      res.json({ success: true, qr: response.data.qr });
+      // Gateway already returns base64 data URL, forward it directly
+      res.json({ 
+        success: true, 
+        qr: response.data.qr  // ✅ Already in data:image/png;base64,... format
+      });
+    } else if (response.data.message) {
+      // Already connected
+      res.json({ 
+        success: true, 
+        qr: null, 
+        message: response.data.message 
+      });
     } else {
-      res.json({ success: true, qr: null, message: response.data.message || 'Already connected' });
+      // Unexpected response
+      console.error(`[${name}] Unexpected response from gateway:`, response.data);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Unexpected response from gateway' 
+      });
     }
   } catch (error) {
     console.error(`[${name}] Error getting QR code from gateway:`, error.response?.data || error.message);
-    res.status(500).json({ success: false, error: error.response?.data?.message || 'Failed to fetch QR code' });
+    
+    // FIX: Better error handling
+    if (error.code === 'ECONNREFUSED') {
+      res.status(503).json({ 
+        success: false, 
+        error: 'WA Gateway service is not available' 
+      });
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        error: error.response?.data?.message || 'Failed to fetch QR code' 
+      });
+    }
   }
 });
 

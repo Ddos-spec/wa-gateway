@@ -1,12 +1,14 @@
 // API Configuration
 const config = {
-  // Deteksi base URL secara dinamis
+  // FIX: Deteksi base URL yang proper untuk VPS
   apiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? "http://localhost:3001"
-    : "",
+    : `${window.location.protocol}//${window.location.host}`,  // ✅ Pake URL yang sama dengan akses user
+  
   backendApiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? "http://localhost:3001"
-    : "",
+    : `${window.location.protocol}//${window.location.host}`,  // ✅ Same here
+    
   endpoints: {
     login: "/api/auth/login",
     register: "/api/auth/register",
