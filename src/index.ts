@@ -255,3 +255,11 @@ whatsapp.onDisconnected(async (session) => {
 });
 
 whatsapp.loadSessionsFromStorage();
+
+const port = Number(env.PORT) || 5001;
+console.log(`🚀 WA Gateway running on port ${port}`);
+
+serve({
+  fetch: app.fetch,
+  port: port,
+});
