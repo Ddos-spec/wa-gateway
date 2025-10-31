@@ -2,20 +2,20 @@
 const config = {
   // Deteksi base URL secara dinamis
   apiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? "http://localhost:5000"
-    : "/",
+    ? "http://localhost:3001"
+    : "",
   backendApiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? "http://localhost:5000"
-    : "/",
+    ? "http://localhost:3001"
+    : "",
   endpoints: {
     login: "/api/auth/login",
     register: "/api/auth/register",
     sessions: "/api/sessions",
     verify: "/api/auth/verify",
-    messages: "/message",
-    sendText: "/message/send-text",
-    sendImage: "/message/send-image",
-    sendDocument: "/message/send-document",
+    messages: "/gateway/message",
+    sendText: "/gateway/message/send-text",
+    sendImage: "/gateway/message/send-image",
+    sendDocument: "/gateway/message/send-document",
     webhooks: "/api/webhooks"
   },
   timeout: 30000,
