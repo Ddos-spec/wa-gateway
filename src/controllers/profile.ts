@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import { requestValidator } from "../middlewares/validation.middleware.js";
 import { z } from "zod";
 import { createKeyMiddleware } from "../middlewares/key.middleware.js";
-import { toDataURL } from "qrcode";
 import { HTTPException } from "hono/http-exception";
 
 export const createProfileController = () => {
@@ -26,54 +25,21 @@ export const createProfileController = () => {
       throw new HTTPException(404, { message: "Session not found" });
     }
 
-    // The user object is nested inside the socket property, as discovered from research.
-    // We use optional chaining and a type assertion to safely access it.
     const user = (session as any)?.socket?.user;
 
     if (!user) {
-      throw new HTTPException(404, { message: "User info not available yet. Please wait a moment." });
+      // Return valid JSON even for errors
+      return c.json({
+        success: false,
+        message: "User info not available yet. Please wait a moment."
+      }, 404);
     }
 
     return c.json({
+      success: true,
       name: user.name,
       id: user.id,
       number: user.id?.split(':')[0] || ''
     });
   });
-
-  app.post(
-    "/",
-    createKeyMiddleware(),
-    requestValidator("json", getProfileSchema),
-    async (c) => {
-      const payload = c.req.valid("json");
-      const isExist = whatsapp.getSession(payload.session);
-      if (!isExist) {
-        throw new HTTPException(400, {
-          message: "Session does not exist",
-        });
-      }
-
-      const isRegistered = await whatsapp.isExist({
-        sessionId: payload.session,
-        to: payload.target,
-        isGroup: payload.target.includes("@g.us"),
-      });
-
-      if (!isRegistered) {
-        throw new HTTPException(400, {
-          message: "Target is not registered",
-        });
-      }
-
-      return c.json({
-        data: await whatsapp.getProfileInfo({
-          sessionId: payload.session,
-          target: payload.target,
-        }),
-      });
-    }
-  );
-
-  return app;
 };
