@@ -9,9 +9,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.FRONTEND_PORT || 5000;
 
-// Proxy API requests to the backend server
+// Proxy API requests to the backend dashboard server
 app.use('/api', createProxyMiddleware({
-  target: 'http://localhost:3001', // The backend server
+  target: 'http://localhost:3001', // The backend dashboard server
+  changeOrigin: true,
+}));
+
+// Proxy WA Gateway API requests to the main server
+app.use(['/session', '/message', '/profile', '/auth'], createProxyMiddleware({
+  target: 'http://localhost:5001', // The main WA Gateway server
   changeOrigin: true,
 }));
 
