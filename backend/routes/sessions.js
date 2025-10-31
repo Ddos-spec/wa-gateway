@@ -84,13 +84,12 @@ router.post('/:name/pair-phone', authMiddleware, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Phone number is required' });
     }
     
-    // FIX: Langsung kembalikan error 501/not implemented
-    // Karena gateway (src/controllers/session.ts) mengembalikan 501
-    return res.status(501).json({ 
-      success: false, 
-      error: "Phone pairing sedang dalam pengembangan. Silakan gunakan QR Code.",
-      use_qr: true 
+    const response = await axios.post(`${process.env.WA_GATEWAY_URL}/session/pair-phone`, {
+      session: name,
+      phone_number: phone_number
     });
+
+    res.json({ success: true, data: response.data });
 
   } catch (error) {
     console.error('Pair phone error:', error);

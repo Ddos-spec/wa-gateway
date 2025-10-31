@@ -11,8 +11,10 @@ export const createSessionController = () => {
     const app = new Hono();
     // Endpoint to get all sessions from the DATABASE
     app.get("/", createKeyMiddleware(), async (c) => {
+        console.log("Attempting to fetch all sessions.");
         try {
             const result = await query('SELECT * FROM sessions ORDER BY created_at DESC');
+            console.log("Fetched sessions:", result.rows);
             return c.json({
                 data: result.rows,
             });
@@ -22,30 +24,57 @@ export const createSessionController = () => {
             throw new HTTPException(500, { message: "Failed to fetch sessions" });
         }
     });
-    // Endpoint to create a new session
+    // Endpoint to create a new session or get QR
     app.post("/start", createKeyMiddleware(), requestValidator("json", z.object({ session: z.string() })), async (c) => {
         const payload = c.req.valid("json");
         try {
-            // 1. Start the session in the library
+            // 1. Check if session exists in DB
+            const dbSession = await query("SELECT * FROM sessions WHERE session_name = $1", [payload.session]);
+            // 2. Start the session in the library
             const qr = await new Promise((resolve) => {
                 whatsapp.startSession(payload.session, {
                     onConnected: () => resolve(null),
                     onQRUpdated: (qr) => resolve(qr),
                 });
             });
-            // 2. Save the session to the DATABASE
-            const apiKey = crypto.randomBytes(32).toString('hex');
-            await query('INSERT INTO sessions (session_name, status, api_key) VALUES ($1, $2, $3) ON CONFLICT (session_name) DO UPDATE SET status = $2', [payload.session, 'connecting', apiKey]);
+            // 3. Save/Update the session to the DATABASE
+            if (dbSession.rows.length === 0) {
+                const apiKey = crypto.randomBytes(32).toString('hex');
+                await query('INSERT INTO sessions (session_name, status, api_key) VALUES ($1, $2, $3)', [payload.session, 'connecting', apiKey]);
+            }
+            else {
+                await query('UPDATE sessions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE session_name = $2', ['connecting', payload.session]);
+            }
             if (qr) {
                 return c.json({ qr: await toDataURL(qr) });
             }
             // If already connected (no QR)
-            await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [payload.session]);
+            await query("UPDATE sessions SET status = 'online', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [payload.session]);
             return c.json({ message: "Already connected" });
         }
         catch (error) {
             console.error("Error starting session:", error);
             throw new HTTPException(500, { message: "Failed to start session" });
+        }
+    });
+    // Endpoint to get a specific session by name from the DATABASE
+    app.get("/:name", createKeyMiddleware(), async (c) => {
+        const name = c.req.param("name");
+        try {
+            const result = await query("SELECT * FROM sessions WHERE session_name = $1", [name]);
+            if (result.rows.length === 0) {
+                throw new HTTPException(404, { message: "Session not found in database" });
+            }
+            return c.json({
+                success: true,
+                session: result.rows[0],
+            });
+        }
+        catch (error) {
+            console.error(`Error fetching session ${name}:`, error);
+            if (error instanceof HTTPException)
+                throw error;
+            throw new HTTPException(500, { message: "Failed to get session" });
         }
     });
     // Endpoint to get a specific session's status from the DATABASE
@@ -68,19 +97,84 @@ export const createSessionController = () => {
             throw new HTTPException(500, { message: "Failed to get session status" });
         }
     });
-    // Endpoint to delete a session
-    app.all("/logout", createKeyMiddleware(), async (c) => {
-        const sessionName = c.req.query().session || (await c.req.json()).session || "";
+    // Endpoint to update webhook by name
+    app.put("/:name/webhook", createKeyMiddleware(), requestValidator("json", z.object({
+        webhook_url: z.string().url().optional().nullable(),
+        webhook_events: z.record(z.boolean()).optional(),
+    })), async (c) => {
+        const name = c.req.param("name");
+        const { webhook_url, webhook_events } = c.req.valid("json");
         try {
-            // 1. Delete from the library
-            await whatsapp.deleteSession(sessionName);
-            // 2. Delete from the DATABASE
-            await query("DELETE FROM sessions WHERE session_name = $1", [sessionName]);
-            return c.json({ data: "success" });
+            const result = await query("UPDATE sessions SET webhook_url = $1, webhook_events = $2, updated_at = CURRENT_TIMESTAMP WHERE session_name = $3 RETURNING *", [webhook_url || null, JSON.stringify(webhook_events || {}), name]);
+            if (result.rows.length === 0) {
+                throw new HTTPException(404, { message: "Session not found" });
+            }
+            return c.json({ success: true, session: result.rows[0] });
         }
         catch (error) {
-            console.error(`Error logging out session ${sessionName}:`, error);
-            throw new HTTPException(500, { message: "Failed to logout session" });
+            console.error(`Error updating webhook for ${name}:`, error);
+            if (error instanceof HTTPException)
+                throw error;
+            throw new HTTPException(500, { message: "Failed to update webhook" });
+        }
+    });
+    // Endpoint to regenerate API key by name
+    app.post("/:name/regenerate-key", createKeyMiddleware(), async (c) => {
+        const name = c.req.param("name");
+        try {
+            const newApiKey = crypto.randomBytes(32).toString('hex');
+            const result = await query("UPDATE sessions SET api_key = $1, updated_at = CURRENT_TIMESTAMP WHERE session_name = $2 RETURNING *", [newApiKey, name]);
+            if (result.rows.length === 0) {
+                throw new HTTPException(404, { message: "Session not found" });
+            }
+            return c.json({ success: true, api_key: newApiKey });
+        }
+        catch (error) {
+            console.error(`Error regenerating API key for ${name}:`, error);
+            if (error instanceof HTTPException)
+                throw error;
+            throw new HTTPException(500, { message: "Failed to regenerate API key" });
+        }
+    });
+    // Endpoint to pair with phone number  
+    app.post("/pair-phone", createKeyMiddleware(), requestValidator("json", z.object({
+        session: z.string(),
+        phone: z.string()
+    })), async (c) => {
+        const { session, phone } = c.req.valid("json");
+        try {
+            // Return 501 Not Implemented, as requested by frontend logic
+            return c.json({
+                success: false,
+                message: "Phone pairing sedang dalam pengembangan. Silakan gunakan QR Code.",
+                use_qr: true
+            }, 501);
+        }
+        catch (error) {
+            console.error("Error pairing with phone:", error);
+            throw new HTTPException(500, { message: "Failed to pair with phone number" });
+        }
+    });
+    // Endpoint to delete a session by name
+    app.delete("/:name", createKeyMiddleware(), async (c) => {
+        const sessionName = c.req.param("name");
+        try {
+            // 1. Get session id
+            const sessionResult = await query('SELECT id FROM sessions WHERE session_name = $1', [sessionName]);
+            if (sessionResult.rows.length > 0) {
+                const sessionId = sessionResult.rows[0].id;
+                // 2. Delete associated webhooks from the DATABASE
+                await query("DELETE FROM webhooks WHERE session_id = $1", [sessionId]);
+            }
+            // 3. Delete from the library
+            await whatsapp.deleteSession(sessionName);
+            // 4. Delete from the DATABASE
+            await query("DELETE FROM sessions WHERE session_name = $1", [sessionName]);
+            return c.json({ success: true, message: "Session deleted successfully" });
+        }
+        catch (error) {
+            console.error(`Error deleting session ${sessionName}:`, error);
+            throw new HTTPException(500, { message: "Failed to delete session" });
         }
     });
     return app;

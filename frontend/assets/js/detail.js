@@ -103,8 +103,8 @@ async function loadQrCode() {
     `;
 
     try {
-        // FIX: Backend route is GET, not POST
         const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionId}/qr`, {
+            method: 'POST', // Use POST to trigger session start
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }

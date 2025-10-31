@@ -7,11 +7,11 @@ const mapUser = (record) => ({
     id: record.id,
     username: record.username,
     createdAt: (() => {
-        const dateValue = record.created_at instanceof Date
-            ? record.created_at
-            : new Date(record.created_at);
+        const dateValue = record.updated_at instanceof Date
+            ? record.updated_at
+            : new Date(record.updated_at);
         return Number.isNaN(dateValue.getTime())
-            ? String(record.created_at)
+            ? String(record.updated_at)
             : dateValue.toISOString();
     })(),
 });
@@ -22,7 +22,7 @@ export const authenticateUser = async (username, password) => {
             message: "Invalid username or password",
         });
     }
-    const isPasswordValid = await bcrypt.compare(password, record.password);
+    const isPasswordValid = await bcrypt.compare(password, record.password_hash);
     if (!isPasswordValid) {
         throw new HTTPException(401, {
             message: "Invalid username or password",

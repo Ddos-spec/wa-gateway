@@ -1,4 +1,14 @@
 import { MessageReceived } from "wa-multi-session";
-import { CreateWebhookProps } from "./index.js";
-export declare const createWebhookMessage: (props: CreateWebhookProps) => (message: MessageReceived) => Promise<void>;
+export type WebhookMessageBody = {
+    session: string;
+    from: string | null;
+    message: string | null;
+    media: {
+        image: string | null;
+        video: string | null;
+        document: string | null;
+        audio: string | null;
+    };
+};
+export declare const createWebhookMessage: (message: MessageReceived) => Promise<WebhookMessageBody | undefined>;
 //# sourceMappingURL=message.d.ts.map

@@ -1,19 +1,13 @@
-import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import moment from "moment";
-import * as whastapp from "wa-multi-session";
+import * as whatsapp from "wa-multi-session";
 import { createAuthController } from "./controllers/auth.js";
-import { createMessageController } from "./controllers/message.js";
-import { createProfileController } from "./controllers/profile.js";
-import { createSessionController } from "./controllers/session.js";
 import { env } from "./env.js";
-import { globalErrorMiddleware } from "./middlewares/error.middleware.js";
-import { notFoundMiddleware } from "./middlewares/notfound.middleware.js";
+import { webhookClient } from "./webhooks/index.js";
 import { createWebhookMessage } from "./webhooks/message.js";
-import { createWebhookSession } from "./webhooks/session.js";
 import { query } from "./lib/postgres.js";
 const app = new Hono();
 const defaultAllowedOrigins = [
@@ -73,6 +67,12 @@ app.options("*", (c) => {
     applyPreflightHeaders(c);
     return c.newResponse(null, 204);
 });
+/**
+ * auth routes
+ */
+console.log("Registering auth routes...");
+app.route("/auth", createAuthController());
+console.log("Auth routes registered.");
 app.use("*", logger((...params) => {
     params.forEach((param) => console.log(`${moment().toISOString()} | ${param}`));
 }));
@@ -87,67 +87,105 @@ app.get("/", (c) => c.json({
 app.use("/media/*", serveStatic({
     root: "./",
 }));
-/**
- * session routes
- */
-app.route("/session", createSessionController());
-/**
- * message routes
- */
-app.route("/message", createMessageController());
-/**
- * profile routes
- */
-app.route("/profile", createProfileController());
-/**
- * auth routes
- */
-app.route("/auth", createAuthController());
-app.notFound(notFoundMiddleware);
-app.onError(globalErrorMiddleware);
-const port = env.PORT;
-serve({
-    fetch: app.fetch,
-    port,
-}, (info) => {
-    console.log(`Server is running on http://localhost:${info.port}`);
+// --- NEW WEBHOOK LOGIC ---
+// Helper function to get active webhooks for a session
+const getActiveWebhooks = async (sessionName) => {
+    try {
+        const sessionResult = await query("SELECT id FROM sessions WHERE session_name = $1", [sessionName]);
+        if (sessionResult.rows.length === 0) {
+            return [];
+        }
+        const sessionId = sessionResult.rows[0].id;
+        const webhooksResult = await query("SELECT * FROM webhooks WHERE session_id = $1 AND is_active = true", [sessionId]);
+        return webhooksResult.rows;
+    }
+    catch (error) {
+        console.error(`Error fetching webhooks for ${sessionName}:`, error);
+        return [];
+    }
+};
+// Helper function to dispatch webhooks
+const dispatchWebhook = (webhook, body, eventType) => {
+    try {
+        const events = typeof webhook.webhook_events === 'string'
+            ? JSON.parse(webhook.webhook_events)
+            : webhook.webhook_events;
+        if (events[eventType]) {
+            webhookClient.post(webhook.webhook_url, body).catch(err => console.error(`Failed to send webhook to ${webhook.webhook_url}:`, err.message));
+        }
+    }
+    catch (e) {
+        console.error(`Error parsing webhook events for ${webhook.webhook_url}:`, e);
+    }
+};
+// --- WHATSAPP EVENT LISTENERS ---
+whatsapp.onMessageReceived(async (message) => {
+    if (message.key.fromMe || message.key.remoteJid?.includes("broadcast"))
+        return;
+    const activeWebhooks = await getActiveWebhooks(message.sessionId);
+    if (activeWebhooks.length === 0)
+        return;
+    // Create the webhook body
+    const webhookBody = await createWebhookMessage(message);
+    if (!webhookBody)
+        return;
+    // Dispatch to all interested webhooks
+    for (const webhook of activeWebhooks) {
+        let eventType = 'individual'; // Default
+        if (message.key.remoteJid?.includes('@g.us'))
+            eventType = 'group';
+        if (webhookBody.media.image)
+            eventType = 'image';
+        if (webhookBody.media.video)
+            eventType = 'video';
+        if (webhookBody.media.audio)
+            eventType = 'audio';
+        if (webhookBody.media.document)
+            eventType = 'document';
+        // Note: sticker event type is missing from original logic, add if needed
+        dispatchWebhook(webhook, webhookBody, eventType);
+    }
 });
-whastapp.onConnected(async (session) => {
+whatsapp.onConnected(async (session) => {
     console.log(`session: '${session}' connected`);
-    await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
+    try {
+        const sessionInfo = whatsapp.getSession(session);
+        const waNumber = sessionInfo?.user?.id.split('@')[0] || '';
+        const profileName = sessionInfo?.user?.name ?? '';
+        await query("UPDATE sessions SET status = 'online', wa_number = $1, profile_name = $2, updated_at = CURRENT_TIMESTAMP WHERE session_name = $3", [waNumber, profileName, session]);
+        const activeWebhooks = await getActiveWebhooks(session);
+        if (activeWebhooks.length === 0)
+            return;
+        const body = { session, status: "connected" };
+        for (const webhook of activeWebhooks) {
+            dispatchWebhook(webhook, body, 'update_status');
+        }
+    }
+    catch (error) {
+        console.error(`Error getting profile info for session ${session}:`, error);
+        await query("UPDATE sessions SET status = 'online', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [session]);
+    }
 });
-whastapp.onDisconnected(async (session) => {
-    console.log(`session: '${session}' disconnected`);
-    await query("UPDATE sessions SET status = 'offline' WHERE session_name = $1", [session]);
-});
-whastapp.onConnecting(async (session) => {
+whatsapp.onConnecting(async (session) => {
     console.log(`session: '${session}' connecting`);
-    await query("UPDATE sessions SET status = 'connecting' WHERE session_name = $1", [session]);
+    await query("UPDATE sessions SET status = 'connecting', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [session]);
+    const activeWebhooks = await getActiveWebhooks(session);
+    if (activeWebhooks.length === 0)
+        return;
+    const body = { session, status: "connecting" };
+    for (const webhook of activeWebhooks) {
+        dispatchWebhook(webhook, body, 'update_status');
+    }
 });
-// Implement Webhook
-if (env.WEBHOOK_BASE_URL) {
-    const webhookProps = {
-        baseUrl: env.WEBHOOK_BASE_URL,
-    };
-    // message webhook
-    whastapp.onMessageReceived(createWebhookMessage(webhookProps));
-    // session webhook
-    const webhookSession = createWebhookSession(webhookProps);
-    whastapp.onConnected(async (session) => {
-        console.log(`session: '${session}' connected`);
-        await query("UPDATE sessions SET status = 'online' WHERE session_name = $1", [session]);
-        webhookSession({ session, status: "connected" });
-    });
-    whastapp.onConnecting(async (session) => {
-        console.log(`session: '${session}' connecting`);
-        await query("UPDATE sessions SET status = 'connecting' WHERE session_name = $1", [session]);
-        webhookSession({ session, status: "connecting" });
-    });
-    whastapp.onDisconnected(async (session) => {
-        console.log(`session: '${session}' disconnected`);
-        await query("UPDATE sessions SET status = 'offline' WHERE session_name = $1", [session]);
-        webhookSession({ session, status: "disconnected" });
-    });
-}
-// End Implement Webhook
-whastapp.loadSessionsFromStorage();
+whatsapp.onDisconnected(async (session) => {
+    console.log(`session: '${session}' disconnected`);
+    await query("UPDATE sessions SET status = 'offline', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [session]);
+    const activeWebhooks = await getActiveWebhooks(session);
+    if (activeWebhooks.length === 0)
+        return;
+    const body = { session, status: "disconnected" };
+    for (const webhook of activeWebhooks) {
+        dispatchWebhook(webhook, body, 'update_status');
+    }
+});
+whatsapp.loadSessionsFromStorage();

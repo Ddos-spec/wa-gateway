@@ -1,9 +1,8 @@
-import { webhookClient } from "./index.js";
 import { handleWebhookAudioMessage, handleWebhookDocumentMessage, handleWebhookImageMessage, handleWebhookVideoMessage, } from "./media.js";
-export const createWebhookMessage = (props) => async (message) => {
-    if (message.key.fromMe || message.key.remoteJid?.includes("broadcast"))
+export const createWebhookMessage = async (message) => {
+    if (message.key.fromMe || message.key.remoteJid?.includes("broadcast")) {
         return;
-    const endpoint = `${props.baseUrl}/message`;
+    }
     const image = await handleWebhookImageMessage(message);
     const video = await handleWebhookVideoMessage(message);
     const document = await handleWebhookDocumentMessage(message);
@@ -30,5 +29,5 @@ export const createWebhookMessage = (props) => async (message) => {
             audio,
         },
     };
-    webhookClient.post(endpoint, body).catch(console.error);
+    return body;
 };
