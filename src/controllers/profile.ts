@@ -20,12 +20,13 @@ const errorResponse = (message: string, details?: any) => ({
 });
 
 /**
- * ✅ FIXED: Dramatically increased retry window based on research
- * Reference: User info can take up to 2-3 minutes to be fully available
+ * ✅ FIXED: Extract user info dari Baileys WASocket
+ * wa-multi-session.getSession() returns Baileys WASocket object
+ * User info ada di: socket.user (authState.creds.me)
  * 
- * @param session - WhatsApp session object
- * @param options - Retry configuration
- * @returns User info or null if not available
+ * References:
+ * - Baileys stores auth creds including user info
+ * - User object structure: { id: "628xxx:xx@s.whatsapp.net", name: "..." }
  */
 async function extractUserInfo(
   session: any,
@@ -36,24 +37,48 @@ async function extractUserInfo(
   } = {}
 ): Promise<{ name: string; id: string; number: string } | null> {
   const { 
-    maxRetries = 8,        // ✅ Increased from 3 to 8
-    initialDelay = 500,    // ✅ Start with shorter delay
-    maxDelay = 3000        // ✅ Cap at 3 seconds
+    maxRetries = 8,
+    initialDelay = 500,
+    maxDelay = 3000
   } = options;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const user = session?.socket?.user;
+    try {
+      // ✅ CRITICAL FIX: Baileys user info ada di session.user
+      // Ini adalah property dari WASocket, bukan socket.user
+      const user = session?.user;
 
-    if (user && user.id) {
-      console.log(`✅ User info extracted on attempt ${attempt}`);
-      return {
-        name: user.name || "Unknown",
-        id: user.id,
-        number: user.id?.split(":")[0] || "",
-      };
+      if (user && user.id) {
+        console.log(`✅ User info extracted on attempt ${attempt}`);
+        
+        // Parse phone number dari ID format: "628xxx:xx@s.whatsapp.net"
+        const phoneNumber = user.id.split('@')[0].split(':')[0];
+        
+        return {
+          name: user.name || user.verifiedName || "Unknown",
+          id: user.id,
+          number: phoneNumber,
+        };
+      }
+
+      // ✅ Alternative: Try authState if user not available directly
+      const authState = (session as any)?.authState?.creds;
+      if (authState?.me) {
+        console.log(`✅ User info extracted from authState on attempt ${attempt}`);
+        const phoneNumber = authState.me.id.split('@')[0].split(':')[0];
+        
+        return {
+          name: authState.me.name || authState.me.verifiedName || "Unknown",
+          id: authState.me.id,
+          number: phoneNumber,
+        };
+      }
+
+    } catch (error) {
+      console.error(`⚠️ Error extracting user info on attempt ${attempt}:`, error);
     }
 
-    // ✅ Exponential backoff: 500ms -> 1s -> 2s -> 3s (capped)
+    // Exponential backoff
     if (attempt < maxRetries) {
       const delay = Math.min(initialDelay * Math.pow(2, attempt - 1), maxDelay);
       console.log(`⏳ Attempt ${attempt}/${maxRetries}: User info not ready, retrying in ${delay}ms...`);
@@ -98,7 +123,6 @@ export const createProfileController = () => {
   /**
    * ✅ GET /:name - Get profile info dari session yang logged in
    * 
-   * IMPORTANT: This endpoint will try for ~15 seconds total before giving up
    * Total retry time: 500ms + 1s + 2s + 3s + 3s + 3s + 3s + 3s ≈ 18.5 seconds
    */
   app.get("/:name", createKeyMiddleware(), async (c) => {
@@ -115,7 +139,6 @@ export const createProfileController = () => {
       });
 
       if (!userInfo) {
-        // ✅ Return 503 dengan hint untuk retry
         return c.json(
           errorResponse(
             "User info not available. Session might still be initializing.",
@@ -147,7 +170,7 @@ export const createProfileController = () => {
 
   /**
    * ✅ GET /:name/quick - Quick check tanpa retry
-   * Endpoint ini untuk frontend polling - fast fail, let frontend handle retry
+   * Fast fail endpoint untuk frontend polling
    */
   app.get("/:name/quick", createKeyMiddleware(), async (c) => {
     const name = c.req.param("name");
@@ -156,19 +179,39 @@ export const createProfileController = () => {
       const session = validateSession(name);
 
       // ✅ Single attempt, no retry
-      const user = session?.socket?.user;
+      try {
+        const user = session?.user;
+        
+        if (user && user.id) {
+          const phoneNumber = user.id.split('@')[0].split(':')[0];
+          
+          return c.json(
+            successResponse({
+              name: user.name || user.verifiedName || "Unknown",
+              id: user.id,
+              number: phoneNumber,
+            })
+          );
+        }
 
-      if (user && user.id) {
-        return c.json(
-          successResponse({
-            name: user.name || "Unknown",
-            id: user.id,
-            number: user.id?.split(":")[0] || "",
-          })
-        );
+        // Try authState alternative
+        const authState = (session as any)?.authState?.creds;
+        if (authState?.me) {
+          const phoneNumber = authState.me.id.split('@')[0].split(':')[0];
+          
+          return c.json(
+            successResponse({
+              name: authState.me.name || authState.me.verifiedName || "Unknown",
+              id: authState.me.id,
+              number: phoneNumber,
+            })
+          );
+        }
+      } catch (extractError) {
+        console.error("Quick extract error:", extractError);
       }
 
-      // ✅ Fast fail - let frontend retry
+      // ✅ Fast fail
       return c.json(
         errorResponse("User info not ready yet", {
           hint: "Session is still initializing. Frontend should retry.",
@@ -185,25 +228,37 @@ export const createProfileController = () => {
   });
 
   /**
-   * ✅ GET /:name/status - Check session status with minimal info
+   * ✅ GET /:name/status - Check session status
    */
   app.get("/:name/status", createKeyMiddleware(), async (c) => {
     const name = c.req.param("name");
 
     try {
       const session = validateSession(name);
-      const user = session?.socket?.user;
+      
+      // Check multiple sources
+      const user = session?.user;
+      const authState = (session as any)?.authState?.creds?.me;
+      const hasUserInfo = (user && user.id) || (authState && authState.id);
+
+      let userInfo = null;
+      if (hasUserInfo) {
+        const source = user && user.id ? user : authState;
+        const phoneNumber = source.id.split('@')[0].split(':')[0];
+        
+        userInfo = {
+          name: source.name || source.verifiedName || "Unknown",
+          id: source.id,
+          number: phoneNumber,
+        };
+      }
 
       return c.json(
         successResponse({
           session_id: name,
-          is_ready: !!(user && user.id),
-          has_user_info: !!user,
-          user_info: user && user.id ? {
-            name: user.name || "Unknown",
-            id: user.id,
-            number: user.id?.split(":")[0] || "",
-          } : null,
+          is_ready: !!hasUserInfo,
+          has_user_info: !!hasUserInfo,
+          user_info: userInfo,
         })
       );
     } catch (error) {
@@ -281,41 +336,24 @@ export const createProfileController = () => {
 
 /**
  * ============================================
- * 🎯 RECOMMENDED FRONTEND USAGE PATTERNS
+ * 🎯 DEBUGGING TIPS
  * ============================================
  * 
- * PATTERN 1: Use GET /:name with long timeout (simple but blocks)
- * - Single request, backend handles retry
- * - Takes 15-20 seconds if not ready
- * - Good for: Initial page load after QR scan
+ * If user info is still not available after this fix:
  * 
- * PATTERN 2: Use GET /:name/quick with frontend polling (recommended)
- * - Fast fail (~instant response)
- * - Frontend controls retry frequency
- * - Good for: Status polling, better UX
+ * 1. Check Baileys WASocket structure:
+ *    console.log(Object.keys(session));
+ *    console.log(session.user);
+ *    console.log(session.authState);
  * 
- * PATTERN 3: Use GET /:name/status to check readiness first
- * - Check if ready before fetching
- * - Prevents unnecessary calls
- * - Good for: Conditional UI rendering
+ * 2. Check if session is actually connected:
+ *    console.log(session.ws?.readyState); // Should be OPEN (1)
  * 
- * Example implementation in frontend:
+ * 3. Check Baileys version compatibility:
+ *    npm list @whiskeysockets/baileys
  * 
- * ```javascript
- * async function waitForProfile(sessionId, maxAttempts = 20) {
- *   for (let i = 0; i < maxAttempts; i++) {
- *     const data = await fetch(`/api/profile/${sessionId}/quick`);
- *     
- *     if (data.success) {
- *       return data; // Got it!
- *     }
- *     
- *     // Exponential backoff: 2s, 4s, 6s, ..., max 10s
- *     const delay = Math.min(2000 * (i + 1), 10000);
- *     await sleep(delay);
- *   }
- *   
- *   throw new Error('Timeout waiting for profile');
- * }
- * ```
+ * 4. Add event listener to know when user info becomes available:
+ *    session.ev.on('creds.update', () => {
+ *      console.log('Creds updated, user info might be ready now');
+ *    });
  */
