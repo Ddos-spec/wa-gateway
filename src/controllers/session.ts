@@ -35,6 +35,19 @@ export const createSessionController = () => {
       const payload = c.req.valid("json");
       try {
         console.log(`[${payload.session}] Starting session...`);
+
+        // ✅ FIX: Check if session already exists in the library before starting
+        const existingSession = whatsapp.getSession(payload.session);
+        if (existingSession) {
+          console.log(`[${payload.session}] Session already exists in state: ${existingSession.status}`);
+          if (existingSession.status === 'connecting') {
+            // We can't get the QR here, so we ask the user to wait.
+            return c.json({ message: "Session is already connecting. Please wait for the QR to update or refresh." });
+          }
+          if (existingSession.status === 'online') {
+            return c.json({ message: "Session is already online." });
+          }
+        }
         
         // 1. Check if session exists in DB
         const dbSession = await query("SELECT * FROM sessions WHERE session_name = $1", [payload.session]);
