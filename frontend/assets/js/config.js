@@ -3,10 +3,10 @@ const config = {
   // Deteksi base URL secara dinamis
   apiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? "http://localhost:5000"
-    : ``,
+    : "/",
   backendApiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? "http://localhost:5000"
-    : ``,
+    : "/",
   endpoints: {
     login: "/api/auth/login",
     register: "/api/auth/register",

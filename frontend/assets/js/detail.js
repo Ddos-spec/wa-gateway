@@ -1,4 +1,26 @@
-'''// Check authentication
+'''window.onerror = function(message, source, lineno, colno, error) {
+    const errorContainer = document.getElementById('error-container');
+    const errorDetails = document.getElementById('error-details');
+    if (errorContainer && errorDetails) {
+        errorDetails.textContent = `Pesan: ${message}\nSumber: ${source}\nBaris: ${lineno}\nKolom: ${colno}\nError: ${error}`;
+        errorContainer.style.display = 'block';
+    }
+    return true; // Mencegah error ditampilkan di konsol browser
+};
+
+function copyErrorDetails() {
+    const errorDetails = document.getElementById('error-details');
+    if (errorDetails) {
+        navigator.clipboard.writeText(errorDetails.textContent).then(() => {
+            showToast('success', 'Detail kesalahan berhasil disalin!');
+        }).catch(err => {
+            showToast('error', 'Gagal menyalin detail kesalahan.');
+        });
+    }
+}
+
+
+// Check authentication
 if (!checkAuth()) {
     window.location.href = 'index.html';
 }
@@ -565,4 +587,6 @@ loadSessionDetails();
 window.addEventListener('beforeunload', () => {
     if (statusPolling) clearInterval(statusPolling);
 });
+
+
 ''

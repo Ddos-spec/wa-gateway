@@ -24,6 +24,15 @@
         </div>
     </nav>
 
+    <div id="error-container" class="container mt-4" style="display: none;">
+        <div class="alert alert-danger">
+            <h5><i class="bi bi-exclamation-triangle-fill"></i> Terjadi Kesalahan JavaScript</h5>
+            <p>Salin detail kesalahan di bawah ini dan kirimkan untuk bantuan.</p>
+            <pre id="error-details" class="bg-light p-2 rounded"></pre>
+            <button class="btn btn-danger btn-sm" onclick="copyErrorDetails()">Salin Detail</button>
+        </div>
+    </div>
+
     <div class="container mt-4">
         <div class="row">
             <div class="col-md-8">
