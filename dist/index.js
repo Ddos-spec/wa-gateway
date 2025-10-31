@@ -6,6 +6,9 @@ import { logger } from "hono/logger";
 import moment from "moment";
 import * as whatsapp from "wa-multi-session";
 import { createAuthController } from "./controllers/auth.js";
+import { createMessageController } from "./controllers/message.js";
+import { createProfileController } from "./controllers/profile.js";
+import { createSessionController } from "./controllers/session.js";
 import { env } from "./env.js";
 import { webhookClient } from "./webhooks/index.js";
 import { createWebhookMessage } from "./webhooks/message.js";
@@ -73,6 +76,9 @@ app.options("*", (c) => {
  */
 console.log("Registering auth routes...");
 app.route("/auth", createAuthController());
+app.route("/session", createSessionController());
+app.route("/message", createMessageController());
+app.route("/profile", createProfileController());
 console.log("Auth routes registered.");
 app.use("*", logger((...params) => {
     params.forEach((param) => console.log(`${moment().toISOString()} | ${param}`));
