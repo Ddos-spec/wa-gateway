@@ -54,47 +54,52 @@ router.get('/:name/status', authMiddleware, async (req, res) => {
 
 // GET QR CODE FOR SESSION BY NAME
 router.post('/:name/qr', authMiddleware, async (req, res) => {
+  const { name } = req.params;
+  console.log(`[${name}] Received request for QR code.`);
+  const gatewayUrl = `${process.env.WA_GATEWAY_URL}/session/start`;
+  console.log(`[${name}] Forwarding request to gateway: ${gatewayUrl}`);
+
   try {
-    const { name } = req.params;
+    const response = await axios.post(gatewayUrl, { session: name });
+    console.log(`[${name}] Received response from gateway for QR code:`, response.data);
     
-    // FIX: Panggil gateway menggunakan POST /session/start
-    const response = await axios.post(`${process.env.WA_GATEWAY_URL}/session/start`, 
-      { session: name }
-    );
-    
-    // Kirim QR jika ada, atau status jika sudah terhubung
     if (response.data.qr) {
       res.json({ success: true, qr: response.data.qr });
     } else {
       res.json({ success: true, qr: null, message: response.data.message || 'Already connected' });
     }
   } catch (error) {
-    console.error('Get QR code error:', error.response?.data || error.message);
+    console.error(`[${name}] Error getting QR code from gateway:`, error.response?.data || error.message);
     res.status(500).json({ success: false, error: error.response?.data?.message || 'Failed to fetch QR code' });
   }
 });
 
 // PAIR WITH PHONE NUMBER
 router.post('/:name/pair-phone', authMiddleware, async (req, res) => {
+  const { name } = req.params;
+  const { phone_number } = req.body;
+  console.log(`[${name}] Received request to pair with phone number: ${phone_number}`);
+
+  if (!phone_number) {
+    return res.status(400).json({ success: false, error: 'Phone number is required' });
+  }
+
   try {
-    const { name } = req.params;
-    const { phone_number } = req.body;
-    
-    if (!phone_number) {
-      return res.status(400).json({ success: false, error: 'Phone number is required' });
-    }
-    
+    console.log(`[${name}] Updating session status to 'pairing'.`);
     await pool.query('UPDATE sessions SET status = $1 WHERE session_name = $2', ['pairing', name]);
     
-    const response = await axios.post(`${process.env.WA_GATEWAY_URL}/session/pair-phone`, {
+    const gatewayUrl = `${process.env.WA_GATEWAY_URL}/session/pair-phone`;
+    console.log(`[${name}] Forwarding request to gateway: ${gatewayUrl}`);
+    const response = await axios.post(gatewayUrl, {
       session: name,
       phone_number: phone_number
     });
+    console.log(`[${name}] Received response from gateway for phone pairing:`, response.data);
 
     res.json({ success: true, data: response.data });
 
   } catch (error) {
-    console.error('Pair phone error:', error);
+    console.error(`[${name}] Error pairing with phone number from gateway:`, error.response?.data || error.message);
     res.status(500).json({ success: false, error: error.response?.data?.message || 'Failed to pair with phone number' });
   }
 });
