@@ -106,6 +106,9 @@ app.options("*", (c) => {
  */
 console.log("Registering auth routes...");
 app.route("/auth", createAuthController());
+app.route("/session", createSessionController());
+app.route("/message", createMessageController());
+app.route("/profile", createProfileController());
 console.log("Auth routes registered.");
 
 app.use(
