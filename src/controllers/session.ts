@@ -169,13 +169,27 @@ export const createSessionController = () => {
     async (c) => {
       const { session, phone } = c.req.valid("json");
       try {
-        // Placeholder for phone pairing - akan diimplementasikan saat library support
-        // Sementara ini, redirect ke QR code method
+        const code = await new Promise<string>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error("Timeout waiting for pairing code"));
+          }, 30000); // 30 second timeout
+
+          whatsapp.onPairingCodeUpdated(({ sessionId, pairCode }) => {
+            if (sessionId === session) {
+              clearTimeout(timeout);
+              resolve(pairCode);
+            }
+          });
+
+          whatsapp.startSession(session, { pairingNumber: phone });
+        });
+
         return c.json({ 
-          success: false, 
-          message: "Phone pairing sedang dalam pengembangan. Silakan gunakan QR Code.",
-          use_qr: true
-        }, 501);
+          success: true, 
+          message: "Pairing code generated successfully.",
+          code: code
+        });
+
       } catch (error) {
         console.error("Error pairing with phone:", error);
         throw new HTTPException(500, { message: "Failed to pair with phone number" });
