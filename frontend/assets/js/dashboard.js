@@ -216,6 +216,7 @@ async function createSession() {
             try {
                 // FIX: Menggunakan config.endpoints.sessions
                 const qrResponse = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionName}/qr`, {
+                    method: 'POST', // FIX: Use POST to match the backend route
                     headers: { 'Authorization': `Bearer ${getToken()}` }
                 });
                 const qrData = await qrResponse.json();
