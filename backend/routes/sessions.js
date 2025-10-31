@@ -53,7 +53,7 @@ router.get('/:name/status', authMiddleware, async (req, res) => {
 });
 
 // GET QR CODE FOR SESSION BY NAME
-router.get('/:name/qr', authMiddleware, async (req, res) => {
+router.post('/:name/qr', authMiddleware, async (req, res) => {
   try {
     const { name } = req.params;
     
@@ -83,6 +83,8 @@ router.post('/:name/pair-phone', authMiddleware, async (req, res) => {
     if (!phone_number) {
       return res.status(400).json({ success: false, error: 'Phone number is required' });
     }
+    
+    await pool.query('UPDATE sessions SET status = $1 WHERE session_name = $2', ['pairing', name]);
     
     const response = await axios.post(`${process.env.WA_GATEWAY_URL}/session/pair-phone`, {
       session: name,

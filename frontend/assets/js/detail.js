@@ -77,9 +77,11 @@ async function updateStatus() {
             } else {
                 statusBadge.classList.remove('bg-success');
                 document.getElementById('pairingSection').style.display = 'block';
-                if (data.status === 'connecting' || data.status === 'offline') {
+                if (data.status === 'connecting') {
                     statusBadge.classList.add('bg-warning');
                     loadQrCode(); // Attempt to load QR code
+                } else if (data.status === 'offline') {
+                    statusBadge.classList.add('bg-secondary');
                 } else {
                     statusBadge.classList.add('bg-secondary');
                 }
