@@ -40,8 +40,6 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-const PORT = process.env.BACKEND_PORT || 3001;
-
 app.listen(PORT, () => {
   console.log(`🚀 WA Gateway Dashboard API running on port ${PORT}`);
   console.log(`📡 WA Gateway URL: ${process.env.WA_GATEWAY_URL}`);
