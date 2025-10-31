@@ -376,7 +376,93 @@ async function deleteWebhook(id) {
     }
 }
 
-// --- Phone pairing functions will be added here later ---
+// --- Phone Pairing Functions ---
+
+// Format nomor telepon otomatis dengan strip
+document.getElementById('pairingPhone').addEventListener('input', (e) => {
+    let input = e.target.value.replace(/\D/g, ''); // Hapus semua non-digit
+    
+    // Otomatis tambahkan 62 jika dimulai dengan 0
+    if (input.startsWith('0')) {
+        input = '62' + input.substring(1);
+    }
+    
+    let formatted = '';
+    if (input.length > 2) {
+        formatted += input.substring(0, 2); // Kode negara (62)
+        
+        if (input.length > 2) {
+            formatted += '-';
+            let rest = input.substring(2);
+            // Format sisa nomor per 4 digit
+            const chunks = [];
+            while (rest.length > 0) {
+                chunks.push(rest.substring(0, 4));
+                rest = rest.substring(4);
+            }
+            formatted += chunks.join('-');
+        }
+    } else {
+        formatted = input;
+    }
+    
+    e.target.value = formatted;
+});
+
+// Handle submit form pairing nomor
+document.getElementById('phonePairingForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const phoneInput = document.getElementById('pairingPhone');
+    // Hapus semua strip dan spasi untuk dikirim ke API
+    const phoneNumber = phoneInput.value.replace(/[-\s]/g, ''); 
+    const pairBtn = document.getElementById('pairPhoneBtn');
+    const pairingCodeContainer = document.getElementById('pairingCodeContainer');
+    const pairingCode = document.getElementById('pairingCode');
+
+    if (!phoneNumber || phoneNumber.length < 10 || !phoneNumber.startsWith('62')) {
+        showToast('error', 'Format nomor telepon tidak valid. Pastikan diawali 62.');
+        return;
+    }
+    
+    pairBtn.disabled = true;
+    pairBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Menghubungkan...';
+    pairingCodeContainer.classList.add('d-none');
+
+    try {
+        const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionId}/pair-phone`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getToken()}`
+            },
+            body: JSON.stringify({ phone_number: phoneNumber })
+        });
+        
+        const data = await response.json();
+
+        if (response.ok && data.success && data.data && data.data.code) {
+            // Jika sukses dan dapat kode pairing (walaupun backend bilang belum support)
+            showToast('success', 'Kode pairing diterima! Masukkan di HP Anda.');
+            pairingCode.textContent = data.data.code.replace(/(\d{3})(?=\d)/g, '$1 - '); // Format kode pairing
+            pairingCodeContainer.classList.remove('d-none');
+        } else {
+            // Tangani error atau pesan "sedang pengembangan"
+            let errorMsg = data.error || data.message || 'Gagal melakukan pairing';
+            if (data.use_qr) {
+                errorMsg += ' Silakan gunakan Scan QR.';
+                // Pindah ke tab QR
+                new bootstrap.Tab(document.getElementById('qr-tab')).show();
+            }
+            showToast('error', errorMsg);
+        }
+    } catch (error) {
+        console.error('Pair phone error:', error);
+        showToast('error', 'Terjadi kesalahan saat pairing.');
+    } finally {
+        pairBtn.disabled = false;
+        pairBtn.innerHTML = '<i class="bi bi-link-45deg"></i> Hubungkan';
+    }
+});
 
 
 // Utility functions

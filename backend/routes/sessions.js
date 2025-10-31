@@ -56,11 +56,16 @@ router.get('/:name/status', authMiddleware, async (req, res) => {
 router.get('/:name/qr', authMiddleware, async (req, res) => {
   try {
     const { name } = req.params;
-    // Just trigger the gateway, the frontend will handle the QR code display via polling
-    const response = await axios.get(`${process.env.WA_GATEWAY_URL}/session/start?session=${name}`);
+    
+    // FIX: Panggil gateway menggunakan POST /session/start sesuai spek Hono API
+    // Bukan GET /session/start?session=...
+    const response = await axios.post(`${process.env.WA_GATEWAY_URL}/session/start`, 
+      { session: name }
+    );
+    
     res.json({ success: true, qr: response.data.qr || null });
   } catch (error) {
-    console.error('Get QR code error:', error);
+    console.error('Get QR code error:', error.message);
     res.status(500).json({ success: false, error: 'Failed to fetch QR code' });
   }
 });
