@@ -182,7 +182,7 @@ export const createProfileController = () => {
       try {
         const user = session?.user;
         
-        if (user && user.id) {
+        if (user?.id) {
           const phoneNumber = user.id.split('@')[0].split(':')[0];
           
           return c.json(
@@ -196,7 +196,7 @@ export const createProfileController = () => {
 
         // Try authState alternative
         const authState = (session as any)?.authState?.creds;
-        if (authState?.me) {
+        if (authState?.me?.id) {
           const phoneNumber = authState.me.id.split('@')[0].split(':')[0];
           
           return c.json(
@@ -239,18 +239,20 @@ export const createProfileController = () => {
       // Check multiple sources
       const user = session?.user;
       const authState = (session as any)?.authState?.creds?.me;
-      const hasUserInfo = (user && user.id) || (authState && authState.id);
+      const hasUserInfo = (user?.id) || (authState?.id);
 
       let userInfo = null;
       if (hasUserInfo) {
-        const source = user && user.id ? user : authState;
-        const phoneNumber = source.id.split('@')[0].split(':')[0];
-        
-        userInfo = {
-          name: source.name || source.verifiedName || "Unknown",
-          id: source.id,
-          number: phoneNumber,
-        };
+        const source = user?.id ? user : authState;
+        if (source?.id) {
+          const phoneNumber = source.id.split('@')[0].split(':')[0];
+          
+          userInfo = {
+            name: source.name || source.verifiedName || "Unknown",
+            id: source.id,
+            number: phoneNumber,
+          };
+        }
       }
 
       return c.json(
