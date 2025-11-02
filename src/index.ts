@@ -296,7 +296,7 @@ const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 12) =
       // Fallback: If name is missing, try verifiedName, push all possible fields to logs
       if (source && source.id) {
         phoneNumber = source.id.split('@')[0].split(':')[0];
-        profileName = source.name || source.verifiedName || source.pushname || source.displayName || "";
+        profileName = source.name || source.verifiedName || source.pushname || source.displayName || "Unknown";
         console.log(`[${sessionName}] Extracted fields:`, {
           name: source.name,
           verifiedName: source.verifiedName,
@@ -304,8 +304,6 @@ const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 12) =
           displayName: source.displayName,
           id: source.id
         });
-        // Fallback: If profileName is still empty, use phoneNumber
-        if (!profileName) profileName = phoneNumber;
       }
 
       // Only update DB if we have a valid phone number and profile name

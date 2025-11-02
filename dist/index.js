@@ -156,15 +156,12 @@ whatsapp.onMessageReceived(async (message) => {
 whatsapp.onConnected(async (session) => {
     console.log(`session: '${session}' connected`);
     try {
-        // Based on research, user info is available on session.socket.user after connection
-        const sessionInfo = whatsapp.getSession(session);
-        // Use optional chaining for safety. The `as any` is used to bypass potential incorrect type definitions.
-        const waNumber = sessionInfo?.socket?.user?.id?.split(':')[0] || '';
-        const profileName = sessionInfo?.socket?.user?.name ?? '';
-        console.log(`[${session}] sessionInfo object:`, sessionInfo);
-        console.log(`[${session}] Extracted waNumber: ${waNumber}, profileName: ${profileName}`);
-        await query("UPDATE sessions SET status = 'online', wa_number = $1, profile_name = $2, updated_at = CURRENT_TIMESTAMP WHERE session_name = $3", [waNumber, profileName, session]);
-        console.log(`[${session}] Successfully updated DB with profile info.`);
+        // 1. Update status to online
+        await query("UPDATE sessions SET status = 'online', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [session]);
+        console.log(`[${session}] Successfully updated DB status to online.`);
+        // 2. Extract and save profile info (async, non-blocking)
+        extractAndSaveProfileInfo(session).catch(err => console.error(`[${session}] Failed to extract profile:`, err));
+        // 3. Trigger webhooks
         const activeWebhooks = await getActiveWebhooks(session);
         if (activeWebhooks.length === 0)
             return;
@@ -174,8 +171,7 @@ whatsapp.onConnected(async (session) => {
         }
     }
     catch (error) {
-        console.error(`Error getting profile info for session ${session}:`, error);
-        await query("UPDATE sessions SET status = 'online', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [session]);
+        console.error(`[${session}] Error in onConnected handler:`, error);
     }
 });
 whatsapp.onConnecting(async (session) => {
@@ -207,3 +203,67 @@ serve({
     fetch: app.fetch,
     port: port,
 });
+const extractAndSaveProfileInfo = async (sessionName, maxRetries = 12) => {
+    let phoneNumber = "";
+    let profileName = "";
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const session = whatsapp.getSession(sessionName);
+            if (!session) {
+                console.log(`[${sessionName}] Session not found in library, skipping profile extraction`);
+                return;
+            }
+            // Debugging: Inspect session object
+            console.log(`[${sessionName}] Session keys:`, Object.keys(session));
+            console.log(`[${sessionName}] User object:`, session?.user);
+            console.log(`[${sessionName}] AuthState:`, session?.authState?.creds?.me);
+            // Try all possible sources for user info
+            let source = null;
+            if (session?.user && typeof session.user.id === 'string') {
+                source = session.user;
+            }
+            else if (session?.authState?.creds?.me && typeof session.authState.creds.me.id === 'string') {
+                source = session.authState.creds.me;
+            }
+            // Fallback: If name is missing, try verifiedName, push all possible fields to logs
+            if (source && source.id) {
+                phoneNumber = source.id.split('@')[0].split(':')[0];
+                profileName = source.name || source.verifiedName || source.pushname || source.displayName || "Unknown";
+                console.log(`[${sessionName}] Extracted fields:`, {
+                    name: source.name,
+                    verifiedName: source.verifiedName,
+                    pushname: source.pushname,
+                    displayName: source.displayName,
+                    id: source.id
+                });
+            }
+            // Only update DB if we have a valid phone number and profile name
+            if (phoneNumber && profileName) {
+                const updateResult = await query(`UPDATE sessions 
+           SET wa_number = $1, 
+               profile_name = $2, 
+               updated_at = CURRENT_TIMESTAMP 
+           WHERE session_name = $3 RETURNING wa_number, profile_name`, [phoneNumber, profileName, sessionName]);
+                if (updateResult.rows.length > 0) {
+                    console.log(`✅ [${sessionName}] DB updated:`, updateResult.rows[0]);
+                }
+                else {
+                    console.warn(`⚠️ [${sessionName}] DB update did not return any rows!`);
+                }
+                return; // Success! Exit loop
+            }
+            else {
+                console.log(`⏳ [${sessionName}] Attempt ${attempt}/${maxRetries}: Profile info not ready (name: '${profileName}', number: '${phoneNumber}'), retrying...`);
+            }
+        }
+        catch (error) {
+            console.error(`⚠️ [${sessionName}] Error extracting profile on attempt ${attempt}:`, error);
+        }
+        // Exponential backoff retry
+        if (attempt < maxRetries) {
+            const delay = Math.min(500 * Math.pow(2, attempt - 1), 3000);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+    }
+    console.log(`❌ [${sessionName}] Failed to extract profile after ${maxRetries} attempts`);
+};
