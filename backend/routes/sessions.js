@@ -122,7 +122,7 @@ router.post('/:name/pair-phone', authMiddleware, async (req, res) => {
     console.log(`[${name}] Forwarding request to gateway: ${gatewayUrl}`);
     const response = await axios.post(gatewayUrl, {
       session: name,
-      phone_number: phone_number
+      phone: phone_number
     });
     console.log(`[${name}] Received response from gateway for phone pairing:`, response.data);
 
