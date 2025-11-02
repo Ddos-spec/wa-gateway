@@ -123,7 +123,7 @@ async function fetchProfileInfo(attemptCount = 0) {
     
     try {
         // ✅ Use /quick endpoint untuk fast response
-        const data = await apiRequest(`${config.backendApiUrl}/api/profile/${sessionId}/quick`);
+        const data = await apiRequest(`${config.backendApiUrl}/api/profile/${sessionId}`);
         
         // ✅ Check success flag
         if (!data.success) {
