@@ -296,12 +296,14 @@ const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 12) =
       // Fallback: If name is missing, try verifiedName, push all possible fields to logs
       if (source && source.id) {
         phoneNumber = source.id.split('@')[0].split(':')[0];
-        profileName = source.name || source.verifiedName || source.pushname || source.displayName || "Unknown";
+        profileName = source.name || source.verifiedName || source.pushname || source.displayName || source.notify || "Profil tidak ditemukan";
+        console.log(`[${sessionName}] Full source object:`, JSON.stringify(source, null, 2));
         console.log(`[${sessionName}] Extracted fields:`, {
           name: source.name,
           verifiedName: source.verifiedName,
           pushname: source.pushname,
           displayName: source.displayName,
+          notify: source.notify,
           id: source.id
         });
       }
