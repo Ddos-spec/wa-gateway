@@ -580,9 +580,7 @@ document.getElementById('phonePairingForm').addEventListener('submit', async (e)
     const pairingCodeContainer = document.getElementById('pairingCodeContainer');
     const pairingCode = document.getElementById('pairingCode');
 
-    if (phoneNumber.startsWith('0')) {
-        phoneNumber = '62' + phoneNumber.substring(1);
-    }
+
 
     if (!phoneNumber || phoneNumber.length < 10 || !phoneNumber.startsWith('62')) {
         showToast('error', 'Format nomor telepon tidak valid. Pastikan diawali dengan 08 atau 62.');
