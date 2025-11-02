@@ -181,13 +181,14 @@ export const createProfileController = () => {
       // ✅ Single attempt, no retry
       try {
         const user = session?.user;
-        if (user && typeof user.id === 'string') {
-          const phoneNumber = user.id.split('@')[0].split(':')[0];
+        const userId = typeof user?.id === "string" ? user.id : undefined;
+        if (user && userId) {
+          const phoneNumber = userId.split('@')[0].split(':')[0];
           
           return c.json(
             successResponse({
               name: user.name || user.verifiedName || "Unknown",
-              id: user.id,
+              id: userId,
               number: phoneNumber,
             })
           );
@@ -195,13 +196,14 @@ export const createProfileController = () => {
 
         // Try authState alternative
         const authState = (session as any)?.authState?.creds ?? {};
-        if (authState?.me?.id) {
-          const phoneNumber = authState.me.id.split('@')[0].split(':')[0];
+        const authId = typeof authState?.me?.id === "string" ? authState.me.id : undefined;
+        if (authId) {
+          const phoneNumber = authId.split('@')[0].split(':')[0];
           
           return c.json(
             successResponse({
               name: authState.me.name || authState.me.verifiedName || "Unknown",
-              id: authState.me.id,
+              id: authId,
               number: phoneNumber,
             })
           );
