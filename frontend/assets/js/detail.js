@@ -574,15 +574,21 @@ document.getElementById('phonePairingForm').addEventListener('submit', async (e)
     e.preventDefault();
     
     const phoneInput = document.getElementById('pairingPhone');
+    console.log('phoneInput.value:', phoneInput.value);
     // Hapus semua strip dan spasi untuk dikirim ke API
     let phoneNumber = phoneInput.value.replace(/[-\s]/g, ''); 
+    console.log('phoneNumber after replace:', phoneNumber);
     const pairBtn = document.getElementById('pairPhoneBtn');
     const pairingCodeContainer = document.getElementById('pairingCodeContainer');
     const pairingCode = document.getElementById('pairingCode');
 
-
+    if (phoneNumber.startsWith('0')) {
+        phoneNumber = '62' + phoneNumber.substring(1);
+        console.log('phoneNumber after adding 62:', phoneNumber);
+    }
 
     if (!phoneNumber || phoneNumber.length < 10 || !phoneNumber.startsWith('62')) {
+        console.log('Validation failed. phoneNumber:', phoneNumber);
         showToast('error', 'Format nomor telepon tidak valid. Pastikan diawali dengan 08 atau 62.');
         return;
     }
