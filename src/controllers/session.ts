@@ -108,8 +108,10 @@ export const createSessionController = () => {
                   
         if (qr) {
           const qrDataURL = await toDataURL(qr);
-          console.log(`[${payload.session}] Returning QR code`);
-          return c.json({ qr: qrDataURL });
+          const sessionDetails = await query("SELECT profile_name, wa_number FROM sessions WHERE session_name = $1", [payload.session]);
+          const userInfo = sessionDetails.rows[0];
+          console.log(`[${payload.session}] Returning QR code with user info`);
+          return c.json({ qr: qrDataURL, user: userInfo });
         }
 
         // If already connected (no QR)
