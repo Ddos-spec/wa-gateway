@@ -161,6 +161,7 @@ whatsapp.onConnected(async (session) => {
         // Use optional chaining for safety. The `as any` is used to bypass potential incorrect type definitions.
         const waNumber = sessionInfo?.socket?.user?.id?.split(':')[0] || '';
         const profileName = sessionInfo?.socket?.user?.name ?? '';
+        console.log(`[${session}] sessionInfo object:`, sessionInfo);
         console.log(`[${session}] Extracted waNumber: ${waNumber}, profileName: ${profileName}`);
         await query("UPDATE sessions SET status = 'online', wa_number = $1, profile_name = $2, updated_at = CURRENT_TIMESTAMP WHERE session_name = $3", [waNumber, profileName, session]);
         console.log(`[${session}] Successfully updated DB with profile info.`);
