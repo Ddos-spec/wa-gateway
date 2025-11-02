@@ -199,7 +199,6 @@ async function updateStatus() {
                 
                 if (data.status === 'connecting') {
                     statusBadge.classList.add('bg-warning');
-                    loadQrCode(); // Attempt to load QR code
                 } else if (data.status === 'offline') {
                     statusBadge.classList.add('bg-secondary');
                 } else {
@@ -680,6 +679,17 @@ function showToast(type, message) {
     // Make sure this function is properly implemented in your codebase
     console.log(`[${type.toUpperCase()}] ${message}`);
 }
+
+document.getElementById('chooseQrBtn').addEventListener('click', () => {
+    document.getElementById('pairingChoice').classList.add('d-none');
+    document.getElementById('qrSection').classList.remove('d-none');
+    loadQrCode();
+});
+
+document.getElementById('choosePhoneBtn').addEventListener('click', () => {
+    document.getElementById('pairingChoice').classList.add('d-none');
+    document.getElementById('phoneSection').classList.remove('d-none');
+});
 
 // Initial load
 loadSessionDetails();
