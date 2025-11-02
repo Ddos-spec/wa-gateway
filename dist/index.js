@@ -214,9 +214,27 @@ const extractAndSaveProfileInfo = async (sessionName, maxRetries = 12) => {
                 return;
             }
             // Debugging: Inspect session object
-            console.log(`[${sessionName}] Session keys:`, Object.keys(session));
-            console.log(`[${sessionName}] User object:`, session?.user);
-            console.log(`[${sessionName}] AuthState:`, session?.authState?.creds?.me);
+            console.log(`[${sessionName}] Attempt ${attempt}: Full session object keys:`, Object.keys(session));
+            console.log(`[${sessionName}] Attempt ${attempt}: session.user object:`, JSON.stringify(session?.user, null, 2));
+            console.log(`[${sessionName}] Attempt ${attempt}: session.authState.creds object:`, JSON.stringify(session?.authState?.creds, null, 2));
+            try {
+                if (session.user && session.user.id) {
+                    const onWhatsApp = await session.onWhatsApp(session.user.id);
+                    console.log(`[${sessionName}] onWhatsApp:`, JSON.stringify(onWhatsApp, null, 2));
+                }
+            }
+            catch (e) {
+                console.log(`[${sessionName}] Could not get onWhatsApp`, e);
+            }
+            try {
+                if (session.user && session.user.id) {
+                    const businessProfile = await session.getBusinessProfile(session.user.id);
+                    console.log(`[${sessionName}] Business Profile:`, JSON.stringify(businessProfile, null, 2));
+                }
+            }
+            catch (e) {
+                console.log(`[${sessionName}] Could not get business profile`, e);
+            }
             // Try all possible sources for user info
             let source = null;
             if (session?.user && typeof session.user.id === 'string') {
@@ -228,12 +246,14 @@ const extractAndSaveProfileInfo = async (sessionName, maxRetries = 12) => {
             // Fallback: If name is missing, try verifiedName, push all possible fields to logs
             if (source && source.id) {
                 phoneNumber = source.id.split('@')[0].split(':')[0];
-                profileName = source.name || source.verifiedName || source.pushname || source.displayName || "Unknown";
+                profileName = source.name || source.verifiedName || source.pushname || source.displayName || source.notify || "Profil tidak ditemukan";
+                console.log(`[${sessionName}] Full source object:`, JSON.stringify(source, null, 2));
                 console.log(`[${sessionName}] Extracted fields:`, {
                     name: source.name,
                     verifiedName: source.verifiedName,
                     pushname: source.pushname,
                     displayName: source.displayName,
+                    notify: source.notify,
                     id: source.id
                 });
             }

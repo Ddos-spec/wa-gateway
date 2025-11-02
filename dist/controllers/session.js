@@ -189,12 +189,20 @@ export const createSessionController = () => {
     })), async (c) => {
         const { session, phone } = c.req.valid("json");
         try {
-            // Return 501 Not Implemented, as requested by frontend logic
+            const code = await new Promise((resolve) => {
+                whatsapp.onPairingCode((sessionId, code) => {
+                    if (sessionId === session) {
+                        resolve(code);
+                    }
+                });
+                whatsapp.startSessionWithPairingCode(session, { phoneNumber: phone });
+            });
             return c.json({
-                success: false,
-                message: "Phone pairing sedang dalam pengembangan. Silakan gunakan QR Code.",
-                use_qr: true
-            }, 501);
+                success: true,
+                data: {
+                    code: code,
+                },
+            });
         }
         catch (error) {
             console.error("Error pairing with phone:", error);

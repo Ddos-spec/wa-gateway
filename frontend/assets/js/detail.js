@@ -556,28 +556,14 @@ async function toggleWebhook(checkbox, id) {
 document.getElementById('pairingPhone').addEventListener('input', (e) => {
     let input = e.target.value.replace(/\D/g, ''); // Hapus semua non-digit
     
-    // Otomatis tambahkan 62 jika dimulai dengan 0
-    if (input.startsWith('0')) {
-        input = '62' + input.substring(1);
-    }
-    
     let formatted = '';
-    if (input.length > 2) {
-        formatted += input.substring(0, 2); // Kode negara (62)
-        
-        if (input.length > 2) {
-            formatted += '-';
-            let rest = input.substring(2);
-            // Format sisa nomor per 4 digit
-            const chunks = [];
-            while (rest.length > 0) {
-                chunks.push(rest.substring(0, 4));
-                rest = rest.substring(4);
-            }
-            formatted += chunks.join('-');
+    if (input.length > 0) {
+        const chunks = [];
+        while (input.length > 0) {
+            chunks.push(input.substring(0, 4));
+            input = input.substring(4);
         }
-    } else {
-        formatted = input;
+        formatted = chunks.join('-');
     }
     
     e.target.value = formatted;
@@ -589,13 +575,17 @@ document.getElementById('phonePairingForm').addEventListener('submit', async (e)
     
     const phoneInput = document.getElementById('pairingPhone');
     // Hapus semua strip dan spasi untuk dikirim ke API
-    const phoneNumber = phoneInput.value.replace(/[-\s]/g, ''); 
+    let phoneNumber = phoneInput.value.replace(/[-\s]/g, ''); 
     const pairBtn = document.getElementById('pairPhoneBtn');
     const pairingCodeContainer = document.getElementById('pairingCodeContainer');
     const pairingCode = document.getElementById('pairingCode');
 
+    if (phoneNumber.startsWith('0')) {
+        phoneNumber = '62' + phoneNumber.substring(1);
+    }
+
     if (!phoneNumber || phoneNumber.length < 10 || !phoneNumber.startsWith('62')) {
-        showToast('error', 'Format nomor telepon tidak valid. Pastikan diawali 62.');
+        showToast('error', 'Format nomor telepon tidak valid. Pastikan diawali dengan 08 atau 62.');
         return;
     }
     
