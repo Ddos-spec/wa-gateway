@@ -285,6 +285,13 @@ const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 12) =
       console.log(`[${sessionName}] Attempt ${attempt}: session.user object:`, JSON.stringify(session?.user, null, 2));
       console.log(`[${sessionName}] Attempt ${attempt}: session.authState.creds.me object:`, JSON.stringify((session as any)?.authState?.creds?.me, null, 2));
 
+      try {
+        const businessProfile = await session.getBusinessProfile(session.user.id);
+        console.log(`[${sessionName}] Business Profile:`, JSON.stringify(businessProfile, null, 2));
+      } catch (e) {
+        console.log(`[${sessionName}] Could not get business profile`, e);
+      }
+
       // Try all possible sources for user info
       let source = null;
       if (session?.user && typeof session.user.id === 'string') {
