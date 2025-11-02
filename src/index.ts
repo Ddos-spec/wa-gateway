@@ -289,6 +289,15 @@ const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 12) =
 
       try {
         if (session.user && session.user.id) {
+          const onWhatsApp = await session.onWhatsApp(session.user.id);
+          console.log(`[${sessionName}] onWhatsApp:`, JSON.stringify(onWhatsApp, null, 2));
+        }
+      } catch (e) {
+        console.log(`[${sessionName}] Could not get onWhatsApp`, e);
+      }
+
+      try {
+        if (session.user && session.user.id) {
           const businessProfile = await session.getBusinessProfile(session.user.id);
           console.log(`[${sessionName}] Business Profile:`, JSON.stringify(businessProfile, null, 2));
         }
