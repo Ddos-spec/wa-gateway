@@ -181,8 +181,7 @@ export const createProfileController = () => {
       // ✅ Single attempt, no retry
       try {
         const user = session?.user;
-        
-        if (user?.id) {
+        if (user && typeof user.id === 'string') {
           const phoneNumber = user.id.split('@')[0].split(':')[0];
           
           return c.json(
@@ -195,7 +194,7 @@ export const createProfileController = () => {
         }
 
         // Try authState alternative
-        const authState = (session as any)?.authState?.creds;
+        const authState = (session as any)?.authState?.creds ?? {};
         if (authState?.me?.id) {
           const phoneNumber = authState.me.id.split('@')[0].split(':')[0];
           
