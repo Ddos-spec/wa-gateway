@@ -182,13 +182,13 @@ export const createProfileController = () => {
       try {
         const user = session?.user;
         const userId = typeof user?.id === "string" ? user.id : undefined;
-        if (user && userId) {
-          const phoneNumber = userId.split('@')[0].split(':')[0];
+        if (user && user.id) {
+          const phoneNumber = (user.id as string).split('@')[0].split(':')[0];
           
           return c.json(
             successResponse({
               name: user.name || user.verifiedName || "Unknown",
-              id: userId,
+              id: user.id,
               number: phoneNumber,
             })
           );
