@@ -270,6 +270,8 @@ serve({
 });
 
 const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 12) => {
+  let phoneNumber = "";
+  let profileName = "";
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const session = whatsapp.getSession(sessionName);
@@ -291,12 +293,19 @@ const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 12) =
         source = (session as any).authState.creds.me;
       }
 
-      // Fallback: If name is missing, try verifiedName, or set to empty string
-      let profileName = "";
-      let phoneNumber = "";
+      // Fallback: If name is missing, try verifiedName, push all possible fields to logs
       if (source && source.id) {
         phoneNumber = source.id.split('@')[0].split(':')[0];
-        profileName = source.name || source.verifiedName || "";
+        profileName = source.name || source.verifiedName || source.pushname || source.displayName || "";
+        console.log(`[${sessionName}] Extracted fields:`, {
+          name: source.name,
+          verifiedName: source.verifiedName,
+          pushname: source.pushname,
+          displayName: source.displayName,
+          id: source.id
+        });
+        // Fallback: If profileName is still empty, use phoneNumber
+        if (!profileName) profileName = phoneNumber;
       }
 
       // Only update DB if we have a valid phone number and profile name
