@@ -283,7 +283,9 @@ const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 12) =
       // Debugging: Inspect session object
       console.log(`[${sessionName}] Attempt ${attempt}: Full session object keys:`, Object.keys(session));
       console.log(`[${sessionName}] Attempt ${attempt}: session.user object:`, JSON.stringify(session?.user, null, 2));
-      console.log(`[${sessionName}] Attempt ${attempt}: session.authState.creds.me object:`, JSON.stringify((session as any)?.authState?.creds?.me, null, 2));
+      console.log(`[${sessionName}] Attempt ${attempt}: session.authState.creds object:`, JSON.stringify((session as any)?.authState?.creds, null, 2));
+
+
 
       try {
         if (session.user && session.user.id) {
