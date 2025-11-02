@@ -208,14 +208,19 @@ whatsapp.onMessageReceived(async (message) => {
 whatsapp.onConnected(async (session) => {
   console.log(`session: '${session}' connected`);
   try {
-    // The onConnected event should ONLY be responsible for setting the status
-    // and triggering webhooks. Profile info is now handled by the /profile endpoint.
+    // 1. Update status to online
     await query(
       "UPDATE sessions SET status = 'online', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1",
       [session]
     );
     console.log(`[${session}] Successfully updated DB status to online.`);
 
+    // 2. Extract and save profile info (async, non-blocking)
+    extractAndSaveProfileInfo(session).catch(err =>
+      console.error(`[${session}] Failed to extract profile:`, err)
+    );
+
+    // 3. Trigger webhooks
     const activeWebhooks = await getActiveWebhooks(session);
     if (activeWebhooks.length === 0) return;
 
@@ -264,7 +269,7 @@ serve({
   port: port,
 });
 
-const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 8) => {
+const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 12) => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const session = whatsapp.getSession(sessionName);
@@ -286,11 +291,16 @@ const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 8) =>
         source = (session as any).authState.creds.me;
       }
 
+      // Fallback: If name is missing, try verifiedName, or set to empty string
+      let profileName = "";
+      let phoneNumber = "";
       if (source && source.id) {
-        const phoneNumber = source.id.split('@')[0].split(':')[0];
-        const profileName = source.name || source.verifiedName || "Unknown";
+        phoneNumber = source.id.split('@')[0].split(':')[0];
+        profileName = source.name || source.verifiedName || "";
+      }
 
-        // ✅ Save to database
+      // Only update DB if we have a valid phone number and profile name
+      if (phoneNumber && profileName) {
         const updateResult = await query(
           `UPDATE sessions 
            SET wa_number = $1, 
@@ -304,19 +314,18 @@ const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 8) =>
         } else {
           console.warn(`⚠️ [${sessionName}] DB update did not return any rows!`);
         }
-
-        console.log(`✅ [${sessionName}] Profile info saved: ${profileName} (${phoneNumber})`);
         return; // Success! Exit loop
+      } else {
+        console.log(`⏳ [${sessionName}] Attempt ${attempt}/${maxRetries}: Profile info not ready (name: '${profileName}', number: '${phoneNumber}'), retrying...`);
       }
 
     } catch (error) {
       console.error(`⚠️ [${sessionName}] Error extracting profile on attempt ${attempt}:`, error);
     }
 
-    // ✅ Exponential backoff retry
+    // Exponential backoff retry
     if (attempt < maxRetries) {
       const delay = Math.min(500 * Math.pow(2, attempt - 1), 3000);
-      console.log(`⏳ [${sessionName}] Attempt ${attempt}/${maxRetries}: Profile not ready, retrying in ${delay}ms...`);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
