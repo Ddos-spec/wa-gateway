@@ -63,7 +63,7 @@ async function extractUserInfo(
 
       // ✅ Alternative: Try authState if user not available directly
       const authState = (session as any)?.authState?.creds;
-      if (authState?.me) {
+      if (authState?.me?.id) {
         console.log(`✅ User info extracted from authState on attempt ${attempt}`);
         const phoneNumber = authState.me.id.split('@')[0].split(':')[0];
         
@@ -181,9 +181,10 @@ export const createProfileController = () => {
       // ✅ Single attempt, no retry
       try {
         const user = session?.user;
-        const userId = typeof user?.id === "string" ? user.id : undefined;
-        if (user && user.id) {
-          const phoneNumber = (user.id as string).split('@')[0].split(':')[0];
+        
+        // ✅ FIX: Type-safe check sebelum akses property
+        if (user && typeof user.id === "string") {
+          const phoneNumber = user?.id?.split?.('@')[0]?.split?.(':')[0] ?? "";
           
           return c.json(
             successResponse({
@@ -194,16 +195,17 @@ export const createProfileController = () => {
           );
         }
 
-        // Try authState alternative
-        const authState = (session as any)?.authState?.creds ?? {};
-        const authId = typeof authState?.me?.id === "string" ? authState.me.id : undefined;
-        if (authId) {
-          const phoneNumber = authId.split('@')[0].split(':')[0];
+        // ✅ FIX: Try authState alternative dengan proper type checking
+        const authState = (session as any)?.authState?.creds;
+        const authMe = authState?.me;
+        
+        if (authMe && authMe.id && typeof authMe.id === "string") {
+          const phoneNumber = authMe.id.split('@')[0].split(':')[0];
           
           return c.json(
             successResponse({
-              name: authState.me.name || authState.me.verifiedName || "Unknown",
-              id: authId,
+              name: authMe.name || authMe.verifiedName || "Unknown",
+              id: authMe.id,
               number: phoneNumber,
             })
           );
@@ -237,15 +239,19 @@ export const createProfileController = () => {
     try {
       const session = validateSession(name);
       
-      // Check multiple sources
+      // ✅ FIX: Type-safe check untuk multiple sources
       const user = session?.user;
-      const authState = (session as any)?.authState?.creds?.me;
-      const hasUserInfo = (user?.id) || (authState?.id);
+      const authState = (session as any)?.authState?.creds;
+      const authMe = authState?.me;
+      
+      const hasUserInfo = !!(user?.id || authMe?.id);
 
       let userInfo = null;
       if (hasUserInfo) {
-        const source = user?.id ? user : authState;
-        if (source?.id) {
+        // ✅ FIX: Proper null checking sebelum akses property
+        const source = user?.id ? user : authMe;
+        
+        if (source && source.id && typeof source.id === "string") {
           const phoneNumber = source.id.split('@')[0].split(':')[0];
           
           userInfo = {
@@ -337,26 +343,4 @@ export const createProfileController = () => {
   return app;
 };
 
-/**
- * ============================================
- * 🎯 DEBUGGING TIPS
- * ============================================
- * 
- * If user info is still not available after this fix:
- * 
- * 1. Check Baileys WASocket structure:
- *    console.log(Object.keys(session));
- *    console.log(session.user);
- *    console.log(session.authState);
- * 
- * 2. Check if session is actually connected:
- *    console.log(session.ws?.readyState); // Should be OPEN (1)
- * 
- * 3. Check Baileys version compatibility:
- *    npm list @whiskeysockets/baileys
- * 
- * 4. Add event listener to know when user info becomes available:
- *    session.ev.on('creds.update', () => {
- *      console.log('Creds updated, user info might be ready now');
- *    });
- */
+export default createProfileController;

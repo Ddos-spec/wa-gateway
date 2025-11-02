@@ -263,3 +263,63 @@ serve({
   fetch: app.fetch,
   port: port,
 });
+
+const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 8) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const session = whatsapp.getSession(sessionName);
+      if (!session) {
+        console.log(`[${sessionName}] Session not found in library, skipping profile extraction`);
+        return;
+      }
+
+      // Debugging: Inspect session object
+      console.log(`[${sessionName}] Session keys:`, Object.keys(session));
+      console.log(`[${sessionName}] User object:`, session?.user);
+      console.log(`[${sessionName}] AuthState:`, (session as any)?.authState?.creds?.me);
+
+      // Try all possible sources for user info
+      let source = null;
+      if (session?.user && typeof session.user.id === 'string') {
+        source = session.user;
+      } else if ((session as any)?.authState?.creds?.me && typeof (session as any).authState.creds.me.id === 'string') {
+        source = (session as any).authState.creds.me;
+      }
+
+      if (source && source.id) {
+        const phoneNumber = source.id.split('@')[0].split(':')[0];
+        const profileName = source.name || source.verifiedName || "Unknown";
+
+        // ✅ Save to database
+        const updateResult = await query(
+          `UPDATE sessions 
+           SET wa_number = $1, 
+               profile_name = $2, 
+               updated_at = CURRENT_TIMESTAMP 
+           WHERE session_name = $3 RETURNING wa_number, profile_name`,
+          [phoneNumber, profileName, sessionName]
+        );
+        if (updateResult.rows.length > 0) {
+          console.log(`✅ [${sessionName}] DB updated:`, updateResult.rows[0]);
+        } else {
+          console.warn(`⚠️ [${sessionName}] DB update did not return any rows!`);
+        }
+
+        console.log(`✅ [${sessionName}] Profile info saved: ${profileName} (${phoneNumber})`);
+        return; // Success! Exit loop
+      }
+
+    } catch (error) {
+      console.error(`⚠️ [${sessionName}] Error extracting profile on attempt ${attempt}:`, error);
+    }
+
+    // ✅ Exponential backoff retry
+    if (attempt < maxRetries) {
+      const delay = Math.min(500 * Math.pow(2, attempt - 1), 3000);
+      console.log(`⏳ [${sessionName}] Attempt ${attempt}/${maxRetries}: Profile not ready, retrying in ${delay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  console.log(`❌ [${sessionName}] Failed to extract profile after ${maxRetries} attempts`);
+};
