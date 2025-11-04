@@ -44,12 +44,15 @@ export const createSessionController = () => {
                     whatsapp.startSession(payload.session, {
                         onConnected: async () => {
                             console.log(`[${payload.session}] Connected!`);
-                            // ✅ FIX: Update status to online when connected
                             try {
-                                await query("UPDATE sessions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE session_name = $2", ['online', payload.session]);
+                                const session = whatsapp.getSession(payload.session);
+                                const profileName = session?.user?.pushname || 'Unknown';
+                                const waNumber = session?.user?.id?.split(':')[0] || 'Unknown';
+                                await query('UPDATE sessions SET status = $1, profile_name = $2, wa_number = $3, updated_at = CURRENT_TIMESTAMP WHERE session_name = $4', ['online', profileName, waNumber, payload.session]);
+                                console.log(`[${payload.session}] Profile updated: ${profileName} (${waNumber})`);
                             }
                             catch (dbError) {
-                                console.error(`[${payload.session}] Failed to update status to online:`, dbError);
+                                console.error(`[${payload.session}] Failed to update status and profile info:`, dbError);
                             }
                             resolve(null);
                         },

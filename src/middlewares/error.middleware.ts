@@ -15,7 +15,7 @@ export const globalErrorMiddleware: ErrorHandler = (err, c) => {
   }
 
   if (ApplicationError.isApplicationError(err)) {
-    return c.json(err.getResponseMessage(), err.code as StatusCode);
+    return c.json(err.getResponseMessage(), err.code as any);
   }
 
   console.error("APP ERROR:", err);
