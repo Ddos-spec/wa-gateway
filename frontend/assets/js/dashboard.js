@@ -9,8 +9,28 @@ document.getElementById('username').textContent = localStorage.getItem('username
 let sessions = [];
 let pollingInterval = null;
 
+// UI State Management
+function showState(state) {
+    const loadingState = document.getElementById('loadingState');
+    const emptyState = document.getElementById('emptyState');
+    const tableBody = document.getElementById('sessionsTableBody');
+
+    // Clear only data rows
+    tableBody.querySelectorAll('tr:not(#loadingState):not(#emptyState)').forEach(row => row.remove());
+
+    loadingState.classList.add('d-none');
+    emptyState.classList.add('d-none');
+
+    if (state === 'loading') {
+        loadingState.classList.remove('d-none');
+    } else if (state === 'empty') {
+        emptyState.classList.remove('d-none');
+    }
+}
+
 // Load sessions
 async function loadSessions() {
+    showState('loading');
     try {
         const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}`, {
             headers: {
@@ -20,15 +40,22 @@ async function loadSessions() {
         
         const data = await response.json();
         
-        if (response.ok && data.data) { // Adjusted to match new API response
+        if (response.ok && data.data) {
             sessions = data.data;
-            renderSessions();
-            startStatusPolling();
+            if (sessions.length === 0) {
+                showState('empty');
+            } else {
+                showState('data');
+                renderSessions();
+                startStatusPolling();
+            }
         } else {
+            showState('empty'); // Show empty state on error as well
             showToast('error', data.message || 'Gagal memuat sesi');
         }
     } catch (error) {
         console.error('Load sessions error:', error);
+        showState('empty'); // Show empty state on error
         showToast('error', 'Terjadi kesalahan saat memuat sesi');
     }
 }
@@ -37,20 +64,8 @@ async function loadSessions() {
 function renderSessions() {
     const tableBody = document.getElementById('sessionsTableBody');
     if (!tableBody) return;
-
-    if (sessions.length === 0) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="5" class="text-center py-5">
-                    <i class="bi bi-inbox" style="font-size: 80px; color: #ccc;"></i>
-                    <p class="text-muted mt-3">Belum ada sesi. Klik "Tambah Session" untuk memulai.</p>
-                </td>
-            </tr>
-        `;
-        return;
-    }
     
-    tableBody.innerHTML = sessions.map(session => `
+    tableBody.innerHTML += sessions.map(session => `
         <tr>
             <td><strong>${session.session_name}</strong></td>
             <td><span class="badge bg-secondary" id="status-${session.session_name}">${session.status}</span></td>
