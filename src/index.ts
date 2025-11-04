@@ -8,7 +8,7 @@ import * as whatsapp from "wa-multi-session";
 import { createAuthController } from "./controllers/auth.js";
 import { createMessageController } from "./controllers/message.js";
 import { createProfileController } from "./controllers/profile.js";
-import { createSessionController } from "./controllers/session.js";
+import { createSessionRoutes } from "./routes/session.routes.js";
 import { env } from "./env.js";
 import { globalErrorMiddleware } from "./middlewares/error.middleware.js";
 import { notFoundMiddleware } from "./middlewares/notfound.middleware.js";
@@ -102,11 +102,12 @@ app.options("*", (c) => {
 });
 
 /**
+import { createSessionRoutes } from "./routes/session.routes.js";
  * auth routes
  */
 console.log("Registering auth routes...");
 app.route("/auth", createAuthController());
-app.route("/session", createSessionController());
+app.route("/session", createSessionRoutes());
 app.route("/message", createMessageController());
 app.route("/profile", createProfileController());
 console.log("Auth routes registered.");
@@ -132,9 +133,9 @@ app.get("/", (c) =>
  * serve media message static files
  */
 app.use(
-  "/media/*",
+  "/*",
   serveStatic({
-    root: "./",
+    root: "./frontend/",
   })
 );
 
@@ -268,6 +269,7 @@ serve({
   fetch: app.fetch,
   port: port,
 });
+console.log(`Server is running on http://localhost:${port}`);
 
 const extractAndSaveProfileInfo = async (sessionName: string, maxRetries = 12) => {
   let phoneNumber = "";
