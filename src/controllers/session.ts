@@ -48,7 +48,7 @@ export const createSessionController = () => {
         const dbSession = await query("SELECT * FROM sessions WHERE session_name = $1", [payload.session]);
 
         // 2. Start the session in the library
-        const qr = await new Promise<string | null>((resolve, reject) => {
+        const sessionPromise = new Promise<string | null>((resolve, reject) => {
           try {
             whatsapp.startSession(payload.session, {
               onConnected: async () => {
@@ -96,6 +96,14 @@ export const createSessionController = () => {
           }
         });
 
+        const timeoutPromise = new Promise<string | null>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error("Pairing timed out. Please try again."));
+          }, 60000); // 60 seconds timeout
+        });
+
+        const qr = await Promise.race([sessionPromise, timeoutPromise]);
+
         // 3. Save/Update the session to the DATABASE
         if (dbSession.rows.length === 0) {
           const apiKey = crypto.randomBytes(32).toString('hex');
@@ -118,8 +126,11 @@ export const createSessionController = () => {
         console.log(`[${payload.session}] Already connected, no QR needed`);
         return c.json({ message: "Already connected" });
 
-      } catch (error) {
+      } catch (error: any) {
         console.error(`[${payload.session}] Error starting session:`, error);
+        if (error.message === "Pairing timed out. Please try again.") {
+          throw new HTTPException(408, { message: error.message });
+        }
         throw new HTTPException(500, { message: "Failed to start session" });
       }
     }
@@ -229,7 +240,7 @@ export const createSessionController = () => {
     async (c) => {
       const { session, phone } = c.req.valid("json");
       try {
-        const code = await new Promise<string>((resolve) => {
+        const pairingPromise = new Promise<string>((resolve) => {
           whatsapp.onPairingCode((sessionId, code) => {
             if (sessionId === session) {
               resolve(code);
@@ -238,18 +249,52 @@ export const createSessionController = () => {
           whatsapp.startSessionWithPairingCode(session, { phoneNumber: phone });
         });
 
+        const timeoutPromise = new Promise<string>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error("Pairing timed out. Please try again."));
+          }, 60000); // 60 seconds timeout
+        });
+
+        const code = await Promise.race([pairingPromise, timeoutPromise]);
+
         return c.json({
           success: true,
           data: {
             code: code,
           },
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error pairing with phone:", error);
+        if (error.message === "Pairing timed out. Please try again.") {
+          throw new HTTPException(408, { message: error.message });
+        }
         throw new HTTPException(500, { message: "Failed to pair with phone number" });
       }
     }
   );
+
+  // Endpoint to cancel a pending pairing
+  app.post("/:name/cancel", createKeyMiddleware(), async (c) => {
+    const sessionName = c.req.param("name");
+    try {
+      // Calling deleteSession should stop the pairing process
+      // and trigger the onDisconnected callback, which sets status to 'offline'.
+      await whatsapp.deleteSession(sessionName);
+
+      // We manually set the status here to guarantee the state is updated,
+      // in case onDisconnected doesn't fire for a session that wasn't fully connecting.
+      await query(
+        "UPDATE sessions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE session_name = $2",
+        ['offline', sessionName]
+      );
+
+      console.log(`[${sessionName}] Pairing cancelled by user.`);
+      return c.json({ success: true, message: "Pairing cancelled" });
+    } catch (error) {
+      console.error(`Error cancelling pairing for session ${sessionName}:`, error);
+      throw new HTTPException(500, { message: "Failed to cancel pairing" });
+    }
+  });
 
   // Endpoint to delete a session by name
   app.delete("/:name", createKeyMiddleware(), async (c) => {
