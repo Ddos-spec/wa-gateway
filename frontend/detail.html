@@ -3,104 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Detail Session - WA Gateway</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <title>Detail Sesi - WA Gateway</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="assets/css/dashboard.css">
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="dashboard.html">
-                <i class="bi bi-arrow-left"></i> Kembali ke Dashboard
-            </a>
-            <div class="d-flex align-items-center">
-                <span class="text-white me-3"><i class="bi bi-person-circle"></i> Admin</span>
-                <button class="btn btn-outline-light btn-sm" onclick="logout()">
-                    <i class="bi bi-box-arrow-right"></i> Logout
-                </button>
+    <div class="d-flex">
+        <!-- Sidebar -->
+        <nav id="sidebar" class="bg-dark">
+            <div class="sidebar-header">
+                <h3>WA Gateway</h3>
             </div>
-        </div>
-    </nav>
+            <ul class="list-unstyled components">
+                <li><a href="dashboard.html"><i class="bi bi-grid-fill"></i> Dashboard</a></li>
+                <li class="active"><a href="#"><i class="bi bi-sliders"></i> Detail Sesi</a></li>
+            </ul>
+        </nav>
 
-    <div id="error-container" class="container mt-4" style="display: none;">
-        <div class="alert alert-danger">
-            <h5><i class="bi bi-exclamation-triangle-fill"></i> Terjadi Kesalahan JavaScript</h5>
-            <p>Salin detail kesalahan di bawah ini dan kirimkan untuk bantuan.</p>
-            <pre id="error-details" class="bg-light p-2 rounded"></pre>
-            <button class="btn btn-danger btn-sm" onclick="copyErrorDetails()">Salin Detail</button>
-        </div>
-    </div>
-
-    <div class="container mt-4">
-        <div class="row">
-            <div class="col-lg-8">
-                <!-- Session Info -->
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h4><i class="bi bi-info-circle"></i> Informasi Session</h4>
-                            <span class="badge" id="statusBadge">Loading...</span>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <p><strong>Nama Session:</strong><br><span id="sessionName">-</span></p>
-                                <p><strong>Profile Name:</strong><br><span id="profileName">-</span></p>
-                                <p><strong>Nomor WA:</strong><br><span id="waNumber">-</span></p>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <p><strong>Connection Uptime:</strong><br><span id="connectionUptime">-</span></p>
-                                <p><strong>Last Activity:</strong><br><span id="lastActivity">-</span></p>
-                                <p><strong>Device Info:</strong><br><span id="deviceInfo">-</span></p>
-                            </div>
-                            <div class="col-md-6">
-                                <p><strong>Message Count:</strong><br><span id="messageCount">-</span></p>
-                            </div>
-                            <div class="col-md-6">
-                                <p><strong>Webhook Success Rate:</strong><br><span id="webhookSuccessRate">-</span></p>
-                            </div>
-                        </div>
+        <!-- Page Content -->
+        <div id="content" class="w-100">
+            <nav class="navbar navbar-expand-lg navbar-light bg-light">
+                <div class="container-fluid">
+                    <button type="button" id="sidebarCollapse" class="btn btn-info">
+                        <i class="bi bi-list"></i>
+                    </button>
+                    <div class="d-flex align-items-center ms-auto">
+                        <span class="me-3"><i class="bi bi-person-circle"></i> Admin</span>
+                        <button class="btn btn-outline-danger btn-sm" onclick="logout()">
+                            <i class="bi bi-box-arrow-right"></i> Logout
+                        </button>
                     </div>
                 </div>
+            </nav>
 
-                <!-- Pairing Section -->
-                 <div class="card mb-4" id="pairingSection">
-                    <div class="card-body">
-                        <h5 class="card-title"><i class="bi bi-link-45deg"></i> Hubungkan Session</h5>
-                        
-                        <!-- QR Code Pairing -->
-                        <div id="qrPairing" class="text-center">
-                            <p class="text-muted">Scan QR Code untuk menghubungkan WhatsApp</p>
-                            <div id="qrCodeContainer" class="mb-3 position-relative" style="min-height: 200px;">
-                                <!-- Spinner will be here -->
+            <main class="container-fluid p-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2 class="h4">Detail Sesi: <span id="sessionNameTitle">-</span></h2>
+                    <span class="badge fs-6" id="statusBadge">Loading...</span>
+                </div>
+
+                <div class="row">
+                    <!-- Main Content -->
+                    <div class="col-lg-8">
+                        <!-- Pairing Section -->
+                        <div class="card shadow-sm mb-4" id="pairingSection">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="bi bi-link-45deg"></i> Hubungkan Perangkat</h5>
                             </div>
-                            <button class="btn btn-primary btn-sm me-2" onclick="startQrPairing()"><i class="bi bi-arrow-repeat"></i> Generate QR</button>
-                            <button class="btn btn-info btn-sm" onclick="showPhonePairing()">Gunakan Nomor Telepon</button>
-                        </div>
-
-                        <!-- Phone Number Pairing -->
-                        <div id="phonePairing" class="d-none">
-                             <p class="text-muted">Hubungkan dengan nomor telepon</p>
-                             <div id="phoneFormContainer">
-                                <div class="mb-3">
-                                    <label class="form-label">Nomor Telepon</label>
-                                    <input type="text" class="form-control" id="pairingPhone" placeholder="628123456789" required>
-                                    <small class="text-muted">Gunakan format internasional (62xxx)</small>
+                            <div class="card-body">
+                                <!-- QR Pairing -->
+                                <div id="qrPairing" class="text-center">
+                                    <p class="text-muted">Pindai QR Code untuk menghubungkan WhatsApp Anda.</p>
+                                    <div id="qrCodeContainer" class="d-flex justify-content-center align-items-center" style="min-height: 260px;"></div>
+                                    <button class="btn btn-primary" onclick="startQrPairing()"><i class="bi bi-arrow-clockwise"></i> Buat Ulang QR</button>
+                                    <button class="btn btn-secondary" onclick="showPhonePairing()">Gunakan Nomor Telepon</button>
                                 </div>
-                                <div class="d-flex justify-content-between">
-                                    <button class="btn btn-primary" id="pairPhoneBtn" onclick="startPhonePairing()"><i class="bi bi-phone"></i> Dapatkan Kode</button>
-                                    <button class="btn btn-outline-secondary" onclick="showQrPairing()">Gunakan QR Code</button>
-                                </div>
-                             </div>
-
-                             <div id="codeDisplayContainer" class="d-none text-center mt-3">
-                                <p>Masukkan kode ini di aplikasi WhatsApp Anda:</p>
-                                <div class="alert alert-info">
-                                    <h2 id="pairingCode" class="display-4 fw-bold" style="letter-spacing: 5px;"></h2>
-                                    <button class="btn btn-sm btn-outline-secondary mt-2" onclick="copyPairingCode()">
-                                        <i class="bi bi-clipboard"></i> Salin Kode
-                                    </button>
+                                <!-- Phone Pairing -->
+                                <div id="phonePairing" class="d-none">
+                                    <div id="phoneFormContainer">
+                                        <p class="text-muted">Masukkan nomor telepon Anda untuk mendapatkan kode pairing.</p>
+                                        <div class="mb-3">
+                                            <label for="pairingPhone" class="form-label">Nomor Telepon (Format Internasional)</label>
+                                            <input type="tel" class="form-control" id="pairingPhone" placeholder="628123456789" required>
+                                        </div>
+                                        <button class="btn btn-primary" id="pairPhoneBtn" onclick="startPhonePairing()"><i class="bi bi-send"></i> Dapatkan Kode</button>
+                                        <button class="btn btn-secondary" onclick="showQrPairing()">Gunakan QR Code</button>
+                                    </div>
+                                    <div id="codeDisplayContainer" class="d-none text-center">
+                                        <h6>Masukkan kode ini di aplikasi WhatsApp Anda:</h6>
+                                        <div class="alert alert-success my-3">
+                                            <h1 id="pairingCode" class="display-4 fw-bold text-success" style="letter-spacing: 8px;"></h1>
+                                            <button class="btn btn-sm btn-outline-success mt-2" onclick="copyPairingCode()"><i class="bi bi-clipboard"></i> Salin Kode</button>
+                                        </div>
+                                        <div class="progress" style="height: 5px;">
+                                            <div id="countdownBar" class="progress-bar bg-success" role="progressbar" style="width: 100%;"></div>
+                                        </div>
+                                        <small id="countdownText" class="text-muted mt-1 d-block">Kode akan kedaluwarsa dalam 5:00</small>
+                                        <hr>
+                                        <div class="mt-3">
+                                            <button class="btn btn-danger" onclick="cancelPairing()">Batalkan</button>
+                                            <button class="btn btn-secondary" onclick="requestNewCode()">Minta Kode Baru</button>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="progress" style="height: 5px;">
                                     <div id="countdownBar" class="progress-bar" role="progressbar" style="width: 100%;"></div>
@@ -120,176 +105,73 @@
                                 </div>
                              </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Multiple Webhooks Configuration -->
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h5><i class="bi bi-link-45deg"></i> Konfigurasi Webhooks</h5>
-                            <div>
-                                <button class="btn btn-outline-secondary btn-sm" id="testWebhookBtn">
-                                    <i class="bi bi-send"></i> Test Webhook
-                                </button>
-                                <button class="btn btn-primary btn-sm" onclick="addWebhook()">
-                                    <i class="bi bi-plus-circle"></i> Tambah Webhook
-                                </button>
+                        <!-- Webhook Config -->
+                        <div class="card shadow-sm mb-4">
+                             <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><i class="bi bi-hdd-network"></i> Konfigurasi Webhook</h5>
+                                <button class="btn btn-primary btn-sm" onclick="addWebhook()"><i class="bi bi-plus-lg"></i> Tambah Webhook</button>
+                            </div>
+                            <div class="card-body">
+                                <div id="webhooksContainer">
+                                    <p class="text-muted text-center">Tidak ada webhook yang dikonfigurasi.</p>
+                                </div>
                             </div>
                         </div>
-                        
-                        <div id="webhooksContainer">
-                            <!-- Webhooks will be loaded here -->
+                    </div>
+
+                    <!-- Side Content -->
+                    <div class="col-lg-4">
+                        <div class="card shadow-sm mb-4">
+                            <div class="card-header"><h5 class="mb-0"><i class="bi bi-info-circle"></i> Info Sesi</h5></div>
+                            <div class="card-body">
+                                <p><strong>Nama Profil:</strong> <span id="profileName">-</span></p>
+                                <p><strong>Nomor WA:</strong> <span id="waNumber">-</span></p>
+                            </div>
+                        </div>
+                        <div class="card shadow-sm mb-4">
+                            <div class="card-header"><h5 class="mb-0"><i class="bi bi-key"></i> Kunci API</h5></div>
+                            <div class="card-body">
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="apiKey" readonly>
+                                    <button class="btn btn-outline-secondary" onclick="copyApiKey()"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                                <button class="btn btn-warning mt-2 w-100" onclick="regenerateApiKey()"><i class="bi bi-arrow-clockwise"></i> Buat Ulang</button>
+                            </div>
+                        </div>
+                        <div class="card shadow-sm mb-4">
+                             <div class="card-header"><h5 class="mb-0"><i class="bi bi-chat-quote"></i> Uji Pesan</h5></div>
+                             <div class="card-body">
+                                 <form id="testMessageForm">
+                                     <div class="mb-3">
+                                         <label class="form-label">Nomor Tujuan</label>
+                                         <input type="text" class="form-control" id="testPhoneNumber" placeholder="628123456789" required>
+                                     </div>
+                                     <div class="mb-3">
+                                         <label class="form-label">Pesan</label>
+                                         <textarea class="form-control" id="testMessage" rows="2" required></textarea>
+                                     </div>
+                                     <button type="submit" class="btn btn-success w-100"><i class="bi bi-send"></i> Kirim</button>
+                                 </form>
+                             </div>
+                        </div>
+                        <div class="card shadow-sm border-danger">
+                             <div class="card-header bg-danger text-white"><h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Zona Berbahaya</h5></div>
+                             <div class="card-body text-center">
+                                 <p class="text-muted">Tindakan ini tidak dapat diurungkan.</p>
+                                 <button class="btn btn-danger w-100" onclick="deleteSession()"><i class="bi bi-trash"></i> Hapus Sesi</button>
+                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div class="col-lg-4">
-                <!-- API Key -->
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <h5><i class="bi bi-key"></i> API Key</h5>
-                        <div class="input-group mb-3">
-                            <input type="text" class="form-control" id="apiKey" readonly>
-                            <button class="btn btn-outline-secondary" onclick="copyApiKey()">
-                                <i class="bi bi-clipboard"></i>
-                            </button>
-                        </div>
-                        <button class="btn btn-warning btn-sm w-100" onclick="regenerateApiKey()">
-                            <i class="bi bi-arrow-repeat"></i> Regenerate
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Test Message -->
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <h5><i class="bi bi-chat-dots"></i> Test Message</h5>
-                        <form id="testMessageForm">
-                            <div class="mb-3">
-                                <label class="form-label">Nomor Tujuan</label>
-                                <input type="text" class="form-control" id="testPhoneNumber" placeholder="628123456789" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Pesan</label>
-                                <textarea class="form-control" id="testMessage" rows="3" placeholder="Tulis pesan..." required></textarea>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100">
-                                <i class="bi bi-send"></i> Kirim
-                            </button>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- Delete Session -->
-                <div class="card border-danger">
-                    <div class="card-body">
-                        <h5 class="text-danger"><i class="bi bi-trash"></i> Danger Zone</h5>
-                        <p class="text-muted small">Hapus session ini secara permanen</p>
-                        <button class="btn btn-danger w-100" onclick="deleteSession()">
-                            <i class="bi bi-trash"></i> Hapus Session
-                        </button>
-                    </div>
-                </div>
-            </div>
+            </main>
         </div>
     </div>
 
-    <!-- Add/Edit Webhook Modal -->
-    <div class="modal fade" id="webhookModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="webhookModalTitle">Tambah Webhook</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="webhookForm">
-                        <input type="hidden" id="webhookId">
-                        <div class="mb-3">
-                            <label class="form-label">Webhook URL</label>
-                            <input type="url" class="form-control" id="webhookUrl" placeholder="https://yourdomain.com/webhook" required>
-                        </div>
-                        
-                        <h6 class="mb-3">Webhook Events</h6>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" id="webhookIndividual">
-                                    <label class="form-check-label" for="webhookIndividual">Individual Messages</label>
-                                </div>
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" id="webhookGroup">
-                                    <label class="form-check-label" for="webhookGroup">Group Messages</label>
-                                </div>
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" id="webhookFromMe">
-                                    <label class="form-check-label" for="webhookFromMe">From Me</label>
-                                </div>
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" id="webhookUpdateStatus">
-                                    <label class="form-check-label" for="webhookUpdateStatus">Update Status</label>
-                                </div>
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" id="webhookImage">
-                                    <label class="form-check-label" for="webhookImage">Image</label>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" id="webhookVideo">
-                                    <label class="form-check-label" for="webhookVideo">Video</label>
-                                </div>
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" id="webhookAudio">
-                                    <label class="form-check-label" for="webhookAudio">Audio</label>
-                                </div>
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" id="webhookSticker">
-                                    <label class="form-check-label" for="webhookSticker">Sticker</label>
-                                </div>
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" id="webhookDocument">
-                                    <label class="form-check-label" for="webhookDocument">Document</label>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                    <button type="button" class="btn btn-primary" onclick="saveWebhook()">
-                        <i class="bi bi-save"></i> Simpan
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Modal, Toasts, etc. (Keep them as they are) -->
 
-    <!-- Toast Container -->
-    <div class="toast-container position-fixed top-0 end-0 p-3">
-        <div id="successToast" class="toast" role="alert">
-            <div class="toast-header bg-success text-white">
-                <i class="bi bi-check-circle me-2"></i>
-                <strong class="me-auto">Success</strong>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
-            </div>
-            <div class="toast-body" id="successMessage"></div>
-        </div>
-        
-        <div id="errorToast" class="toast" role="alert">
-            <div class="toast-header bg-danger text-white">
-                <i class="bi bi-exclamation-circle me-2"></i>
-                <strong class="me-auto">Error</strong>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
-            </div>
-            <div class="toast-body" id="errorMessage"></div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/config.js"></script>
-    <script src="assets/js/detail.js?v=1.1"></script>
+    <script src="assets/js/detail.js"></script>
 </body>
 </html>

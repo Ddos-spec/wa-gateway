@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manajemen Pelanggan - WA Gateway</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="assets/css/dashboard.css">
+</head>
+<body>
+    <div class="d-flex">
+        <!-- Sidebar -->
+        <nav id="sidebar" class="bg-dark">
+            <div class="sidebar-header">
+                <h3>Admin Panel</h3>
+            </div>
+            <ul class="list-unstyled components">
+                <li><a href="dashboard.html"><i class="bi bi-grid-fill"></i> Dashboard</a></li>
+                <li class="active"><a href="#"><i class="bi bi-people-fill"></i> Pelanggan</a></li>
+                <li><a href="#"><i class="bi bi-bar-chart-fill"></i> Laporan</a></li>
+            </ul>
+        </nav>
+
+        <!-- Page Content -->
+        <div id="content" class="w-100">
+             <nav class="navbar navbar-expand-lg navbar-light bg-light">
+                <div class="container-fluid">
+                    <button type="button" id="sidebarCollapse" class="btn btn-info">
+                        <i class="bi bi-list"></i>
+                    </button>
+                    <div class="d-flex align-items-center ms-auto">
+                        <span class="me-3"><i class="bi bi-person-circle"></i> Admin</span>
+                        <button class="btn btn-outline-danger btn-sm" onclick="logout()">
+                            <i class="bi bi-box-arrow-right"></i> Logout
+                        </button>
+                    </div>
+                </div>
+            </nav>
+
+            <main class="container-fluid p-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2 class="h4">Manajemen Pelanggan</h2>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#customerModal"><i class="bi bi-plus-lg"></i> Tambah Pelanggan</button>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Nama</th>
+                                    <th>Email</th>
+                                    <th>Paket</th>
+                                    <th>Status Tagihan</th>
+                                    <th>Status Akun</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="customerTableBody">
+                                <!-- Dummy Data -->
+                                <tr>
+                                    <td>PT. Sinar Jaya</td>
+                                    <td>marketing@sinarjaya.com</td>
+                                    <td>Bisnis</td>
+                                    <td><span class="badge bg-success">Lunas</span></td>
+                                    <td><span class="badge bg-success">Aktif</span></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
+                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>CV. Maju Mundur</td>
+                                    <td>cs@majumundur.id</td>
+                                    <td>Pro</td>
+                                    <td><span class="badge bg-warning">Jatuh Tempo</span></td>
+                                    <td><span class="badge bg-success">Aktif</span></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
+                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Add/Edit Customer Modal -->
+    <div class="modal fade" id="customerModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="customerModalTitle">Tambah Pelanggan Baru</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="customerForm">
+                        <input type="hidden" id="customerId">
+                        <div class="mb-3">
+                            <label for="customerName" class="form-label">Nama Perusahaan</label>
+                            <input type="text" class="form-control" id="customerName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="customerEmail" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="customerEmail" required>
+                        </div>
+                         <div class="mb-3">
+                            <label for="customerPhone" class="form-label">Nomor Telepon</label>
+                            <input type="tel" class="form-control" id="customerPhone" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="customerPlan" class="form-label">Paket Langganan</label>
+                            <select class="form-select" id="customerPlan">
+                                <option value="basic">Basic</option>
+                                <option value="pro">Pro</option>
+                                <option value="business">Bisnis</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary" onclick="saveCustomer()">Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/config.js"></script>
+    <script>
+        function saveCustomer() {
+            // Save logic to be implemented
+            alert('Save customer functionality to be implemented.');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('customerModal'));
+            modal.hide();
+        }
+         function logout(){
+            alert('Logout functionality to be implemented.');
+        }
+    </script>
+</body>
+</html>

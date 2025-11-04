@@ -75,12 +75,16 @@ app.options("*", (c) => {
 import { createSessionRoutes } from "./routes/session.routes.js";
  * auth routes
  */
-console.log("Registering auth routes...");
+import { createAdminRoutes } from "./routes/admin.routes.js";
+import { createCustomerRoutes } from "./routes/customer.routes.js";
+console.log("Registering routes...");
 app.route("/auth", createAuthController());
 app.route("/session", createSessionRoutes());
 app.route("/message", createMessageController());
 app.route("/profile", createProfileController());
-console.log("Auth routes registered.");
+app.route("/admin", createAdminRoutes());
+app.route("/customer", createCustomerRoutes());
+console.log("Routes registered.");
 app.use("*", logger((...params) => {
     params.forEach((param) => console.log(`${moment().toISOString()} | ${param}`));
 }));
