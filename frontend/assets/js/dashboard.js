@@ -12,7 +12,6 @@ let pollingInterval = null;
 // Load sessions
 async function loadSessions() {
     try {
-        // FIX: Menggunakan config.endpoints.sessions
         const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
@@ -21,12 +20,12 @@ async function loadSessions() {
         
         const data = await response.json();
         
-        if (response.ok && data.sessions) {
-            sessions = data.sessions;
+        if (response.ok && data.data) { // Adjusted to match new API response
+            sessions = data.data;
             renderSessions();
             startStatusPolling();
         } else {
-            showToast('error', data.error || 'Gagal memuat sesi');
+            showToast('error', data.message || 'Gagal memuat sesi');
         }
     } catch (error) {
         console.error('Load sessions error:', error);
@@ -34,43 +33,35 @@ async function loadSessions() {
     }
 }
 
-// Render sessions
+// Render sessions in a table
 function renderSessions() {
-    const container = document.getElementById('sessionsList');
-    if (!container) return;
+    const tableBody = document.getElementById('sessionsTableBody');
+    if (!tableBody) return;
 
     if (sessions.length === 0) {
-        container.innerHTML = `
-            <div class="col-12 text-center py-5">
-                <i class="bi bi-inbox" style="font-size: 80px; color: #ccc;"></i>
-                <p class="text-muted mt-3">Belum ada sesi. Klik "Tambah Session" untuk memulai.</p>
-            </div>
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center py-5">
+                    <i class="bi bi-inbox" style="font-size: 80px; color: #ccc;"></i>
+                    <p class="text-muted mt-3">Belum ada sesi. Klik "Tambah Session" untuk memulai.</p>
+                </td>
+            </tr>
         `;
         return;
     }
     
-    container.innerHTML = sessions.map(session => `
-        <div class="col-md-6 col-lg-4">
-            <div class="card session-card">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">${session.session_name}</h5>
-                        <span class="badge bg-secondary" id="status-${session.session_name}">${session.status}</span>
-                    </div>
-                    <p class="text-muted mb-2">
-                        <i class="bi bi-person"></i> ${session.profile_name || 'Belum terhubung'}
-                    </p>
-                    <p class="text-muted mb-3">
-                        <i class="bi bi-phone"></i> ${session.wa_number || '-'}
-                    </p>
-                    <div class="d-grid gap-2">
-                        <a href="detail.html?session=${session.session_name}" class="btn btn-primary btn-sm">
-                            <i class="bi bi-gear"></i> Detail
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
+    tableBody.innerHTML = sessions.map(session => `
+        <tr>
+            <td><strong>${session.session_name}</strong></td>
+            <td><span class="badge bg-secondary" id="status-${session.session_name}">${session.status}</span></td>
+            <td>${session.profile_name || 'Belum terhubung'}</td>
+            <td>${session.wa_number || '-'}</td>
+            <td>
+                <a href="detail.html?session=${session.session_name}" class="btn btn-primary btn-sm">
+                    <i class="bi bi-gear"></i> Detail
+                </a>
+            </td>
+        </tr>
     `).join('');
 }
 
@@ -95,7 +86,6 @@ async function updateAllStatus() {
 // Update single session status
 async function updateSessionStatus(sessionName) {
     try {
-        // FIX: Menggunakan config.endpoints.sessions
         const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionName}/status`, {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
@@ -142,7 +132,6 @@ function pollSessionStatus(sessionName) {
         }
 
         try {
-            // FIX: Menggunakan config.endpoints.sessions
             const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionName}/status`, {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
@@ -179,63 +168,32 @@ async function createSession() {
     createBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Membuat...';
     
     try {
-        // 1. Create the session in the backend
-        // FIX: Menggunakan config.endpoints.sessions
-        const createResponse = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}`,
+        const createResponse = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/start`,
         {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${getToken()}`
             },
-            body: JSON.stringify({ session_name: sessionName })
+            body: JSON.stringify({ session: sessionName })
         });
 
         const createData = await createResponse.json();
 
         if (!createResponse.ok) {
-            throw new Error(createData.error || 'Gagal membuat session');
+            throw new Error(createData.message || 'Gagal membuat session');
         }
 
-        // 2. Start polling for the QR code
         document.getElementById('qrCodeContainer').classList.remove('d-none');
+        document.getElementById('qrCodeImage').src = createData.qr;
         createBtn.classList.add('d-none');
-        pollSessionStatus(sessionName); // Start polling for connection status
-
-        let qrAttempts = 0;
-        const maxQrAttempts = 20; // Poll for 1 minute
-        const qrInterval = setInterval(async () => {
-            qrAttempts++;
-            if (qrAttempts > maxQrAttempts) {
-                clearInterval(qrInterval);
-                showToast('error', 'Gagal mendapatkan QR code. Silakan coba lagi.');
-                bootstrap.Modal.getInstance(document.getElementById('addSessionModal'))?.hide();
-                return;
-            }
-
-            try {
-                // FIX: Menggunakan config.endpoints.sessions
-                const qrResponse = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionName}/qr`, {
-                    method: 'POST', // FIX: Use POST to match the backend route
-                    headers: { 'Authorization': `Bearer ${getToken()}` }
-                });
-                const qrData = await qrResponse.json();
-                if (qrResponse.ok && qrData.qr) {
-                    clearInterval(qrInterval);
-                    showToast('success', 'Session berhasil dibuat! Pindai QR Code di bawah ini.');
-                    document.getElementById('qrCodeImage').src = qrData.qr;
-                }
-            } catch (error) {
-                // Ignore polling errors, keep trying
-                console.error('QR poll error:', error);
-            }
-        }, 3000);
+        pollSessionStatus(sessionName);
 
     } catch (error) {
         console.error('Create session error:', error);
         showToast('error', error.message || 'Terjadi kesalahan saat membuat session');
         createBtn.disabled = false;
-        createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Session';
+        createBtn.innerHTML = 'Buat Session';
     }
 }
 
@@ -248,7 +206,7 @@ document.getElementById('addSessionModal').addEventListener('hidden.bs.modal', (
     const createBtn = document.getElementById('createSessionBtn');
     createBtn.classList.remove('d-none');
     createBtn.disabled = false;
-    createBtn.innerHTML = '<i class="bi bi-plus-circle"></i> Buat Session';
+    createBtn.innerHTML = 'Buat Session';
     
     const pollingIntervalId = modal.getAttribute('data-polling-interval-id');
     if (pollingIntervalId) {
@@ -256,8 +214,6 @@ document.getElementById('addSessionModal').addEventListener('hidden.bs.modal', (
         modal.removeAttribute('data-polling-interval-id');
     }
 });
-
-
 
 // Toast functions
 function showToast(type, message) {
