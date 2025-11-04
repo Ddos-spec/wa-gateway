@@ -8,7 +8,7 @@ import * as whatsapp from "wa-multi-session";
 import { createAuthController } from "./controllers/auth.js";
 import { createMessageController } from "./controllers/message.js";
 import { createProfileController } from "./controllers/profile.js";
-import { createSessionController } from "./controllers/session.js";
+import { createSessionRoutes } from "./routes/session.routes.js";
 import { env } from "./env.js";
 import { webhookClient } from "./webhooks/index.js";
 import { createWebhookMessage } from "./webhooks/message.js";
@@ -72,14 +72,19 @@ app.options("*", (c) => {
     return c.newResponse(null, 204);
 });
 /**
+import { createSessionRoutes } from "./routes/session.routes.js";
  * auth routes
  */
-console.log("Registering auth routes...");
+import { createAdminRoutes } from "./routes/admin.routes.js";
+import { createCustomerRoutes } from "./routes/customer.routes.js";
+console.log("Registering routes...");
 app.route("/auth", createAuthController());
-app.route("/session", createSessionController());
+app.route("/session", createSessionRoutes());
 app.route("/message", createMessageController());
 app.route("/profile", createProfileController());
-console.log("Auth routes registered.");
+app.route("/admin", createAdminRoutes());
+app.route("/customer", createCustomerRoutes());
+console.log("Routes registered.");
 app.use("*", logger((...params) => {
     params.forEach((param) => console.log(`${moment().toISOString()} | ${param}`));
 }));
@@ -91,8 +96,8 @@ app.get("/", (c) => c.json({
 /**
  * serve media message static files
  */
-app.use("/media/*", serveStatic({
-    root: "./",
+app.use("/*", serveStatic({
+    root: "./frontend/",
 }));
 // --- NEW WEBHOOK LOGIC ---
 // Helper function to get active webhooks for a session
@@ -203,6 +208,7 @@ serve({
     fetch: app.fetch,
     port: port,
 });
+console.log(`Server is running on http://localhost:${port}`);
 const extractAndSaveProfileInfo = async (sessionName, maxRetries = 12) => {
     let phoneNumber = "";
     let profileName = "";

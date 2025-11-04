@@ -1,5 +1,23 @@
+:root {
+    --primary-color: #0d6efd;
+    --secondary-color: #6c757d;
+    --success-color: #198754;
+    --warning-color: #ffc107;
+    --danger-color: #dc3545;
+    --light-color: #f8f9fa;
+    --dark-color: #212529;
+    --font-family-sans-serif: 'Inter', sans-serif;
+    --border-radius: 0.5rem;
+    --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
 body {
-    background-color: #f8f9fa;
+    background-color: var(--light-color);
+    font-family: var(--font-family-sans-serif);
+}
+
+.navbar {
+    background-color: var(--primary-color) !important;
 }
 
 .navbar-brand {
@@ -8,49 +26,52 @@ body {
 
 .card {
     border: none;
-    border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
     margin-bottom: 20px;
 }
 
 .session-card {
-    transition: transform 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .session-card:hover {
     transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
 }
 
 .badge {
     padding: 8px 15px;
     font-size: 12px;
     font-weight: 600;
+    border-radius: var(--border-radius);
 }
 
 .badge.bg-success {
-    background-color: #28a745 !important;
+    background-color: var(--success-color) !important;
 }
 
 .badge.bg-warning {
-    background-color: #ffc107 !important;
+    background-color: var(--warning-color) !important;
 }
 
 .badge.bg-danger {
-    background-color: #dc3545 !important;
+    background-color: var(--danger-color) !important;
 }
 
 .badge.bg-secondary {
-    background-color: #6c757d !important;
+    background-color: var(--secondary-color) !important;
 }
 
 .btn {
-    border-radius: 8px;
+    border-radius: var(--border-radius);
     padding: 10px 20px;
     font-weight: 500;
+    transition: background-color 0.2s, border-color 0.2s;
 }
 
 .form-control {
-    border-radius: 8px;
+    border-radius: var(--border-radius);
 }
 
 .form-switch .form-check-input {
@@ -59,9 +80,49 @@ body {
 }
 
 .modal-content {
-    border-radius: 15px;
+    border-radius: 1rem;
 }
 
 .toast {
-    border-radius: 10px;
+    border-radius: var(--border-radius);
+}
+
+/* Login Page Styles */
+.login-page {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.login-card {
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    padding: 2.5rem;
+    max-width: 420px;
+    width: 100%;
+}
+
+.login-card .logo {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.login-card .logo i {
+    font-size: 3.5rem;
+    color: var(--primary-color);
+}
+
+.login-card .btn-login {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #764ba2 100%);
+    border: none;
+    padding: 0.75rem;
+    font-weight: 600;
+}
+
+.login-card .btn-login:hover {
+    opacity: 0.9;
 }
