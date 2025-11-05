@@ -122,14 +122,17 @@ import { createAdminRoutes } from "./routes/admin.routes.js";
 import { createCustomerRoutes } from "./routes/customer.routes.js";
 import { createNotificationRoutes } from "./routes/notification.routes.js";
 
+const api = new Hono();
 console.log("Registering routes...");
-app.route("/auth", createAuthController());
-app.route("/session", createSessionRoutes());
-app.route("/message", createMessageController());
-app.route("/profile", createProfileController());
-app.route("/admin", createAdminRoutes());
-app.route("/customer", createCustomerRoutes());
-app.route("/notifications", createNotificationRoutes());
+api.route("/auth", createAuthController());
+api.route("/session", createSessionRoutes());
+api.route("/message", createMessageController());
+api.route("/profile", createProfileController());
+api.route("/admin", createAdminRoutes());
+api.route("/customer", createCustomerRoutes());
+api.route("/notifications", createNotificationRoutes());
+
+app.route("/api", api);
 console.log("Routes registered.");
 
 app.use(
