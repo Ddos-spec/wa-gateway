@@ -25,9 +25,10 @@ app.use('/api', createProxyMiddleware({
 }));
 
 // Proxy WA Gateway API requests to the main server
-app.use(['/session', '/message', '/profile', '/auth'], createProxyMiddleware({
+app.use(['/session', '/message', '/profile', '/auth', '/notifications'], createProxyMiddleware({
   target: GATEWAY_URL,
   changeOrigin: true,
+  ws: true, // Enable WebSocket proxying
   onError: (err, req, res) => {
     console.error('Gateway proxy error:', err);
     res.status(503).json({ error: 'Gateway service unavailable' });

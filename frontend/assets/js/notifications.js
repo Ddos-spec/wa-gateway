@@ -1,5 +1,5 @@
 // Establishes a WebSocket connection to the server
-const socket = io(config.API_URL, {
+const socket = io({
     auth: {
         token: localStorage.getItem('accessToken') // Assuming the JWT is stored in localStorage
     }
