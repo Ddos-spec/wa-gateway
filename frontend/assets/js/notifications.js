@@ -331,15 +331,6 @@ window.addEventListener('error', function(e) {
     }
 });
 
-// Export functions for external use (optional)
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        fetchInitialNotifications,
-        updateNotificationUI,
-        createNotificationItem,
-        markNotificationAsRead
-    };
-}
 
 // GET /api/notifications/recent - Get recent notifications (last 24 hours)
 router.get('/recent', authenticateToken, async (req, res) => {
@@ -429,4 +420,3 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
-export default router;
