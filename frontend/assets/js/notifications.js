@@ -96,7 +96,7 @@ function getNotificationTitle(type) {
  */
 async function fetchInitialNotifications() {
     try {
-        const response = await fetch(`${config.backendApiUrl}${config.endpoints.notifications}`, {
+        const response = await fetch(getApiUrl(config.endpoints.notifications), {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         if (!response.ok) throw new Error('Failed to fetch notifications.');
@@ -139,7 +139,7 @@ async function fetchInitialNotifications() {
  */
 async function markNotificationAsRead(notificationId) {
     try {
-        await fetch(`${config.backendApiUrl}${config.endpoints.notifications}/${notificationId}/read`, {
+        await fetch(getApiUrl(`${config.endpoints.notifications}/${notificationId}/read`), {
             method: 'PATCH',
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
