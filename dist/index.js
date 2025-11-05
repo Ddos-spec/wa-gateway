@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
+import { Server } from "socket.io";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import moment from "moment";
@@ -13,6 +14,7 @@ import { env } from "./env.js";
 import { webhookClient } from "./webhooks/index.js";
 import { createWebhookMessage } from "./webhooks/message.js";
 import { query } from "./lib/postgres.js";
+import { notificationService } from "./services/notification.service.js";
 const app = new Hono();
 const defaultAllowedOrigins = [
     "https://ddos-spec.github.io",
@@ -77,6 +79,7 @@ import { createSessionRoutes } from "./routes/session.routes.js";
  */
 import { createAdminRoutes } from "./routes/admin.routes.js";
 import { createCustomerRoutes } from "./routes/customer.routes.js";
+import { createNotificationRoutes } from "./routes/notification.routes.js";
 console.log("Registering routes...");
 app.route("/auth", createAuthController());
 app.route("/session", createSessionRoutes());
@@ -84,6 +87,7 @@ app.route("/message", createMessageController());
 app.route("/profile", createProfileController());
 app.route("/admin", createAdminRoutes());
 app.route("/customer", createCustomerRoutes());
+app.route("/notifications", createNotificationRoutes());
 console.log("Routes registered.");
 app.use("*", logger((...params) => {
     params.forEach((param) => console.log(`${moment().toISOString()} | ${param}`));
@@ -161,9 +165,18 @@ whatsapp.onMessageReceived(async (message) => {
 whatsapp.onConnected(async (session) => {
     console.log(`session: '${session}' connected`);
     try {
-        // 1. Update status to online
-        await query("UPDATE sessions SET status = 'online', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [session]);
+        // 1. Update status to online and get user_id
+        const result = await query("UPDATE sessions SET status = 'online', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1 RETURNING user_id", [session]);
         console.log(`[${session}] Successfully updated DB status to online.`);
+        // Create a notification for the user
+        if (result.rows.length > 0 && result.rows[0].user_id) {
+            const userId = result.rows[0].user_id;
+            await notificationService.createNotification({
+                user_id: userId,
+                type: "session_connected",
+                message: `Session "${session}" has successfully connected.`,
+            });
+        }
         // 2. Extract and save profile info (async, non-blocking)
         extractAndSaveProfileInfo(session).catch(err => console.error(`[${session}] Failed to extract profile:`, err));
         // 3. Trigger webhooks
@@ -192,7 +205,16 @@ whatsapp.onConnecting(async (session) => {
 });
 whatsapp.onDisconnected(async (session) => {
     console.log(`session: '${session}' disconnected`);
-    await query("UPDATE sessions SET status = 'offline', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1", [session]);
+    const result = await query("UPDATE sessions SET status = 'offline', updated_at = CURRENT_TIMESTAMP WHERE session_name = $1 RETURNING user_id", [session]);
+    // Create a notification for the user
+    if (result.rows.length > 0 && result.rows[0].user_id) {
+        const userId = result.rows[0].user_id;
+        await notificationService.createNotification({
+            user_id: userId,
+            type: "session_disconnected",
+            message: `Session "${session}" has been disconnected.`,
+        });
+    }
     const activeWebhooks = await getActiveWebhooks(session);
     if (activeWebhooks.length === 0)
         return;
@@ -204,11 +226,23 @@ whatsapp.onDisconnected(async (session) => {
 whatsapp.loadSessionsFromStorage();
 const port = Number(env.PORT) || 5001;
 console.log(`🚀 WA Gateway running on port ${port}`);
-serve({
+const server = serve({
     fetch: app.fetch,
     port: port,
 });
 console.log(`Server is running on http://localhost:${port}`);
+export const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"],
+    },
+});
+io.on("connection", (socket) => {
+    console.log("A user connected:", socket.id);
+    socket.on("disconnect", () => {
+        console.log("User disconnected:", socket.id);
+    });
+});
 const extractAndSaveProfileInfo = async (sessionName, maxRetries = 12) => {
     let phoneNumber = "";
     let profileName = "";

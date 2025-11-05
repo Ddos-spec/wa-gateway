@@ -88,4 +88,29 @@ INSERT INTO plans (name, price, session_limit, message_limit, features) VALUES
 ('Professional', 1500000, 5, 50000, '{"support": "priority", "api_access": true, "multi_device": true}'),
 ('Enterprise', 2500000, 20, NULL, '{"support": "dedicated", "api_access": true, "multi_device": true, "custom_integrations": true}');
 
+-- Phase 5: Create Notifications Table
+
+-- ENUM type for different kinds of notifications
+CREATE TYPE notification_type_enum AS ENUM (
+    'session_connected',
+    'session_disconnected',
+    'new_customer_registered',
+    'subscription_expiring',
+    'payment_failed',
+    'high_message_volume',
+    'api_quota_warning',
+    'system_health_alert'
+);
+
+-- Table: notifications
+-- Stores alerts and updates for users and admins.
+CREATE TABLE notifications (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, -- Can be NULL for system-wide notifications
+    type notification_type_enum NOT NULL,
+    message TEXT NOT NULL,
+    read_status BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- End of Migration Script

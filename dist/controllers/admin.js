@@ -1,6 +1,7 @@
 import { HTTPException } from "hono/http-exception";
 import { query } from "../lib/postgres.js";
 import bcrypt from "bcrypt";
+import { notificationService } from "../services/notification.service.js";
 export const getUsers = async (c) => {
     try {
         const result = await query("SELECT id, name, email, company_name, billing_status, status FROM users ORDER BY created_at DESC");
@@ -19,7 +20,14 @@ export const addUser = async (c) => {
     try {
         const password_hash = await bcrypt.hash(password, 10);
         const result = await query("INSERT INTO users (name, email, password_hash, company_name, plan_id, billing_status, status) VALUES ($1, $2, $3, $4, $5, 'active', 'active') RETURNING id, name, email, company_name, billing_status, status", [name, email, password_hash, company_name, plan_id]);
-        return c.json({ success: true, user: result.rows[0] }, 201);
+        const newUser = result.rows[0];
+        // Create a notification for the admin
+        await notificationService.createNotification({
+            user_id: null, // System-wide notification
+            type: "new_customer_registered",
+            message: `New customer registered: ${newUser.name} (${newUser.email}).`,
+        });
+        return c.json({ success: true, user: newUser }, 201);
     }
     catch (error) {
         console.error("Error adding user:", error);
