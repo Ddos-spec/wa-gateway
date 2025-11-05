@@ -5,9 +5,9 @@ services:
     build: .
     container_name: wa-gateway
     ports:
-      - "5001:5001"  # WA Gateway API
-      - "5000:5000"  # Frontend server
-      - "3001:3001"  # Backend Dashboard API
+      - "5001:5001" # WA Gateway API
+      - "5000:5000" # Frontend server  
+      - "3001:3001" # Backend Dashboard API
     environment:
       - DATABASE_URL=postgres://postgres:a0bd3b3c1d54b7833014@postgres_scrapdatan8n:5432/wa_gateaway?sslmode=disable
       - DB_USER=postgres
@@ -15,10 +15,13 @@ services:
       - DB_HOST=postgres_scrapdatan8n
       - DB_PORT=5432
       - DB_NAME=wa_gateaway
-      - WA_GATEWAY_URL=http://localhost:5001
-      - FRONTEND_URL=http://localhost:5000
+      # ✅ FIX: Use production URLs instead of localhost
+      - WA_GATEWAY_URL=https://postgres-wa-gateaway.qk6yxt.easypanel.host
+      - FRONTEND_URL=https://postgres-wa-gateaway.qk6yxt.easypanel.host
+      - ALLOWED_ORIGINS=https://postgres-wa-gateaway.qk6yxt.easypanel.host
       - JWT_SECRET=e932b72464b58e7a0a6a029c7b9667c29e18b02927e163b2f96e4ac74d7c0f1e
       - BACKEND_PORT=3001
+      - NODE_ENV=PRODUCTION
     volumes:
       - ./media:/app/media
       - ./wa_sessions:/app/wa_sessions
