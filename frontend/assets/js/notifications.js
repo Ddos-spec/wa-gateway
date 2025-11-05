@@ -1,5 +1,3 @@
-/ FIXED notifications.js - Frontend - Location: /frontend/notifications.js
-
 // Configuration
 const config = {
     endpoints: {
