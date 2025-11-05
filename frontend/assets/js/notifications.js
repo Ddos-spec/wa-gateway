@@ -1,5 +1,5 @@
 // Configuration
-const config = {
+const notificationConfig = {
     endpoints: {
         notifications: '/api/notifications'
     }
@@ -73,10 +73,10 @@ function getNotificationIconClass(type) {
 }
 
 // WebSocket Connection Setup
-let socket;
+let notificationSocket;
 function initializeWebSocket() {
     try {
-        socket = io(window.location.origin, {
+        notificationSocket = io(window.location.origin, {
             transports: ['websocket', 'polling'],
             timeout: 20000,
             reconnection: true,
@@ -87,20 +87,20 @@ function initializeWebSocket() {
             }
         });
 
-        socket.on('connect', () => {
+        notificationSocket.on('connect', () => {
             console.log('✅ Successfully connected to WebSocket server.');
         });
 
-        socket.on('connect_error', (err) => {
+        notificationSocket.on('connect_error', (err) => {
             console.error('❌ WebSocket connection error:', err.message);
             console.log('🔄 Falling back to polling mode...');
         });
 
-        socket.on('disconnect', (reason) => {
+        notificationSocket.on('disconnect', (reason) => {
             console.log('🔌 WebSocket disconnected:', reason);
         });
 
-        socket.on('new_notification', (notification) => {
+        notificationSocket.on('new_notification', (notification) => {
             console.log('📢 New notification received:', notification);
             updateNotificationUI(notification);
         });
@@ -115,7 +115,7 @@ async function fetchInitialNotifications() {
     try {
         console.log('🔄 Fetching initial notifications...');
         
-        const response = await fetch(getApiUrl(config.endpoints.notifications), {
+        const response = await fetch(getApiUrl(notificationConfig.endpoints.notifications), {
             headers: {
                 'Authorization': `Bearer ${getToken()}`,
                 'Content-Type': 'application/json'
@@ -330,93 +330,3 @@ window.addEventListener('error', function(e) {
         console.warn('⚠️ Socket.io not loaded, notifications will work in polling mode only');
     }
 });
-
-
-// GET /api/notifications/recent - Get recent notifications (last 24 hours)
-router.get('/recent', authenticateToken, async (req, res) => {
-    try {
-        const result = await pool.query(`
-            SELECT 
-                sl.id,
-                sl.action,
-                sl.details,
-                sl.timestamp,
-                s.session_name,
-                s.status
-            FROM session_logs sl
-            LEFT JOIN sessions s ON sl.session_id = s.id
-            WHERE sl.timestamp >= NOW() - INTERVAL '24 hours'
-            ORDER BY sl.timestamp DESC
-            LIMIT 20
-        `);
-
-        res.json({
-            success: true,
-            notifications: result.rows,
-            count: result.rows.length
-        });
-
-    } catch (error) {
-        console.error('❌ Error fetching recent notifications:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: 'Failed to fetch recent notifications' 
-        });
-    }
-});
-
-// PATCH /api/notifications/:id/read - Mark notification as read
-router.patch('/:id/read', authenticateToken, async (req, res) => {
-    try {
-        const notificationId = req.params.id;
-        
-        // For now, just return success (you can implement actual read status later)
-        console.log(`📖 Marking notification ${notificationId} as read`);
-        
-        res.json({
-            success: true,
-            message: 'Notification marked as read'
-        });
-
-    } catch (error) {
-        console.error('❌ Error marking notification as read:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: 'Failed to mark notification as read' 
-        });
-    }
-});
-
-// POST /api/notifications - Create new notification (for testing)
-router.post('/', authenticateToken, async (req, res) => {
-    try {
-        const { action, details, session_id } = req.body;
-
-        const result = await pool.query(`
-            INSERT INTO session_logs (action, details, session_id, timestamp)
-            VALUES ($1, $2, $3, NOW())
-            RETURNING *
-        `, [action, details, session_id || null]);
-
-        console.log('📝 Created new notification:', result.rows[0]);
-
-        // Emit to WebSocket if available
-        const io = req.app.get('io');
-        if (io) {
-            io.to('notifications').emit('new_notification', result.rows[0]);
-        }
-
-        res.json({
-            success: true,
-            notification: result.rows[0]
-        });
-
-    } catch (error) {
-        console.error('❌ Error creating notification:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: 'Failed to create notification' 
-        });
-    }
-});
-
