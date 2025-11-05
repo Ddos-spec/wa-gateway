@@ -11,11 +11,13 @@ import { createMessageController } from "./controllers/message.js";
 import { createProfileController } from "./controllers/profile.js";
 import { createSessionRoutes } from "./routes/session.routes.js";
 import { env } from "./env.js";
+import { globalErrorMiddleware } from "./middlewares/error.middleware.js";
 import { webhookClient } from "./webhooks/index.js";
 import { createWebhookMessage } from "./webhooks/message.js";
 import { query } from "./lib/postgres.js";
 import { notificationService } from "./services/notification.service.js";
 const app = new Hono();
+app.onError(globalErrorMiddleware);
 const defaultAllowedOrigins = [
     "https://ddos-spec.github.io",
     "http://localhost:3000",
@@ -230,6 +232,7 @@ const server = serve({
     fetch: app.fetch,
     port: port,
 });
+console.log(`Server is running on http://localhost:${port}`);
 console.log(`Server is running on http://localhost:${port}`);
 export const io = new Server(server, {
     cors: {
