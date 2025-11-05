@@ -10,12 +10,11 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc",
-    "postinstall": "cd backend && npm install"
+    "build": "tsc"
+
   },
   "author": {
-    "name": "mimamch",
-    "email": "mimamch28@gmail.com"
+    "name": "Ddos-spec"
   },
   "license": "ISC",
   "dependencies": {
