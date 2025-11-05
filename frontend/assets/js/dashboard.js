@@ -30,34 +30,35 @@ function showState(state) {
 
 // Load sessions
 async function loadSessions() {
-    showState('loading');
-    try {
-        const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}`, {
-            headers: {
-                'Authorization': `Bearer ${getToken()}`
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok && data.data) {
-            sessions = data.data;
-            if (sessions.length === 0) {
-                showState('empty');
-            } else {
-                showState('data');
-                renderSessions();
-                startStatusPolling();
-            }
-        } else {
-            showState('empty'); // Show empty state on error as well
-            showToast('error', data.message || 'Gagal memuat sesi');
-        }
-    } catch (error) {
-        console.error('Load sessions error:', error);
-        showState('empty'); // Show empty state on error
-        showToast('error', 'Terjadi kesalahan saat memuat sesi');
+  showState('loading');
+  try {
+    const response = await fetch(getApiUrl(config.endpoints.sessions), {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
     }
+    
+    const data = await response.json();
+    
+    if (data.success && data.data) {
+      sessions = data.data;
+      if (sessions.length === 0) {
+        showState('empty');
+      } else {
+        showState('data');
+        renderSessions();
+        startStatusPolling();
+      }
+    } else {
+      throw new Error(data.error || 'Invalid response format');
+    }
+  } catch (error) {
+    console.error('Load sessions error:', error);
+    showState('empty');
+    showToast('error', `Failed to load sessions: ${error.message}`);
+  }
 }
 
 // Render sessions in a table
@@ -101,7 +102,7 @@ async function updateAllStatus() {
 // Update single session status
 async function updateSessionStatus(sessionName) {
     try {
-        const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionName}/status`, {
+        const response = await fetch(getApiUrl(`${config.endpoints.sessions}/${sessionName}/status`), {
             headers: {
                 'Authorization': `Bearer ${getToken()}`
             }
@@ -147,7 +148,7 @@ function pollSessionStatus(sessionName) {
         }
 
         try {
-            const response = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/${sessionName}/status`, {
+            const response = await fetch(getApiUrl(`${config.endpoints.sessions}/${sessionName}/status`), {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
 
@@ -171,45 +172,59 @@ function pollSessionStatus(sessionName) {
 
 // Create session
 async function createSession() {
-    const sessionName = document.getElementById('sessionName').value.trim();
-    
-    if (!sessionName) {
-        showToast('error', 'Nama session harus diisi');
-        return;
+  const sessionName = document.getElementById('sessionName').value.trim();
+  
+  if (!sessionName) {
+    showToast('error', 'Session name required');
+    return;
+  }
+  
+  const createBtn = document.getElementById('createSessionBtn');
+  createBtn.disabled = true;
+  createBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
+  
+  try {
+    // ✅ Single call to backend /api/sessions/start
+    // Backend will handle DB creation + gateway communication
+    const response = await fetch(getApiUrl(config.endpoints.sessionStart), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({ session: sessionName })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP ${response.status}`);
     }
-    
-    const createBtn = document.getElementById('createSessionBtn');
-    createBtn.disabled = true;
-    createBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Membuat...';
-    
-    try {
-        const createResponse = await fetch(`${config.backendApiUrl}${config.endpoints.sessions}/start`,
-        {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getToken()}`
-            },
-            body: JSON.stringify({ session: sessionName })
-        });
 
-        const createData = await createResponse.json();
+    const data = await response.json();
 
-        if (!createResponse.ok) {
-            throw new Error(createData.message || 'Gagal membuat session');
-        }
-
-        document.getElementById('qrCodeContainer').classList.remove('d-none');
-        document.getElementById('qrCodeImage').src = createData.qr;
-        createBtn.classList.add('d-none');
-        pollSessionStatus(sessionName);
-
-    } catch (error) {
-        console.error('Create session error:', error);
-        showToast('error', error.message || 'Terjadi kesalahan saat membuat session');
-        createBtn.disabled = false;
-        createBtn.innerHTML = 'Buat Session';
+    if (data.qr) {
+      // Show QR code
+      document.getElementById('qrCodeContainer').classList.remove('d-none');
+      document.getElementById('qrCodeImage').src = data.qr;
+      createBtn.classList.add('d-none');
+      
+      // Start polling for connection
+      pollSessionStatus(sessionName);
+    } else if (data.status === 'connected') {
+      // Already connected
+      showToast('success', `Session '${sessionName}' connected!`);
+      bootstrap.Modal.getInstance(document.getElementById('addSessionModal'))?.hide();
+      loadSessions();
+    } else {
+      throw new Error('Unexpected response from server');
     }
+
+  } catch (error) {
+    console.error('Create session error:', error);
+    showToast('error', error.message || 'Failed to create session');
+    createBtn.disabled = false;
+    createBtn.innerHTML = 'Create Session';
+  }
 }
 
 // Reset modal when closed

@@ -1,34 +1,25 @@
 // API Configuration
 const config = {
-  // FIX: Deteksi base URL yang proper untuk VPS
-  apiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  // ✅ Single base URL
+  apiUrl: window.location.hostname === 'localhost' 
     ? "http://localhost:3001"
-    : `${window.location.protocol}//${window.location.host}`,  // ✅ Pake URL yang sama dengan akses user
-  
-  backendApiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? "http://localhost:3001"
-    : `${window.location.protocol}//${window.location.host}`,  // ✅ Same here
+    : `${window.location.protocol}//${window.location.host}/api`,
     
   endpoints: {
-    login: "/api/auth/login",
-    register: "/api/auth/register",
-    sessions: "/session",
-    notifications: "/notifications",
-    verify: "/api/auth/verify",
-    messages: "/message",
-    sendText: "/message/send-text",
-    sendImage: "/message/send-image",
-    sendDocument: "/message/send-document",
-    webhooks: "/api/webhooks"
-  },
-  timeout: 30000,
-  maxRetries: 3,
-  retryDelay: 1000,
+    // ✅ Consistent /api/ prefix untuk semua backend calls
+    login: "/auth/login",           // Backend will add /api/ prefix
+    sessions: "/sessions",           // → /api/sessions
+    sessionStart: "/sessions/start", // Backend proxies to gateway
+    messages: "/messages",
+    webhooks: "/webhooks",
+    notifications: "/notifications"
+  }
 };
 
-// Backward compatibility for existing scripts
-const API_BASE_URL = config.apiUrl;
-const API_ENDPOINTS = config.endpoints;
+// ✅ Helper function
+function getApiUrl(endpoint) {
+  return `${config.apiUrl}${endpoint}`;
+}
 
 function getToken() {
   return localStorage.getItem("authToken") ?? localStorage.getItem("token");
