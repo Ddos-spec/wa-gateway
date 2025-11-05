@@ -10,11 +10,12 @@ const config = {
     : `${window.location.protocol}//${window.location.host}`,  // ✅ Same here
     
   endpoints: {
-    login: "/api/auth/login",
-    register: "/api/auth/register",
-    sessions: "/api/sessions",
-    verify: "/api/auth/verify",
-    messages: "/gateway/message",
+    login: "/auth/login",
+    register: "/auth/register",
+    sessions: "/session",
+    notifications: "/notifications",
+    verify: "/auth/verify",
+    messages: "/message",
     sendText: "/gateway/message/send-text",
     sendImage: "/gateway/message/send-image",
     sendDocument: "/gateway/message/send-document",
