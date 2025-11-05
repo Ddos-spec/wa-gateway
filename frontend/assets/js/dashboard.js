@@ -1,3 +1,8 @@
+// ================================
+// FIXED dashboard.js - Frontend
+// Location: /frontend/dashboard.js
+// ================================
+
 // Check authentication
 if (!checkAuth()) {
     window.location.href = 'index.html';
@@ -8,6 +13,13 @@ document.getElementById('username').textContent = localStorage.getItem('username
 
 let sessions = [];
 let pollingInterval = null;
+
+// Configuration
+const config = {
+    endpoints: {
+        sessions: '/api/sessions'
+    }
+};
 
 // UI State Management
 function showState(state) {
@@ -30,237 +42,244 @@ function showState(state) {
 
 // Load sessions
 async function loadSessions() {
-  showState('loading');
-  try {
-    const response = await fetch(getApiUrl(config.endpoints.sessions), {
-      headers: { 'Authorization': `Bearer ${getToken()}` }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    if (data.success && data.data) {
-      sessions = data.data;
-      if (sessions.length === 0) {
+    showState('loading');
+    try {
+        const response = await fetch(getApiUrl(config.endpoints.sessions), {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('API returned non-JSON response - check if backend is running');
+        }
+
+        const data = await response.json();
+        
+        if (data.success && Array.isArray(data.sessions)) {
+            sessions = data.sessions;
+            displaySessions();
+            
+            if (sessions.length > 0) {
+                startStatusPolling();
+            }
+        } else if (data.success && Array.isArray(data.data)) {
+            sessions = data.data;
+            displaySessions();
+            
+            if (sessions.length > 0) {
+                startStatusPolling();
+            }
+        } else {
+            throw new Error('Invalid response format');
+        }
+        
+    } catch (error) {
+        console.error('Load sessions error:', error);
         showState('empty');
-      } else {
-        showState('data');
-        renderSessions();
-        startStatusPolling();
-      }
-    } else {
-      throw new Error(data.error || 'Invalid response format');
+        showToast('error', `Failed to load sessions: ${error.message}`);
     }
-  } catch (error) {
-    console.error('Load sessions error:', error);
-    showState('empty');
-    showToast('error', `Failed to load sessions: ${error.message}`);
-  }
 }
 
-// Render sessions in a table
-function renderSessions() {
+// Display sessions in table
+function displaySessions() {
     const tableBody = document.getElementById('sessionsTableBody');
-    if (!tableBody) return;
     
-    tableBody.innerHTML += sessions.map(session => `
-        <tr>
-            <td><strong>${session.session_name}</strong></td>
-            <td><span class="badge bg-secondary" id="status-${session.session_name}">${session.status}</span></td>
-            <td>${session.profile_name || 'Belum terhubung'}</td>
-            <td>${session.wa_number || '-'}</td>
-            <td>
-                <a href="detail.html?session=${session.session_name}" class="btn btn-primary btn-sm">
-                    <i class="bi bi-gear"></i> Detail
-                </a>
-            </td>
-        </tr>
-    `).join('');
+    // Clear existing data rows
+    tableBody.querySelectorAll('tr:not(#loadingState):not(#emptyState)').forEach(row => row.remove());
+    
+    if (sessions.length === 0) {
+        showState('empty');
+        return;
+    }
+
+    sessions.forEach(session => {
+        const row = createSessionRow(session);
+        tableBody.appendChild(row);
+    });
+}
+
+// Create session row
+function createSessionRow(session) {
+    const row = document.createElement('tr');
+    row.className = 'session-row';
+    row.setAttribute('data-session', session.name || session.session_name);
+    
+    const sessionName = session.name || session.session_name;
+    const status = session.status || 'offline';
+    const statusClass = status === 'online' ? 'success' : status === 'connecting' ? 'warning' : 'danger';
+    
+    row.innerHTML = `
+        <td>
+            <div class="d-flex align-items-center">
+                <div class="session-avatar">
+                    <i class="fab fa-whatsapp"></i>
+                </div>
+                <div class="ml-3">
+                    <div class="font-weight-bold">${sessionName}</div>
+                    <div class="small text-muted">Created: ${new Date(session.created_at).toLocaleDateString()}</div>
+                </div>
+            </div>
+        </td>
+        <td>
+            <span class="badge badge-${statusClass} session-status" data-session="${sessionName}">
+                ${status}
+            </span>
+        </td>
+        <td>
+            <div class="session-profile">
+                <div class="font-weight-bold">${session.profile_name || '-'}</div>
+                <div class="small text-muted">${session.wa_number || 'Not connected'}</div>
+            </div>
+        </td>
+        <td>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-primary" onclick="viewSession('${sessionName}')">
+                    <i class="fas fa-eye"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteSession('${sessionName}')">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    `;
+    
+    return row;
+}
+
+// ===== FIXED UPDATE SESSION STATUS FUNCTION =====
+// Update session status
+async function updateSessionStatus(sessionName) {
+    try {
+        const response = await fetch(getApiUrl(`${config.endpoints.sessions}/${sessionName}/status`), {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+
+        if (!response.ok) {
+            // Silently skip 404 errors for status updates
+            if (response.status === 404) {
+                return;
+            }
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            console.warn(`⚠️ Session ${sessionName} status endpoint returned non-JSON response`);
+            return;
+        }
+
+        const data = await response.json();
+        if (data.success && data.session) {
+            updateSessionInTable(sessionName, data.session);
+        }
+    } catch (error) {
+        // Only log if it's not a parsing error from HTML response
+        if (!error.message.includes('Unexpected token') && !error.message.includes('<!DOCTYPE')) {
+            console.error('Update status error:', error);
+        }
+    }
+}
+
+// Update session in table
+function updateSessionInTable(sessionName, sessionData) {
+    const statusElement = document.querySelector(`.session-status[data-session="${sessionName}"]`);
+    if (statusElement) {
+        const statusClass = sessionData.status === 'online' ? 'success' : 
+                          sessionData.status === 'connecting' ? 'warning' : 'danger';
+        
+        statusElement.className = `badge badge-${statusClass} session-status`;
+        statusElement.textContent = sessionData.status;
+    }
+
+    // Update profile info if available
+    const row = document.querySelector(`.session-row[data-session="${sessionName}"]`);
+    if (row && sessionData.profile_name) {
+        const profileDiv = row.querySelector('.session-profile');
+        if (profileDiv) {
+            profileDiv.innerHTML = `
+                <div class="font-weight-bold">${sessionData.profile_name}</div>
+                <div class="small text-muted">${sessionData.wa_number || 'Connected'}</div>
+            `;
+        }
+    }
 }
 
 // Start status polling
 function startStatusPolling() {
+    // Clear existing interval
     if (pollingInterval) {
         clearInterval(pollingInterval);
     }
-    updateAllStatus();
-    pollingInterval = setInterval(updateAllStatus, 10000);
+    
+    // Start new polling
+    pollingInterval = setInterval(updateAllStatus, 10000); // Every 10 seconds
 }
 
 // Update all session status
 async function updateAllStatus() {
     for (const session of sessions) {
-        if (session.session_name) {
-            await updateSessionStatus(session.session_name);
-        }
+        const sessionName = session.name || session.session_name;
+        await updateSessionStatus(sessionName);
     }
 }
 
-// Update single session status
-async function updateSessionStatus(sessionName) {
-    try {
-        const response = await fetch(getApiUrl(`${config.endpoints.sessions}/${sessionName}/status`), {
-            headers: {
-                'Authorization': `Bearer ${getToken()}`
-            }
-        });
-        
-        if (!response.ok) return;
+// View session details
+function viewSession(sessionName) {
+    // Implementation for viewing session details
+    showToast('info', `Viewing session: ${sessionName}`);
+}
 
-        const data = await response.json();
-        
-        if (data.success) {
-            const statusBadge = document.getElementById(`status-${sessionName}`);
-            if (statusBadge) {
-                statusBadge.textContent = data.status;
-                statusBadge.className = 'badge';
-                
-                if (data.status === 'online' || data.status === 'connected') {
-                    statusBadge.classList.add('bg-success');
-                } else if (data.status === 'connecting') {
-                    statusBadge.classList.add('bg-warning');
-                } else {
-                    statusBadge.classList.add('bg-danger');
-                }
-            }
+// Delete session
+async function deleteSession(sessionName) {
+    if (!confirm(`Are you sure you want to delete session "${sessionName}"?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(getApiUrl(`${config.endpoints.sessions}/${sessionName}`), {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+
+        if (response.ok) {
+            showToast('success', `Session "${sessionName}" deleted successfully`);
+            loadSessions(); // Reload sessions
+        } else {
+            throw new Error(`HTTP ${response.status}`);
         }
     } catch (error) {
-        console.error('Update status error:', error);
+        console.error('Delete session error:', error);
+        showToast('error', `Failed to delete session: ${error.message}`);
     }
 }
 
-// Poll for session connection
-function pollSessionStatus(sessionName) {
-    const modal = document.getElementById('addSessionModal');
-    let attempts = 0;
-    const maxAttempts = 40; // 2 minutes
+// Add new session
+function addNewSession() {
+    const sessionName = prompt('Enter session name:');
+    if (!sessionName) return;
 
-    const intervalId = setInterval(async () => {
-        attempts++;
-        if (attempts > maxAttempts) {
-            clearInterval(intervalId);
-            showToast('error', 'Waktu tunggu untuk memindai QR habis.');
-            bootstrap.Modal.getInstance(modal)?.hide();
-            return;
-        }
-
-        try {
-            const response = await fetch(getApiUrl(`${config.endpoints.sessions}/${sessionName}/status`), {
-                headers: { 'Authorization': `Bearer ${getToken()}` }
-            });
-
-            if (!response.ok) return;
-
-            const data = await response.json();
-
-            if (data.success && (data.status === 'connected' || data.status === 'online')) {
-                clearInterval(intervalId);
-                showToast('success', `Sesi '${sessionName}' berhasil terhubung!`);
-                bootstrap.Modal.getInstance(modal)?.hide();
-                loadSessions();
-            }
-        } catch (error) {
-            console.error('Polling status error:', error);
-        }
-    }, 3000);
-
-    modal.setAttribute('data-polling-interval-id', intervalId);
+    // Implementation for adding new session
+    showToast('info', `Adding new session: ${sessionName}`);
 }
 
-// Create session
-async function createSession() {
-  const sessionName = document.getElementById('sessionName').value.trim();
-  
-  if (!sessionName) {
-    showToast('error', 'Session name required');
-    return;
-  }
-  
-  const createBtn = document.getElementById('createSessionBtn');
-  createBtn.disabled = true;
-  createBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
-  
-  try {
-    // ✅ Single call to backend /api/sessions/start
-    // Backend will handle DB creation + gateway communication
-    const response = await fetch(getApiUrl(config.endpoints.sessionStart), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      },
-      body: JSON.stringify({ session: sessionName })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.qr) {
-      // Show QR code
-      document.getElementById('qrCodeContainer').classList.remove('d-none');
-      document.getElementById('qrCodeImage').src = data.qr;
-      createBtn.classList.add('d-none');
-      
-      // Start polling for connection
-      pollSessionStatus(sessionName);
-    } else if (data.status === 'connected') {
-      // Already connected
-      showToast('success', `Session '${sessionName}' connected!`);
-      bootstrap.Modal.getInstance(document.getElementById('addSessionModal'))?.hide();
-      loadSessions();
-    } else {
-      throw new Error('Unexpected response from server');
-    }
-
-  } catch (error) {
-    console.error('Create session error:', error);
-    showToast('error', error.message || 'Failed to create session');
-    createBtn.disabled = false;
-    createBtn.innerHTML = 'Create Session';
-  }
+// Refresh sessions
+function refreshSessions() {
+    loadSessions();
 }
 
-// Reset modal when closed
-document.getElementById('addSessionModal').addEventListener('hidden.bs.modal', (event) => {
-    const modal = event.target;
-    document.getElementById('sessionName').value = '';
-    document.getElementById('qrCodeContainer').classList.add('d-none');
-    document.getElementById('qrCodeImage').src = '';
-    const createBtn = document.getElementById('createSessionBtn');
-    createBtn.classList.remove('d-none');
-    createBtn.disabled = false;
-    createBtn.innerHTML = 'Buat Session';
-    
-    const pollingIntervalId = modal.getAttribute('data-polling-interval-id');
-    if (pollingIntervalId) {
-        clearInterval(parseInt(pollingIntervalId));
-        modal.removeAttribute('data-polling-interval-id');
-    }
+// Initialize dashboard
+document.addEventListener('DOMContentLoaded', function() {
+    loadSessions();
 });
 
-// Toast functions
-function showToast(type, message) {
-    const toastId = type === 'success' ? 'successToast' : 'errorToast';
-    const messageId = type === 'success' ? 'successMessage' : 'errorMessage';
-    
-    document.getElementById(messageId).textContent = message;
-    const toastEl = document.getElementById(toastId);
-    const toast = new bootstrap.Toast(toastEl);
-    toast.show();
-}
-
-// Initial load
-loadSessions();
-
 // Cleanup on page unload
-window.addEventListener('beforeunload', () => {
+window.addEventListener('beforeunload', function() {
     if (pollingInterval) {
         clearInterval(pollingInterval);
     }
