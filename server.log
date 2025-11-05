@@ -1,0 +1,13 @@
+Calling createAuthController from src/controllers/auth.ts
+Allowed Origins: [
+  'https://ddos-spec.github.io',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173'
+]
+Registering routes...
+Routes registered.
+🚀 WA Gateway running on port 5001
+Server is running on http://localhost:5001
+Server is running on http://localhost:5001

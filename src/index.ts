@@ -30,6 +30,7 @@ interface AppContext {
 
 const app = new Hono<AppContext>();
 
+app.onError(globalErrorMiddleware);
 
 const defaultAllowedOrigins = [
   "https://ddos-spec.github.io",
