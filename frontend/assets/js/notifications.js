@@ -96,8 +96,8 @@ function getNotificationTitle(type) {
  */
 async function fetchInitialNotifications() {
     try {
-        const response = await fetch(`${config.API_URL}/notifications`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+        const response = await fetch(`${config.backendApiUrl}${config.endpoints.notifications}`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         if (!response.ok) throw new Error('Failed to fetch notifications.');
 
@@ -139,9 +139,9 @@ async function fetchInitialNotifications() {
  */
 async function markNotificationAsRead(notificationId) {
     try {
-        await fetch(`${config.API_URL}/notifications/${notificationId}/read`, {
+        await fetch(`${config.backendApiUrl}${config.endpoints.notifications}/${notificationId}/read`, {
             method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+            headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         // On success, decrement the counter
         const notificationCount = document.getElementById('notificationCount');

@@ -11,11 +11,13 @@ import { createMessageController } from "./controllers/message.js";
 import { createProfileController } from "./controllers/profile.js";
 import { createSessionRoutes } from "./routes/session.routes.js";
 import { env } from "./env.js";
+import { globalErrorMiddleware } from "./middlewares/error.middleware.js";
 import { webhookClient } from "./webhooks/index.js";
 import { createWebhookMessage } from "./webhooks/message.js";
 import { query } from "./lib/postgres.js";
 import { notificationService } from "./services/notification.service.js";
 const app = new Hono();
+app.onError(globalErrorMiddleware);
 const defaultAllowedOrigins = [
     "https://ddos-spec.github.io",
     "http://localhost:3000",
@@ -80,14 +82,16 @@ import { createSessionRoutes } from "./routes/session.routes.js";
 import { createAdminRoutes } from "./routes/admin.routes.js";
 import { createCustomerRoutes } from "./routes/customer.routes.js";
 import { createNotificationRoutes } from "./routes/notification.routes.js";
+const api = new Hono();
 console.log("Registering routes...");
-app.route("/auth", createAuthController());
-app.route("/session", createSessionRoutes());
-app.route("/message", createMessageController());
-app.route("/profile", createProfileController());
-app.route("/admin", createAdminRoutes());
-app.route("/customer", createCustomerRoutes());
-app.route("/notifications", createNotificationRoutes());
+api.route("/auth", createAuthController());
+api.route("/session", createSessionRoutes());
+api.route("/message", createMessageController());
+api.route("/profile", createProfileController());
+api.route("/admin", createAdminRoutes());
+api.route("/customer", createCustomerRoutes());
+api.route("/notifications", createNotificationRoutes());
+app.route("/api", api);
 console.log("Routes registered.");
 app.use("*", logger((...params) => {
     params.forEach((param) => console.log(`${moment().toISOString()} | ${param}`));
@@ -230,6 +234,7 @@ const server = serve({
     fetch: app.fetch,
     port: port,
 });
+console.log(`Server is running on http://localhost:${port}`);
 console.log(`Server is running on http://localhost:${port}`);
 export const io = new Server(server, {
     cors: {

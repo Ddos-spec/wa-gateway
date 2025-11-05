@@ -12,9 +12,10 @@ const config = {
   endpoints: {
     login: "/api/auth/login",
     register: "/api/auth/register",
-    sessions: "/api/sessions",
+    sessions: "/api/session",
+    notifications: "/api/notifications",
     verify: "/api/auth/verify",
-    messages: "/gateway/message",
+    messages: "/api/message",
     sendText: "/gateway/message/send-text",
     sendImage: "/gateway/message/send-image",
     sendDocument: "/gateway/message/send-document",
