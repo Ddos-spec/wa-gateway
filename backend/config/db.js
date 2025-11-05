@@ -1,21 +1,29 @@
+// Database Configuration - Location: /backend/config/db.js
 import pg from 'pg';
 const { Pool } = pg;
-import 'dotenv/config';
 
 const pool = new Pool({
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  database: process.env.DB_NAME,
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
 });
 
 pool.on('connect', () => {
-  console.log('✅ PostgreSQL connected successfully');
+    console.log('✅ Connected to PostgreSQL database');
 });
 
 pool.on('error', (err) => {
-  console.error('❌ PostgreSQL connection error:', err);
+    console.error('❌ PostgreSQL connection error:', err);
+});
+
+pool.query('SELECT NOW()', (err, result) => {
+    if (err) {
+        console.error('❌ Database connection test failed:', err);
+    } else {
+        console.log('✅ Database connection test successful:', result.rows[0]);
+    }
 });
 
 export default pool;
