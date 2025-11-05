@@ -7,9 +7,9 @@ export declare const login: (c: Context) => Promise<Response & import("hono").Ty
         name: any;
         email: any;
     };
-}, import("hono/utils/http-status").StatusCode, "json">>;
+}, import("hono/utils/http-status").ContentfulStatusCode, "json">>;
 export declare const getCustomerSessions: (c: Context) => Promise<Response & import("hono").TypedResponse<{
     success: true;
     sessions: any[];
-}, import("hono/utils/http-status").StatusCode, "json">>;
+}, import("hono/utils/http-status").ContentfulStatusCode, "json">>;
 //# sourceMappingURL=customer.d.ts.map
