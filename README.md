@@ -79,27 +79,30 @@ docker logs -f wa-gateway
 
 ## 🔧 Environment Variables
 
-Salin variabel di bawah ini ke file `.env` Anda.
-
-```env
-DATABASE_URL=postgres://postgres:a0bd3b3c1d54b7833014@postgres_scrapdatan8n:5432/wa_gateaway?sslmode=disable
-JWT_SECRET=wa-gateway-super-secret-key-2025
-JWT_EXPIRES_IN=7d
+# URL & Port Configuration
 NODE_ENV=PRODUCTION
+WA_GATEWAY_URL=https://postgres-wa-gateaway.qk6yxt.easypanel.host
+FRONTEND_URL=https://postgres-wa-gateaway.qk6yxt.easypanel.host
+ALLOWED_ORIGINS=https://postgres-wa-gateaway.qk6yxt.easypanel.host
 PORT=5001
 BACKEND_PORT=3001
 FRONTEND_PORT=5000
+
+# Database Connection
+DATABASE_URL=postgres://postgres:a0bd3b3c1d54b7833014@postgres_scrapdatan8n:5432/wa_gateaway?sslmode=disable
 DB_USER=postgres
 DB_PASSWORD=a0bd3b3c1d54b7833014
 DB_HOST=postgres_scrapdatan8n
 DB_PORT=5432
 DB_NAME=wa_gateaway
-WA_GATEWAY_URL=https://your-domain.com
-FRONTEND_URL=https://your-domain.com
-ALLOWED_ORIGINS=https://your-domain.com,http://localhost:5000,http://127.0.0.1:5000
-WEBHOOK_BASE_URL=
+
+# Security
+JWT_SECRET=e932b72464b58e7a0a6a029c7b9667c29e18b02927e163b2f96e4ac74d7c0f1e
+JWT_EXPIRES_IN=7d
+
+# Optional
+WEBHOOK_BASE_URL=https://postgres-wa-gateaway.qk6yxt.easypanel.host
 KEY=
-```
 
 **PENTING**: Ganti `your-domain.com` dengan domain produksi Anda yang sebenarnya.
 
@@ -215,10 +218,10 @@ sudo kill -9 <PID>
 ### Database connection error
 Pastikan PostgreSQL service berjalan dan kredensial benar di file `.env`.
 
-## 📞 Support
-
-Untuk masalah atau pertanyaan, buka issue di repository ini.
-
-## 📄 License
-
-ISC License
+proksi domain saat ini 
+frontend
+http://postgres_wa_gateaway:5000/
+/api/
+http://postgres_wa_gateaway:3001/
+/gateway/
+http://postgres_wa_gateaway:5001/
