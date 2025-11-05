@@ -43,8 +43,7 @@ router.post('/start', authMiddleware, async (req, res) => {
       `${GATEWAY_URL}/session/start`,
       { session },
       { 
-        timeout: 30000,
-        headers: { 'key': process.env.KEY } // Gateway authentication
+        timeout: 30000
       }
     );
 
@@ -92,8 +91,7 @@ router.get('/:name/status', authMiddleware, async (req, res) => {
       const gatewayStatus = await axios.get(
         `${GATEWAY_URL}/session/${name}`,
         { 
-          timeout: 5000,
-          headers: { 'key': process.env.KEY }
+          timeout: 5000
         }
       );
       
@@ -130,9 +128,7 @@ router.delete('/:name', authMiddleware, async (req, res) => {
     
     // 1. Delete from gateway first
     try {
-      await axios.delete(`${GATEWAY_URL}/session/${name}`, {
-        headers: { 'key': process.env.KEY }
-      });
+      await axios.delete(`${GATEWAY_URL}/session/${name}`);
     } catch (error) {
       console.error('Gateway delete failed:', error.message);
       // Continue even if gateway fails
