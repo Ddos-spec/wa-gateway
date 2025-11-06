@@ -144,13 +144,7 @@ app.use(
   })
 );
 
-app.get("/", (c) =>
-  c.json({
-    status: "ok",
-    message: "WA Gateway API is running",
-    timestamp: new Date().toISOString(),
-  })
-);
+
 
 /**
  * serve media message static files
