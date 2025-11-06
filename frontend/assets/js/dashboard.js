@@ -8,12 +8,8 @@ document.getElementById('username').textContent = localStorage.getItem('username
 let sessions = [];
 let pollingInterval = null;
 
-// Configuration
-const config = {
-    endpoints: {
-        sessions: '/api/sessions'
-    }
-};
+// ✅ FIXED: Remove duplicate config declaration - use the one from config.js
+// Configuration is now imported from config.js (loaded before this script)
 
 // UI State Management
 function showState(state) {
