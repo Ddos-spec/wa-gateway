@@ -1,7 +1,5 @@
 {
   "version": 2,
-  "buildCommand": "npx tsc",
-  "installCommand": "npm install",
   "functions": {
     "api/**/*.js": {
       "runtime": "nodejs18.x"
