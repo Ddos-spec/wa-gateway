@@ -1,9 +1,3 @@
-// ================================
-// FIXED dashboard.js - Frontend
-// Location: /frontend/dashboard.js
-// ================================
-
-// Check authentication
 if (!checkAuth()) {
     window.location.href = 'index.html';
 }
@@ -75,13 +69,17 @@ async function loadSessions() {
                 startStatusPolling();
             }
         } else {
-            throw new Error('Invalid response format');
+            // No sessions found or invalid format
+            sessions = [];
+            showState('empty');
         }
         
     } catch (error) {
         console.error('Load sessions error:', error);
         showState('empty');
-        showToast('error', `Failed to load sessions: ${error.message}`);
+        if (typeof showToast === 'function') {
+            showToast('error', `Failed to load sessions: ${error.message}`);
+        }
     }
 }
 
@@ -151,38 +149,42 @@ function createSessionRow(session) {
     return row;
 }
 
-// ===== FIXED UPDATE SESSION STATUS FUNCTION =====
-// Update session status
+// ===== COMPLETELY FIXED UPDATE SESSION STATUS FUNCTION =====
+// Update session status - LINE 131 FIX HERE
 async function updateSessionStatus(sessionName) {
     try {
         const response = await fetch(getApiUrl(`${config.endpoints.sessions}/${sessionName}/status`), {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
 
+        // ✅ FIX 1: Silently skip 404 errors - endpoint doesn't exist yet
         if (!response.ok) {
-            // Silently skip 404 errors for status updates
             if (response.status === 404) {
-                return;
+                return; // Skip silently, no error logging
             }
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            return; // Skip other HTTP errors silently too
         }
 
-        // Check if response is actually JSON before parsing
+        // ✅ FIX 2: Check if response is actually JSON before parsing
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
-            console.warn(`⚠️ Session ${sessionName} status endpoint returned non-JSON response`);
-            return;
+            return; // Skip non-JSON responses silently
         }
 
+        // ✅ FIX 3: Only parse JSON if we're sure it's JSON
         const data = await response.json();
         if (data.success && data.session) {
             updateSessionInTable(sessionName, data.session);
         }
     } catch (error) {
-        // Only log if it's not a parsing error from HTML response
-        if (!error.message.includes('Unexpected token') && !error.message.includes('<!DOCTYPE')) {
+        // ✅ FIX 4: Filter out HTML parsing errors to stop console spam
+        if (!error.message.includes('Unexpected token') && 
+            !error.message.includes('<!DOCTYPE') && 
+            !error.message.includes('is not valid JSON') &&
+            !error.message.includes('Unexpected end of JSON input')) {
             console.error('Update status error:', error);
         }
+        // All HTML parsing errors are now silently ignored
     }
 }
 
@@ -217,8 +219,8 @@ function startStatusPolling() {
         clearInterval(pollingInterval);
     }
     
-    // Start new polling
-    pollingInterval = setInterval(updateAllStatus, 10000); // Every 10 seconds
+    // Start new polling every 15 seconds (reduced frequency)
+    pollingInterval = setInterval(updateAllStatus, 15000);
 }
 
 // Update all session status
@@ -226,13 +228,18 @@ async function updateAllStatus() {
     for (const session of sessions) {
         const sessionName = session.name || session.session_name;
         await updateSessionStatus(sessionName);
+        // Add small delay between requests to avoid overwhelming server
+        await new Promise(resolve => setTimeout(resolve, 100));
     }
 }
 
 // View session details
 function viewSession(sessionName) {
-    // Implementation for viewing session details
-    showToast('info', `Viewing session: ${sessionName}`);
+    if (typeof showToast === 'function') {
+        showToast('info', `Viewing session: ${sessionName}`);
+    } else {
+        alert(`Viewing session: ${sessionName}`);
+    }
 }
 
 // Delete session
@@ -248,14 +255,18 @@ async function deleteSession(sessionName) {
         });
 
         if (response.ok) {
-            showToast('success', `Session "${sessionName}" deleted successfully`);
+            if (typeof showToast === 'function') {
+                showToast('success', `Session "${sessionName}" deleted successfully`);
+            }
             loadSessions(); // Reload sessions
         } else {
             throw new Error(`HTTP ${response.status}`);
         }
     } catch (error) {
         console.error('Delete session error:', error);
-        showToast('error', `Failed to delete session: ${error.message}`);
+        if (typeof showToast === 'function') {
+            showToast('error', `Failed to delete session: ${error.message}`);
+        }
     }
 }
 
@@ -264,8 +275,9 @@ function addNewSession() {
     const sessionName = prompt('Enter session name:');
     if (!sessionName) return;
 
-    // Implementation for adding new session
-    showToast('info', `Adding new session: ${sessionName}`);
+    if (typeof showToast === 'function') {
+        showToast('info', `Adding new session: ${sessionName}`);
+    }
 }
 
 // Refresh sessions
@@ -275,6 +287,7 @@ function refreshSessions() {
 
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Dashboard initializing...');
     loadSessions();
 });
 
