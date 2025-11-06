@@ -10,6 +10,6 @@
     { "src": "/assets/(.*)", "dest": "/frontend/assets/$1" },
     { "src": "/(customer_login|dashboard|index)\\.html", "dest": "/frontend/$1.html" },
     { "src": "/", "dest": "/frontend/index.html" }
-}
+]
 }
 
