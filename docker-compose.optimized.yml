@@ -1,0 +1,94 @@
+# 🚀 OPTIMIZED DOCKER COMPOSE - Resource Limited
+# Perfect for low-resource VPS (1GB RAM minimum)
+
+version: '3.8'
+
+services:
+  wa-gateway:
+    build: 
+      context: .
+      dockerfile: Dockerfile.optimized
+    container_name: wa-gateway-optimized
+    ports:
+      - "5001:5001" # WA Gateway API
+      - "5000:5000" # Frontend server  
+      - "3001:3001" # Backend Dashboard API
+    environment:
+      - DATABASE_URL=postgres://postgres:a0bd3b3c1d54b7833014@postgres_scrapdatan8n:5432/wa_gateaway?sslmode=disable
+      - DB_USER=postgres
+      - DB_PASSWORD=a0bd3b3c1d54b7833014
+      - DB_HOST=postgres_scrapdatan8n
+      - DB_PORT=5432
+      - DB_NAME=wa_gateaway
+      - WA_GATEWAY_URL=https://postgres-wa-gateaway.qk6yxt.easypanel.host
+      - FRONTEND_URL=https://postgres-wa-gateaway.qk6yxt.easypanel.host
+      - ALLOWED_ORIGINS=https://postgres-wa-gateaway.qk6yxt.easypanel.host
+      - JWT_SECRET=e932b72464b58e7a0a6a029c7b9667c29e18b02927e163b2f96e4ac74d7c0f1e
+      - BACKEND_PORT=3001
+      - NODE_ENV=production
+      # ✅ Memory optimization environment variables
+      - NODE_OPTIONS=--max-old-space-size=512
+      - PM2_HOME=/app/.pm2
+    volumes:
+      - ./media:/app/media
+      - ./wa_sessions:/app/wa_sessions
+      - ./frontend:/app/frontend
+    restart: unless-stopped
+    networks:
+      - wa-network
+    # ✅ RESOURCE LIMITS - Critical for VPS optimization
+    deploy:
+      resources:
+        limits:
+          # Maximum resources the container can use
+          memory: 600M          # Max 600MB RAM
+          cpus: '1.0'           # Max 1 CPU core
+        reservations:
+          # Guaranteed minimum resources
+          memory: 300M          # Min 300MB RAM
+          cpus: '0.5'           # Min 0.5 CPU core
+    # ✅ Health check to restart if unhealthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # ✅ Logging optimization - prevent log bloat
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # ✅ Security optimizations
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:noexec,nosuid,size=50m
+
+networks:
+  wa-network:
+    external: true
+    name: postgres_scrapdatan8n_network
+
+# ✅ OPTIONAL: Add monitoring with minimal overhead
+# Uncomment if you want basic monitoring
+#  monitoring:
+#    image: prom/node-exporter:latest
+#    container_name: wa-gateway-monitor
+#    ports:
+#      - "9100:9100"
+#    volumes:
+#      - /proc:/host/proc:ro
+#      - /sys:/host/sys:ro
+#    command:
+#      - '--path.procfs=/host/proc'
+#      - '--path.sysfs=/host/sys'
+#    networks:
+#      - wa-network
+#    deploy:
+#      resources:
+#        limits:
+#          memory: 50M
+#          cpus: '0.1'
