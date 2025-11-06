@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createCustomerRoutes = void 0;
+var hono_1 = require("hono");
+var customer_js_1 = require("../controllers/customer.js");
+var customer = new hono_1.Hono();
+customer.post("/login", customer_js_1.login);
+customer.get("/sessions", customer_js_1.getCustomerSessions);
+var createCustomerRoutes = function () { return customer; };
+exports.createCustomerRoutes = createCustomerRoutes;

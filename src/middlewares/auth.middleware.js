@@ -35,29 +35,45 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
-var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.query = exports.getPool = void 0;
-var pg_1 = require("pg");
+exports.authMiddleware = void 0;
+var jose_1 = require("jose");
 var env_js_1 = require("../env.js");
-var globalForPg = globalThis;
-var pool = (_a = globalForPg.__pgPool) !== null && _a !== void 0 ? _a : new pg_1.Pool({
-    connectionString: env_js_1.env.DATABASE_URL,
-});
-if (env_js_1.env.NODE_ENV !== "PRODUCTION") {
-    globalForPg.__pgPool = pool;
-}
-var getPool = function () { return pool; };
-exports.getPool = getPool;
-var query = function (text, params) { return __awaiter(void 0, void 0, void 0, function () {
-    var result;
+var util_1 = require("util");
+var secretKey = new util_1.TextEncoder().encode(env_js_1.env.JWT_SECRET);
+var authMiddleware = function (c, next) { return __awaiter(void 0, void 0, void 0, function () {
+    var authHeader, token, payload, error_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
-            case 0: return [4 /*yield*/, pool.query(text, params)];
+            case 0:
+                authHeader = c.req.header("Authorization");
+                if (!authHeader || !authHeader.startsWith("Bearer ")) {
+                    return [2 /*return*/, c.json({ error: "Unauthorized: Missing or invalid token." }, 401)];
+                }
+                token = authHeader.split(" ")[1];
+                if (!token) {
+                    return [2 /*return*/, c.json({ error: "Unauthorized: Token format is invalid." }, 401)];
+                }
+                _a.label = 1;
             case 1:
-                result = _a.sent();
-                return [2 /*return*/, result];
+                _a.trys.push([1, 4, , 5]);
+                return [4 /*yield*/, (0, jose_1.jwtVerify)(token, secretKey)];
+            case 2:
+                payload = (_a.sent()).payload;
+                // Type guard to ensure the payload has the required fields
+                if (typeof payload.id !== 'number' || typeof payload.email !== 'string') {
+                    return [2 /*return*/, c.json({ error: "Unauthorized: Invalid token payload." }, 401)];
+                }
+                c.set("user", payload);
+                return [4 /*yield*/, next()];
+            case 3:
+                _a.sent();
+                return [3 /*break*/, 5];
+            case 4:
+                error_1 = _a.sent();
+                return [2 /*return*/, c.json({ error: "Unauthorized: Invalid token." }, 401)];
+            case 5: return [2 /*return*/];
         }
     });
 }); };
-exports.query = query;
+exports.authMiddleware = authMiddleware;

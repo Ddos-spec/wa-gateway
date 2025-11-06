@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createSessionRoutes = void 0;
+var hono_1 = require("hono");
+var session_js_1 = require("../controllers/session.js");
+var session = new hono_1.Hono();
+session.get("/", session_js_1.getSessions);
+session.get("/:name", session_js_1.getSession);
+session.post("/start", session_js_1.startNewSession);
+session.delete("/:name", session_js_1.deleteSession);
+session.post("/:name/cancel", session_js_1.cancelPairing);
+var createSessionRoutes = function () { return session; };
+exports.createSessionRoutes = createSessionRoutes;
