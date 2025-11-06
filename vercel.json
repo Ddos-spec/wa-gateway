@@ -1,10 +1,16 @@
 {
   "version": 2,
-    "installCommand": "npm install",
+  "installCommand": "pnpm install",
+  "builds": [
+    {
+      "src": "dist/index.js",
+      "use": "@vercel/node"
+    }
+  ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/assets/(.*)", "dest": "/frontend/assets/$1" },
-    { "src": "/(customer_login|dashboard|index)\\.html", "dest": "/frontend/$1.html" },
-    { "src": "/", "dest": "/frontend/index.html" }
+    {
+      "src": "/(.*)",
+      "dest": "dist/index.js"
+    }
   ]
 }
