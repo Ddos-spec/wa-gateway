@@ -1,5 +1,8 @@
-if (!checkAuth()) {
-    window.location.href = 'index.html';
+// Auth Guard - Periksa token saat halaman dimuat
+const authToken = localStorage.getItem('authToken');
+if (!authToken) {
+    // Jika tidak ada token, alihkan ke halaman login
+    window.location.href = 'customer_login.html';
 }
 
 // Set username
