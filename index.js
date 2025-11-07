@@ -162,7 +162,8 @@ if (!fs.existsSync(mediaDir)) {
 
 app.use(express.json());
 // Trust proxy for cPanel and other reverse proxy environments
-app.set('trust proxy', true);
+// Only trust first proxy, not all (prevents security issues)
+app.set('trust proxy', 1);
 
 app.use(bodyParser.json());
 app.use('/admin', express.static(path.join(__dirname, 'admin')));
