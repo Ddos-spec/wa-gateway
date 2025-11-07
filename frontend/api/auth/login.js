@@ -5,6 +5,9 @@ import { Pool } from 'pg'
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
 export default async function handler(req, res) {
+  // Diagnostic Log: Print the environment variable Vercel is using.
+  console.log('DATABASE_URL received by Vercel function:', process.env.DATABASE_URL.replace(/:([^:]+)@/, ':<password>@'));
+
   if (req.method !== 'POST') return res.status(405).end()
   const { username, password } = req.body || {}
   if (!username || !password) return res.status(400).json({ success: false, error: 'Missing credentials' })
@@ -25,6 +28,7 @@ export default async function handler(req, res) {
     const token = sign({ sub: user.id, username }, process.env.JWT_SECRET || 'secret', { expiresIn: '2h' });
     return res.status(200).json({ success: true, token });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message })
+    console.error('!!! Database Connection/Query Error:', e);
+    return res.status(500).json({ success: false, error: e.message });
   }
 }
