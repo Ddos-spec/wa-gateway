@@ -1,8 +1,19 @@
-const { sign } = require('jsonwebtoken');
-const { compare } = require('bcrypt');
-const { Pool } = require('pg');
+import { sign } from 'jsonwebtoken';
+import { createRequire } from 'module';
 
-module.exports = async (req, res) => {
+// Create a require function to import CommonJS modules
+const require = createRequire(import.meta.url);
+
+// Use require for CJS modules
+const pg = require('pg');
+const bcrypt = require('bcrypt');
+
+// Destructure after requiring
+const { Pool } = pg;
+const { compare } = bcrypt;
+
+// Use export default for the handler in an ES Module
+export default async (req, res) => {
   // Diagnostic Log: Print the environment variable Vercel is using.
   console.log('DATABASE_URL received by Vercel function:', process.env.DATABASE_URL.replace(/:([^:]+)@/, ':<password>@'));
 
