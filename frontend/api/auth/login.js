@@ -1,6 +1,9 @@
-import { sign } from 'jsonwebtoken'
-import { compare } from 'bcrypt'
-import { Pool } from 'pg'
+import { sign } from 'jsonwebtoken';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
+const { Pool } = require('pg');
+const { compare } = require('bcrypt');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
