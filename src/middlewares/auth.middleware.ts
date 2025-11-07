@@ -5,7 +5,9 @@ import { TextEncoder } from "util";
 
 interface CustomJwtPayload extends JWTPayload {
   id: number;
+  username: string;
   email: string;
+  role: string;
 }
 
 // Define a custom context interface to include the 'user' property
@@ -35,7 +37,12 @@ export const authMiddleware: MiddlewareHandler<AppContext> = async (c, next) => 
     const { payload } = await jwtVerify(token, secretKey);
 
     // Type guard to ensure the payload has the required fields
-    if (typeof payload.id !== 'number' || typeof payload.email !== 'string') {
+    if (
+      typeof payload.id !== 'number' ||
+      typeof payload.username !== 'string' ||
+      typeof payload.email !== 'string' ||
+      typeof payload.role !== 'string'
+    ) {
       return c.json({ error: "Unauthorized: Invalid token payload." }, 401);
     }
 
@@ -45,3 +52,4 @@ export const authMiddleware: MiddlewareHandler<AppContext> = async (c, next) => 
     return c.json({ error: "Unauthorized: Invalid token." }, 401);
   }
 };
+

@@ -3,13 +3,15 @@ import { HTTPException } from "hono/http-exception";
 import jwt from "jsonwebtoken";
 import { env } from "../env.js";
 import {
-  ConfigRow,
-  findConfigByUsername,
-} from "../repositories/config.repository.js";
+  UserRow,
+  findUserByUsernameOrEmail,
+} from "../repositories/user.repository.js";
 
 export type AuthenticatedUser = {
   id: number;
   username: string;
+  email: string;
+  role: string;
   createdAt: string;
 };
 
@@ -18,26 +20,28 @@ export type AuthResult = {
   user: AuthenticatedUser;
 };
 
-const mapUser = (record: ConfigRow): AuthenticatedUser => ({
+const mapUser = (record: UserRow): AuthenticatedUser => ({
   id: record.id,
   username: record.username,
+  email: record.email,
+  role: record.role,
   createdAt: (() => {
     const dateValue =
-      record.updated_at instanceof Date
-        ? record.updated_at
-        : new Date(record.updated_at);
+      record.created_at instanceof Date
+        ? record.created_at
+        : new Date(record.created_at);
 
     return Number.isNaN(dateValue.getTime())
-      ? String(record.updated_at)
+      ? String(record.created_at)
       : dateValue.toISOString();
   })(),
 });
 
 export const authenticateUser = async (
-  username: string,
+  identifier: string,
   password: string
 ): Promise<AuthResult> => {
-  const record = await findConfigByUsername(username);
+  const record = await findUserByUsernameOrEmail(identifier);
 
   if (!record) {
     throw new HTTPException(401, {
@@ -57,7 +61,10 @@ export const authenticateUser = async (
 
   const token = jwt.sign(
     {
+      id: user.id,
       username: user.username,
+      email: user.email,
+      role: user.role,
     },
     env.JWT_SECRET,
     {
@@ -71,3 +78,4 @@ export const authenticateUser = async (
     user,
   };
 };
+

@@ -19,12 +19,13 @@ import { createWebhookMessage, WebhookMessageBody } from "./webhooks/message.js"
 import { WebhookSessionBody } from "./webhooks/session.js";
 import { query } from "./lib/postgres.js";
 import { notificationService } from "./services/notification.service.js";
+import { authMiddleware, CustomJwtPayload } from "./middlewares/auth.middleware.js"; // Import authMiddleware and CustomJwtPayload
 
 // Define a custom context interface to include the 'user' property
 interface AppContext {
   Bindings: {};
   Variables: {
-    user?: { id: number; email: string };
+    user?: CustomJwtPayload; // Use CustomJwtPayload
   };
 }
 
@@ -123,6 +124,7 @@ import { createCustomerRoutes } from "./routes/customer.routes.js";
 import { createNotificationRoutes } from "./routes/notification.routes.js";
 
 const api = new Hono();
+api.use("/*", authMiddleware); // Apply authMiddleware to all API routes
 console.log("Registering routes...");
 api.route("/auth", createAuthController());
 api.route("/session", createSessionRoutes());
