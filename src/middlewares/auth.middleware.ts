@@ -3,7 +3,7 @@ import { jwtVerify, type JWTPayload } from "jose";
 import { env } from "../env.js";
 import { TextEncoder } from "util";
 
-interface CustomJwtPayload extends JWTPayload {
+export interface CustomJwtPayload extends JWTPayload {
   id: number;
   username: string;
   email: string;
