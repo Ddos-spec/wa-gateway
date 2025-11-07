@@ -60,7 +60,7 @@ class PhonePairing {
             if (session.owner === userId && session.status && session.status.includes('PAIR')) {
                 pairings.push({
                     sessionId: sessionId,
-                    phoneNumber: session.phoneNumber,
+                    phoneNumber: `+${session.phoneNumber}`, // Display with + prefix
                     status: session.status,
                     detail: session.detail,
                     createdAt: session.createdAt

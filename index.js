@@ -922,7 +922,12 @@ async function deleteSession(sessionId) {
     
     // Remove session ownership
     if (session && session.owner) {
-        await userManager.removeSessionFromUser(session.owner, sessionId);
+        try {
+            await userManager.removeSessionFromUser(session.owner, sessionId);
+        } catch (error) {
+            // If user not found, log a warning but continue with session deletion
+            log(`Warning: Could not remove session from user ${session.owner}: ${error.message}`, sessionId);
+        }
     }
     
     sessions.delete(sessionId);

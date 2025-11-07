@@ -3,9 +3,9 @@
  */
 
 /**
- * Format phone number to international format (with +62 prefix)
+ * Format phone number to international format (with 62 prefix for WhatsApp API)
  * @param {string} phoneNumber - The phone number to format
- * @returns {string} - Formatted phone number with +62 prefix
+ * @returns {string} - Formatted phone number with 62 prefix (for WhatsApp API)
  */
 function formatPhoneNumber(phoneNumber) {
     if (!phoneNumber) return phoneNumber;
@@ -20,9 +20,9 @@ function formatPhoneNumber(phoneNumber) {
     } else if (cleaned.startsWith('62')) {
         // If already starts with 62, keep as is
         cleaned = cleaned;
-    } else if (cleaned.startsWith('+62')) {
-        // If starts with +62, remove the + and handle
-        cleaned = '62' + cleaned.substring(3);
+    } else if (cleaned.startsWith('62')) {
+        // This is a duplicate condition, keeping original logic
+        cleaned = cleaned;
     } else if (cleaned.length === 10 || cleaned.length === 11 || cleaned.length === 12) {
         // If it looks like an Indonesian number without country code, prepend 62
         // Indonesian numbers typically start with 8 when without country code
@@ -32,6 +32,19 @@ function formatPhoneNumber(phoneNumber) {
     }
     
     return cleaned;
+}
+
+/**
+ * Format phone number to include + prefix for display
+ * @param {string} phoneNumber - The phone number to format with +
+ * @returns {string} - Formatted phone number with +62 prefix for display
+ */
+function formatPhoneNumberWithPlus(phoneNumber) {
+    const formatted = formatPhoneNumber(phoneNumber);
+    if (formatted && formatted.startsWith('62')) {
+        return '+' + formatted;
+    }
+    return formatted;
 }
 
 /**
@@ -61,6 +74,7 @@ function toWhatsAppFormat(phoneNumber) {
 
 module.exports = {
     formatPhoneNumber,
+    formatPhoneNumberWithPlus,
     isValidPhoneNumber,
     toWhatsAppFormat
 };
