@@ -91,21 +91,73 @@ WhatsApp Gateway adalah platform untuk mengelola koneksi WhatsApp Business API d
    npm start
    ```
 
-## Deployment ke Vercel
+## Deployment - Arsitektur Hybrid
 
+WA Gateway menggunakan arsitektur hybrid yang optimal untuk aplikasi dengan koneksi persisten seperti WhatsApp Gateway:
+
+### Arsitektur:
+1. **Frontend** → Vercel (Static assets, dashboard UI)
+2. **Backend/API** → Platform persisten (DigitalOcean, Render, Railway, atau VPS)  
+3. **Database** → Neon (PostgreSQL serverless)
+
+### Kenapa Arsitektur Hybrid?
+- WhatsApp Gateway membutuhkan koneksi WebSocket persisten
+- Vercel Functions adalah lingkungan serverless (tidak cocok untuk koneksi persisten)
+- Pendekatan hybrid memberikan performa frontend yang cepat dengan kemampuan backend yang full
+
+### Deployment Langkah-demi-Langkah:
+
+#### A. Deploy Frontend ke Vercel:
 1. Fork atau clone repository ini
 2. Buat project baru di Vercel
-3. Pilih framework: `Other` atau `Node.js`
-4. Konfigurasi environment variables di Vercel dashboard:
-   - `DATABASE_URL`: Connection string ke database PostgreSQL (misalnya Neon)
-   - `JWT_SECRET`: Secret key untuk JWT
-   - `WA_GATEWAY_URL`: URL server WhatsApp Gateway
-   - `FRONTEND_URL`: URL deployment Vercel
-   - `BACKEND_PORT`: Port untuk backend (default: 3001)
-   - `FRONTEND_PORT`: Port untuk frontend (default: 5000) 
-   - `ALLOWED_ORIGINS`: Origins yang diizinkan (contoh: https://your-project.vercel.app,http://localhost:3000)
+3. Pilih framework: `Other` atau gunakan `vercel.json` yang sudah disediakan
+4. Tidak perlu konfigurasi environment variables khusus untuk frontend
+5. Deploy - Vercel akan otomatis menyajikan file-file statis
 
-5. Deploy
+#### B. Deploy Backend ke Platform Persisten:
+**Pilihan Platform:** DigitalOcean App Platform, Render.com, Railway, atau VPS
+
+1. Clone repository di server/lingkungan deployment
+2. Install dependencies:
+   ```bash
+   cd backend  # atau sesuaikan dengan struktur backend Anda
+   npm install
+   ```
+   
+3. Konfigurasi environment variables di platform deployment:
+   - `DATABASE_URL`: Connection string Neon database
+   - `JWT_SECRET`: Secret key untuk JWT
+   - `PORT`: Port untuk backend (misal: 5001)
+   - `NODE_ENV`: production
+   - `FRONTEND_URL`: URL deployment Vercel Anda
+   - `ALLOWED_ORIGINS`: Origins yang diizinkan (termasuk URL Vercel Anda)
+
+4. Jalankan backend:
+   ```bash
+   npm run build
+   npm start
+   ```
+
+5. Pastikan backend bisa diakses via URL publik
+
+#### C. Konfigurasi Database (Neon):
+1. Buat project baru di [Neon Console](https://console.neon.tech/)
+2. Dapatkan connection string
+3. Set `DATABASE_URL` di environment backend
+4. Jalankan `create_full_schema.sql` di database Neon
+5. Tambahkan admin user:
+   ```sql
+   INSERT INTO "public"."config" ("id", "username", "password_hash", "updated_at") 
+   VALUES (1, 'admin', '$2a$10$vDtCxgJ3ORp3NRRqzC727u3nyt6W39e9p4Z/GTi5ac844eNOdC36G', CURRENT_TIMESTAMP);
+   ```
+
+### Konfigurasi API Endpoint:
+Setelah deployment, pastikan frontend di Vercel bisa mengakses backend:
+- Ganti konfigurasi API endpoint di frontend untuk mengarah ke backend deployment
+- Gunakan proxy atau konfigurasi CORS yang sesuai
+
+### Dokumentasi Lengkap:
+Untuk panduan migrasi lengkap, lihat file `MIGRATION_GUIDE.md`.
 
 ## Konfigurasi Database
 

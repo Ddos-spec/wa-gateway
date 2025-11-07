@@ -1,9 +1,14 @@
 # .vercelignore
 # File ini menentukan file yang tidak akan di-upload ke Vercel
+# Gunakan untuk deployment FRONTEND saja ke Vercel
+
+# Folder backend (akan dideploy terpisah)
+backend/
+src/
+dist/
 
 # Folder development dan build lokal
 node_modules/
-dist/
 media/
 wa_credentials/
 
@@ -37,3 +42,8 @@ setup.sh
 install.sh
 build.sh
 deploy.sh
+
+# File konfigurasi backend
+.env
+.env.*
+.env.production

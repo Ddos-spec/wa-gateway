@@ -12,7 +12,7 @@ const app = express();
 const server = createServer(app);
 const PORT = process.env.FRONTEND_PORT || 5000;
 
-const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${process.env.BACKEND_PORT || 3001}`;
+const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5001}`;
 const GATEWAY_URL = process.env.WA_GATEWAY_URL || `http://localhost:${process.env.PORT || 5001}`;
 
 const apiProxy = createProxyMiddleware({
