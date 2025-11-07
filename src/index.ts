@@ -149,10 +149,12 @@ app.use(
 /**
  * serve media message static files
  */
+app.get('/', serveStatic({ path: './frontend/index.html' }))
+
 app.use(
   "/*",
   serveStatic({
-    root: "../frontend/",
+    root: "./frontend/",
   })
 );
 
