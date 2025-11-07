@@ -5,6 +5,20 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  const togglePassword = document.getElementById('togglePassword');
+  const passwordInput = document.getElementById('password');
+
+  if (togglePassword && passwordInput) {
+      togglePassword.addEventListener('click', function () {
+          // Toggle the type attribute
+          const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+          passwordInput.setAttribute('type', type);
+          // Toggle the icon
+          this.querySelector('i').classList.toggle('bi-eye-fill');
+          this.querySelector('i').classList.toggle('bi-eye-slash-fill');
+      });
+  }
+
   loginForm.addEventListener('submit', async (event) => {
     event.preventDefault();
 

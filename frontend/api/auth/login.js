@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   if (!username || !password) return res.status(400).json({ success: false, error: 'Missing credentials' })
 
   try {
-    const { rows } = await pool.query('SELECT id, username, password_hash FROM users WHERE username=$1 LIMIT 1', [username])
+    const { rows } = await pool.query('SELECT id, username, password_hash FROM config WHERE username=$1 LIMIT 1', [username])
     if (rows.length === 0) return res.status(401).json({ success: false, error: 'Invalid credentials' })
 
     // Compare bcrypt on DB side if using crypt, else verify here (simple for now)
