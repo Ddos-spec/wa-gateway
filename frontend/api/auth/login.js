@@ -15,7 +15,7 @@ const { compare } = bcrypt;
 // Use export default for the handler in an ES Module
 export default async (req, res) => {
   // Diagnostic Log: Print the environment variable Vercel is using.
-  console.log('DATABASE_URL received by Vercel function:', process.env.DATABASE_URL.replace(/:([^:]+)@/, ':<password>@'));
+  console.log('DATABASE_URL received by Vercel function:', process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/:([^:]+)@/, ':<password>@') : 'Not Set');
 
   if (req.method !== 'POST') {
     return res.status(405).end();
