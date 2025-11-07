@@ -238,7 +238,8 @@
                     <h5 class="mb-0">Session Management</h5>
                      <div class="d-flex align-items-center">
                         <input type="text" id="sessionIdInput" class="form-control me-2" placeholder="Create New Session ID">
-                        <button id="createSessionBtn" class="btn btn-primary">Create</button>
+                        <button id="createSessionBtn" class="btn btn-primary me-2">Create</button>
+                        <button id="pairPhoneBtn" class="btn btn-success">Pair Phone Number</button>
     </div>
   </div>
                 <div class="card-body">
@@ -2025,6 +2026,123 @@ function copyCurl(id, btn) {
   }
 });
 
+  </script>
+
+  <!-- Pair Phone Modal -->
+  <div class="modal fade" id="pairPhoneModal" tabindex="-1" aria-labelledby="pairPhoneModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="pairPhoneModalLabel">Pair Phone Number</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="pairPhoneForm">
+            <div class="mb-3">
+              <label for="pairUserId" class="form-label">User ID</label>
+              <input type="text" class="form-control" id="pairUserId" placeholder="Enter your email or user ID" required>
+              <div class="form-text">Usually your email address or unique identifier</div>
+            </div>
+            <div class="mb-3">
+              <label for="pairPhoneNumber" class="form-label">Phone Number</label>
+              <input type="tel" class="form-control" id="pairPhoneNumber" placeholder="+62 85771 518231" required>
+              <div class="form-text">Enter phone number in international format (e.g., +62 85771 518231)</div>
+            </div>
+          </form>
+          
+          <!-- Result Display -->
+          <div id="pairResult" class="mt-3" style="display: none;">
+            <div class="alert alert-success">
+              <h6>Pairing Code Generated!</h6>
+              <p><strong>Code:</strong> <span id="pairCodeDisplay"></span></p>
+              <p>Please enter this code in your phone's WhatsApp to complete pairing.</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-primary" id="submitPairBtn">Generate Pair Code</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize modal and form elements
+      const pairPhoneModal = new bootstrap.Modal(document.getElementById('pairPhoneModal'));
+      const pairPhoneBtn = document.getElementById('pairPhoneBtn');
+      const submitPairBtn = document.getElementById('submitPairBtn');
+      const pairUserId = document.getElementById('pairUserId');
+      const pairPhoneNumber = document.getElementById('pairPhoneNumber');
+      const pairResult = document.getElementById('pairResult');
+      const pairCodeDisplay = document.getElementById('pairCodeDisplay');
+      
+      // Set default user ID from current user
+      pairUserId.value = document.getElementById('currentUser').textContent.trim() || '';
+      
+      // Show modal when button is clicked
+      pairPhoneBtn.addEventListener('click', function() {
+        pairResult.style.display = 'none';
+        pairPhoneModal.show();
+      });
+      
+      // Handle form submission
+      submitPairBtn.addEventListener('click', async function() {
+        const userId = pairUserId.value.trim();
+        const phoneNumber = pairPhoneNumber.value.trim();
+        
+        if (!userId || !phoneNumber) {
+          alert('Please fill in both User ID and Phone Number');
+          return;
+        }
+        
+        // Format phone number to remove spaces and special characters
+        const formattedPhone = phoneNumber.replace(/\D/g, '');
+        
+        try {
+          submitPairBtn.disabled = true;
+          submitPairBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+          
+          const response = await fetch('/api/v1/pair-phone', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userId: userId,
+              phoneNumber: formattedPhone
+            })
+          });
+          
+          if (response.status === 409) {
+            alert('This phone number is already paired with this user. Please use a different number or delete the existing pairing first.');
+            return;
+          }
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          
+          if (data.pairCode) {
+            pairCodeDisplay.textContent = data.pairCode;
+            pairResult.style.display = 'block';
+            // Auto-select the generated code to make it easier to copy
+            pairCodeDisplay.select && pairCodeDisplay.select();
+          } else {
+            throw new Error('Pair code not returned from server');
+          }
+        } catch (error) {
+          console.error('Pair phone error:', error);
+          alert('Error pairing phone: ' + error.message);
+        } finally {
+          submitPairBtn.disabled = false;
+          submitPairBtn.innerHTML = 'Generate Pair Code';
+        }
+      });
+    });
   </script>
 </body>
 

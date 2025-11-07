@@ -160,15 +160,14 @@ if (!fs.existsSync(mediaDir)) {
     fs.mkdirSync(mediaDir);
 }
 
-app.use(express.json());
 // Trust proxy for cPanel and other reverse proxy environments
 // Only trust first proxy, not all (prevents security issues)
 app.set('trust proxy', 1);
 
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '10mb' })); // Increased limit to handle larger requests
 app.use('/admin', express.static(path.join(__dirname, 'admin')));
 app.use('/media', express.static(mediaDir)); // Serve uploaded media
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' })); // Increased limit for urlencoded data
 app.use(
   helmet({
     contentSecurityPolicy: {

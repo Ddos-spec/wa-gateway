@@ -8,6 +8,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const csurf = require('csurf');
 const validator = require('validator');
+const PhonePairing = require('./phone-pairing');
 // Remove: const { log } = require('./index');
 
 const router = express.Router();
@@ -30,6 +31,9 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger) {
+    // Initialize Phone Pairing
+    const phonePairing = new PhonePairing(sessions, sessionTokens, log);
+
     // Security middlewares
     router.use(helmet());
     
@@ -711,6 +715,124 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         });
         res.json(debugInfo);
     });
+
+    // Phone Pairing Endpoints
+    router.post('/pair-phone', async (req, res) => {
+        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
+
+        const { userId, phoneNumber } = req.body;
+
+        if (!userId || !phoneNumber) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'userId and phoneNumber are required'
+            });
+        }
+
+        try {
+            const result = await phonePairing.pairPhone(userId, phoneNumber);
+            log(`Phone pairing initiated for ${phoneNumber}`, 'SYSTEM', {
+                event: 'phone-pair-initiated',
+                userId,
+                phoneNumber,
+                sessionId: result.sessionId
+            });
+
+            res.status(200).json({
+                status: 'success',
+                pairCode: result.pairCode,
+                sessionId: result.sessionId
+            });
+        } catch (error) {
+            log('Phone pairing error', 'SYSTEM', {
+                event: 'phone-pair-error',
+                error: error.message,
+                endpoint: req.originalUrl
+            });
+
+            if (error.message === 'Phone number already paired with this user') {
+                res.status(409).json({
+                    status: 'error',
+                    message: error.message
+                });
+            } else {
+                res.status(500).json({
+                    status: 'error',
+                    message: 'Internal server error'
+                });
+            }
+        }
+    });
+
+    // Endpoint to validate pair code (for confirmation)
+    router.post('/validate-pair-code', (req, res) => {
+        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
+
+        const { pairCode } = req.body;
+
+        if (!pairCode) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'pairCode is required'
+            });
+        }
+
+        try {
+            const pairing = phonePairing.validatePairCode(pairCode);
+
+            if (!pairing) {
+                return res.status(404).json({
+                    status: 'error',
+                    message: 'Invalid or expired pair code'
+                });
+            }
+
+            res.status(200).json({
+                status: 'success',
+                sessionId: pairing.sessionId,
+                phoneNumber: pairing.phoneNumber
+            });
+        } catch (error) {
+            log('Validate pair code error', 'SYSTEM', {
+                event: 'validate-pair-code-error',
+                error: error.message,
+                endpoint: req.originalUrl
+            });
+
+            res.status(500).json({
+                status: 'error',
+                message: 'Internal server error'
+            });
+        }
+    });
+
+    // Endpoint to get current user's pairings
+    router.get('/my-pairings', checkCampaignAccess, (req, res) => {
+        const currentUser = req.session && req.session.adminAuthed ? {
+            email: req.session.userEmail,
+            role: req.session.userRole
+        } : null;
+
+        if (!currentUser) {
+            return res.status(401).json({ status: 'error', message: 'Authentication required' });
+        }
+
+        try {
+            const pairings = phonePairing.getPairingByUserId(currentUser.email);
+            res.json(pairings);
+        } catch (error) {
+            log('Get pairings error', 'SYSTEM', {
+                event: 'get-pairings-error',
+                error: error.message,
+                endpoint: req.originalUrl
+            });
+
+            res.status(500).json({
+                status: 'error',
+                message: 'Internal server error'
+            });
+        }
+    });
     
     // All routes below this are protected by token
     router.use(validateToken);
@@ -1028,4 +1150,4 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     return router;
 }
 
-module.exports = { initializeApi, getWebhookUrl }; 
+module.exports = { initializeApi, getWebhookUrl };
