@@ -124,9 +124,9 @@ import { createCustomerRoutes } from "./routes/customer.routes.js";
 import { createNotificationRoutes } from "./routes/notification.routes.js";
 
 const api = new Hono();
-api.use("/*", authMiddleware); // Apply authMiddleware to all API routes
 console.log("Registering routes...");
-api.route("/auth", createAuthController());
+api.route("/auth", createAuthController()); // Auth routes should not be protected by authMiddleware
+api.use("/*", authMiddleware); // Apply authMiddleware to all other API routes
 api.route("/session", createSessionRoutes());
 api.route("/message", createMessageController());
 api.route("/profile", createProfileController());
