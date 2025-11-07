@@ -27,7 +27,7 @@ export default async (req, res) => {
   }
 
   try {
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
     const { rows } = await pool.query('SELECT id, username, password_hash FROM config WHERE username=$1 LIMIT 1', [username]);
 
     if (rows.length === 0) {
