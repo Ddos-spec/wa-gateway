@@ -63,7 +63,9 @@ function showToast(type, message) {
 function logout() {
   clearToken();
   localStorage.removeItem("username");
-  window.location.href = "index.html";
+  localStorage.removeItem("userRole");
+  localStorage.removeItem("userType");
+  window.location.href = "customer_login.html";
 }
 
 if (typeof module !== "undefined" && module.exports) {

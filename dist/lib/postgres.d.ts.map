@@ -1,1 +1,0 @@
-{"version":3,"file":"postgres.d.ts","sourceRoot":"","sources":["../../src/lib/postgres.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,IAAI,EAAE,cAAc,EAAE,MAAM,IAAI,CAAC;AAmB1C,eAAO,MAAM,OAAO,YAAa,CAAC;AAElC,eAAO,MAAM,KAAK,GAAU,CAAC,SAAS,cAAc,cAC5C,MAAM,WACH,CAAC,MAAM,GAAG,MAAM,GAAG,OAAO,GAAG,IAAI,GAAG,IAAI,CAAC,EAAE,yCAIrD,CAAC"}

@@ -133,6 +133,17 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/config.js"></script>
     <script>
+        // Auth guard
+        const authToken = localStorage.getItem('authToken');
+        const userRole = localStorage.getItem('userRole');
+        
+        if (!authToken) {
+            window.location.href = 'customer_login.html';
+        } else if (userRole !== 'admin') {
+            // Redirect non-admin users to main dashboard
+            window.location.href = 'customer_dashboard.html';
+        }
+
         function saveCustomer() {
             // Save logic to be implemented
             alert('Save customer functionality to be implemented.');
@@ -140,7 +151,11 @@
             modal.hide();
         }
          function logout(){
-            alert('Logout functionality to be implemented.');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('userRole');
+            localStorage.removeItem('userType');
+            localStorage.removeItem('username');
+            window.location.href = 'customer_login.html';
         }
     </script>
 </body>

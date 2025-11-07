@@ -1,4 +1,39 @@
-backend/
+# .vercelignore
+# File ini menentukan file yang tidak akan di-upload ke Vercel
+
+# Folder development dan build lokal
 node_modules/
-.env
+dist/
+media/
+wa_credentials/
+
+# File log
 *.log
+
+# Skrip deployment lokal
+*.sh
+Dockerfile*
+docker-compose*
+
+# File konfigurasi deployment lokal
+nixpacks.toml
+railway.json
+
+# File sementara dan alat bantu development
+.qwen/
+.gitconfig
+
+# File SQL untuk setup lokal
+*insert_admin*.sql
+*generate_hash*.js
+*generate_hash*.mjs
+
+# File setup lokal
+start-all.sh
+start-services.sh
+stop-services.sh
+optimize-vps.sh
+setup.sh
+install.sh
+build.sh
+deploy.sh

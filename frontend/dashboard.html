@@ -17,6 +17,18 @@
 </head>
 <body>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        // Check authentication and role before page loads
+        const authToken = localStorage.getItem('authToken');
+        const userRole = localStorage.getItem('userRole');
+        
+        if (!authToken) {
+            window.location.href = 'customer_login.html';
+        } else if (userRole === 'customer') {
+            // Redirect customer users to their specific dashboard
+            window.location.href = 'customer_dashboard.html';
+        }
+    </script>
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid">

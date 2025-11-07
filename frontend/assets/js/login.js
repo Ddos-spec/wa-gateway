@@ -71,11 +71,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (data.token) {
         saveToken(data.token);
         localStorage.setItem('username', username);
+        localStorage.setItem('userRole', data.user.role || 'admin');
+        localStorage.setItem('userType', data.user.userType || 'admin');
 
         showMessage('Login successful! Redirecting...', 'success');
 
+        // Redirect to appropriate dashboard based on user role
         setTimeout(() => {
-          window.location.href = './dashboard.html';
+          if (data.user.role === 'customer' || data.user.userType === 'customer') {
+            window.location.href = './customer_dashboard.html';
+          } else {
+            // For admin or other roles, go to main dashboard
+            window.location.href = './dashboard.html';
+          }
         }, 1000);
       } else {
         throw new Error('No token received from server');
