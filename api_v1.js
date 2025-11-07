@@ -34,6 +34,9 @@ const upload = multer({ storage });
 function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger) {
     // Initialize Phone Pairing
     const phonePairing = new PhonePairing(sessions, sessionTokens, log);
+    
+    // Make phonePairing globally accessible for message processing
+    global.phonePairing = phonePairing;
 
     // Security middlewares
     router.use(helmet());

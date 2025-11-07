@@ -768,7 +768,28 @@ async function connectToWhatsApp(sessionId) {
         const msg = m.messages[0];
         if (!msg.key.fromMe) {
             log(`Received new message from ${msg.key.remoteJid}`, sessionId);
-            
+
+            // Check if this is a pairing code message
+            if (global.phonePairing) {
+                const pairingResult = global.phonePairing.validateIncomingMessage(msg, msg.key.remoteJid);
+                if (pairingResult.success) {
+                    log(`Successfully paired phone number ${pairingResult.phoneNumber} for session ${pairingResult.sessionId}`, pairingResult.sessionId);
+                    
+                    // Update session state to reflect the pairing
+                    updateSessionState(pairingResult.sessionId, 'PAIRED', 'Phone number successfully paired', '', '');
+                    
+                    // Send success notification to webhook
+                    await postToWebhook({
+                        event: 'phone-pair-success',
+                        sessionId: pairingResult.sessionId,
+                        phoneNumber: pairingResult.phoneNumber,
+                        message: 'Phone number successfully paired'
+                    });
+                    
+                    return; // Return early to avoid webhook notification for pairing
+                }
+            }
+
             const messageData = {
                 event: 'new-message',
                 sessionId,
