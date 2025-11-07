@@ -183,8 +183,8 @@ app.use(rateLimit({
     windowMs: 1 * 60 * 1000,
     max: 100,
     message: { status: 'error', message: 'Too many requests, please try again later.' },
-    // Trust proxy headers for proper IP detection
-    trustProxy: true,
+    // Trust only first proxy, not all (security fix)
+    trustProxy: 1,
     standardHeaders: true,
     legacyHeaders: false
 }));
