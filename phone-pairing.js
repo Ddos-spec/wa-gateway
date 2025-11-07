@@ -1,4 +1,5 @@
 const { randomBytes } = require('crypto');
+const { formatPhoneNumber } = require('./phone-utils');
 
 class PhonePairing {
     constructor(sessions, sessionTokens, log) {
@@ -8,21 +9,24 @@ class PhonePairing {
     }
 
     async pairPhone(userId, phoneNumber) {
+        // Format phone number to international format with +62 prefix
+        const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
+        
         // Cek apakah kombinasi userId dan phoneNumber sudah ada dalam sessions
         for (let [sessionId, session] of this.sessions) {
-            if (session.owner && session.phoneNumber && session.owner === userId && session.phoneNumber === phoneNumber) {
+            if (session.owner && session.phoneNumber && session.owner === userId && session.phoneNumber === formattedPhoneNumber) {
                 throw new Error('Phone number already paired with this user');
             }
         }
         
         // Generate kode unik (dengan huruf kapital)
         const pairCode = randomBytes(4).toString('hex').toUpperCase();
-        const sessionId = `pair_${phoneNumber.replace(/\D/g, '')}_${Date.now()}`;
+        const sessionId = `pair_${formattedPhoneNumber.replace(/\D/g, '')}_${Date.now()}`;
         
         // Simpan data pairing dalam sessions (seperti session biasa)
         this.sessions.set(sessionId, {
             sessionId: sessionId,
-            phoneNumber: phoneNumber,
+            phoneNumber: formattedPhoneNumber,
             owner: userId,
             status: 'PENDING_PAIR',
             detail: 'Awaiting phone confirmation',
@@ -34,7 +38,7 @@ class PhonePairing {
         // Simpan juga token pairing
         this.sessionTokens.set(sessionId, pairCode);
         
-        this.log(`Phone pairing created for ${phoneNumber}`, sessionId);
+        this.log(`Phone pairing created for ${formattedPhoneNumber}`, sessionId);
         
         return { pairCode, sessionId };
     }

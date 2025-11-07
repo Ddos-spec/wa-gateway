@@ -9,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const csurf = require('csurf');
 const validator = require('validator');
 const PhonePairing = require('./phone-pairing');
+const { formatPhoneNumber, toWhatsAppFormat } = require('./phone-utils');
 // Remove: const { log } = require('./index');
 
 const router = express.Router();
@@ -983,9 +984,13 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
                 results.push({ status: 'error', message: 'Invalid message format. "to" and "type" are required.' });
                 continue;
             }
-            if (!validator.isNumeric(to) && !to.endsWith('@g.us')) {
-                results.push({ status: 'error', message: 'Invalid recipient format.' });
-                continue;
+            if (!to.endsWith('@g.us')) {
+                // Validate phone number format
+                const formattedTo = formatPhoneNumber(to);
+                if (!/^\d+$/.test(formattedTo)) {
+                    results.push({ status: 'error', message: 'Invalid recipient format.' });
+                    continue;
+                }
             }
             
             // Add phone number to the list for logging
@@ -1039,7 +1044,9 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             if (recipient_type === 'group') {
                 destination = to.endsWith('@g.us') ? to : `${to}@g.us`;
             } else {
-                destination = `${to.replace(/[@s.whatsapp.net]/g, '')}@s.whatsapp.net`;
+                // Format the phone number for individual recipients
+                const formattedTo = formatPhoneNumber(to);
+                destination = toWhatsAppFormat(formattedTo);
             }
 
             let messagePayload;

@@ -4,6 +4,7 @@ const { jidNormalizedUser } = require('@whiskeysockets/baileys');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('validator');
 const { validateToken } = require('./api_v1');
+const { formatPhoneNumber, toWhatsAppFormat } = require('./phone-utils');
 
 const router = express.Router();
 const upload = multer(); // for form-data parsing
@@ -43,7 +44,8 @@ function initializeLegacyApi(sessions, sessionTokens) {
             return res.status(400).json({ status: 'error', message: 'sessionId, number, and message are required.' });
         }
         // Input validation
-        if (!/^[0-9]{8,15}$/.test(number)) {
+        const formattedNumber = formatPhoneNumber(number);
+        if (!/^\d+$/.test(formattedNumber)) {
             return res.status(400).json({ status: 'error', message: 'Invalid phone number format.' });
         }
         if (typeof message !== 'string' || message.length === 0 || message.length > 4096) {
@@ -55,7 +57,7 @@ function initializeLegacyApi(sessions, sessionTokens) {
             return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
         }
 
-        const destination = `${number}@s.whatsapp.net`;
+        const destination = toWhatsAppFormat(formattedNumber);
         const result = await sendLegacyMessage(session.sock, destination, { text: message });
         res.status(200).json(result);
     });
@@ -68,7 +70,8 @@ function initializeLegacyApi(sessions, sessionTokens) {
             return res.status(400).json({ status: 'error', message: 'phone and message are required.' });
         }
         // Input validation
-        if (!/^[0-9]{8,15}$/.test(phone)) {
+        const formattedPhone = formatPhoneNumber(phone);
+        if (!/^\d+$/.test(formattedPhone)) {
             return res.status(400).json({ status: 'error', message: 'Invalid phone number format.' });
         }
         if (typeof message !== 'string' || message.length === 0 || message.length > 4096) {
@@ -80,7 +83,7 @@ function initializeLegacyApi(sessions, sessionTokens) {
             return res.status(404).json({ status: 'error', message: `Session ${targetSessionId} not found or not connected.` });
         }
 
-        const destination = `${phone}@s.whatsapp.net`;
+        const destination = toWhatsAppFormat(formattedPhone);
         const result = await sendLegacyMessage(session.sock, destination, { text: message });
         res.status(200).json(result);
     });

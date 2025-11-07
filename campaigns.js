@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { parse } = require('csv-parse/sync');
 const sanitizeHtml = require('sanitize-html');
 const { format } = require('date-fns');
+const { formatPhoneNumber } = require('./phone-utils');
 
 class CampaignManager {
     constructor(encryptionKey) {
@@ -330,12 +331,12 @@ class CampaignManager {
                     return;
                 }
                 
-                // Clean phone number (remove spaces, dashes, plus sign, parentheses)
-                number = number.toString().replace(/[\s\-\+\(\)]/g, '');
+                // Format phone number to international format with +62 prefix
+                number = formatPhoneNumber(number.toString());
                 
                 // Basic phone validation
-                if (!/^\d{10,15}$/.test(number)) {
-                    errors.push(`Row ${index + 2}: Invalid phone number format: ${number} (should be 10-15 digits)`);
+                if (!/^\d+$/.test(number)) {
+                    errors.push(`Row ${index + 2}: Invalid phone number format: ${number} (should be numeric)`);
                     return;
                 }
                 
