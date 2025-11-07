@@ -35,7 +35,7 @@ const gatewayProxy = createProxyMiddleware({
 });
 
 app.use('/api', apiProxy);
-app.use(['/session', '/message', '/profile', '/auth', '/notifications'], gatewayProxy);
+app.use(['/session', '/message', '/profile', '/notifications'], gatewayProxy);
 
 // Serve static files from frontend directory
 app.use(express.static(path.join(__dirname, 'frontend')));

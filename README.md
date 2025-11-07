@@ -4,11 +4,69 @@ WhatsApp Gateway adalah platform untuk mengelola koneksi WhatsApp Business API d
 
 ## Fitur
 
-- Multi-session WhatsApp
-- Dashboard admin dan customer
-- Webhook konfigurasi
-- API integrasi
-- Sistem otentikasi dua level (admin dan customer)
+### Admin Features
+
+- **Session Management**
+  - Membuat session WhatsApp baru
+  - Menampilkan QR code untuk scan
+  - Melakukan phone pairing (8 digit code) untuk koneksi
+  - Mengelola semua session (aktif/non-aktif)
+  - Menghapus session
+  - Menampilkan status koneksi semua session
+
+- **User Management**
+  - Membuat akun customer baru
+  - Mengelola profil customer
+  - Mengatur hak akses customer
+  - Mengaktifkan/non-aktifkan akun customer
+
+- **Webhook Configuration**
+  - Mengatur webhook untuk setiap session
+  - Menentukan event yang ingin ditangkap (pesan masuk, status perubahan, dll)
+  - Menguji webhook yang telah dikonfigurasi
+
+- **API Management**
+  - Generate API key untuk session
+  - Regenerate API key
+  - Melihat log penggunaan API
+
+- **Dashboard Admin**
+  - Melihat semua session yang dibuat oleh semua customer
+  - Melihat metrics keseluruhan
+  - Melihat log aktivitas sistem
+  - Melihat notifikasi sistem penting
+
+- **Customer Management**
+  - Melihat daftar semua customer
+  - Mengatur paket langganan customer
+  - Melihat status pembayaran customer
+  - Mengirim notifikasi ke customer
+
+### Customer Features
+
+- **Dashboard Customer**
+  - Melihat ringkasan pesan terkirim hari ini
+  - Melihat status session mereka saja
+  - Melihat notifikasi khusus untuk mereka
+
+- **Session Management (Terbatas)**
+  - Hanya bisa melihat session yang mereka miliki sendiri
+  - Tidak bisa membuat session baru (harus melalui admin)
+  - Tidak bisa melakukan QR scan atau phone pairing
+
+- **Pesan & Riwayat**
+  - Melihat log pesan yang dikirim dari session mereka
+  - Melihat statistik pengiriman pesan
+  - Melihat pesan masuk (jika ada webhook)
+
+- **Profil**
+  - Mengedit informasi profil pribadi
+  - Mengubah password
+  - Melihat API key milik mereka (hanya untuk session mereka)
+
+- **Laporan Sederhana**
+  - Melihat jumlah pesan terkirim harian/mingguan/bulanan
+  - Melihat statistik dasar pengiriman
 
 ## Teknologi
 
@@ -67,6 +125,14 @@ Saat pertama kali deploy, Anda perlu:
 2. Dapatkan connection string dari tab "Connection Details"
 3. Atur environment variable `DATABASE_URL` di Vercel dengan connection string dari Neon
 4. Tambahkan skema dengan menjalankan file `create_full_schema.sql` di SQL editor Neon
+
+## Pembatasan Hak Akses
+
+- **Customer** tidak bisa mengakses fitur webhook atau phone pairing
+- **Customer** hanya bisa melihat session yang mereka miliki
+- **Customer** tidak bisa mengelola akun customer lain
+- **Admin** bisa melihat dan mengelola semua session, bukan hanya miliknya sendiri
+- **Admin** bisa mengatur hak akses customer
 
 ## Cara Menggunakan
 

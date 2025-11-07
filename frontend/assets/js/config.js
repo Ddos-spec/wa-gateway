@@ -2,12 +2,12 @@
 const config = {
   // ✅ Single base URL
   apiUrl: window.location.hostname === 'localhost' 
-    ? "http://localhost:3001"
+    ? "http://localhost:3001/api"
     : `${window.location.protocol}//${window.location.host}/api`,
     
   endpoints: {
     // ✅ Consistent /api/ prefix untuk semua backend calls
-    login: "/auth/login",           // Backend will add /api/ prefix
+    login: "/auth/login",           // Full: /api/auth/login
     sessions: "/sessions",           // → /api/sessions
     sessionStart: "/sessions/start", // Backend proxies to gateway
     messages: "/messages",
