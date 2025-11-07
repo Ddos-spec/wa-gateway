@@ -1,259 +1,274 @@
-# WA Gateway - WhatsApp API Gateway
+# Super-Light-Web-WhatsApp-API-Server
 
-WhatsApp Gateway adalah platform untuk mengelola koneksi WhatsApp Business API dan mengirimkan pesan secara massal.
+A powerful, lightweight, and multi-session WhatsApp API server using the `@whiskeysockets/baileys` library. This project provides a complete solution for programmatic WhatsApp messaging, featuring a rich RESTful API and an interactive web dashboard for easy management and testing.
 
-## Fitur
+## Author
 
-### Admin Features
+-   Creator: Alucard0x1
+-   Contact: [Telegram @Alucard0x1](https://t.me/Alucard0x1)
 
-- **Session Management**
-  - Membuat session WhatsApp baru
-  - Menampilkan QR code untuk scan
-  - Melakukan phone pairing (8 digit code) untuk koneksi
-  - Mengelola semua session (aktif/non-aktif)
-  - Menghapus session
-  - Menampilkan status koneksi semua session
+## Table of Contents
 
-- **User Management**
-  - Membuat akun customer baru
-  - Mengelola profil customer
-  - Mengatur hak akses customer
-  - Mengaktifkan/non-aktifkan akun customer
+-   [Features](#features)
+-   [Security](#security)
+-   [Prerequisites](#prerequisites)
+-   [Installation](#installation)
+-   [Usage](#usage)
+-   [Admin Dashboard](#admin-dashboard)
+-   [API Documentation](#api-documentation)
+    -   [Authentication](#authentication)
+    -   [V1 API Endpoints](#v1-api-endpoints)
+    -   [Legacy API Endpoints](#legacy-api-endpoints)
+-   [Important Notes](#important-notes)
+-   [Contributions](#contributions)
+-   [License](#license)
 
-- **Webhook Configuration**
-  - Mengatur webhook untuk setiap session
-  - Menentukan event yang ingin ditangkap (pesan masuk, status perubahan, dll)
-  - Menguji webhook yang telah dikonfigurasi
+## Features
 
-- **API Management**
-  - Generate API key untuk session
-  - Regenerate API key
-  - Melihat log penggunaan API
+-   **Multi-Session Management:** Run multiple WhatsApp accounts from a single server.
+-   **Multi-User System:** Role-based access control with Admin and User roles.
+    -   User authentication with email/password
+    -   Session ownership tracking
+    -   Activity logging and audit trail
+    -   Admin can manage all users and monitor all activities
+    -   Users can only manage their own sessions
+-   **Persistent Sessions:** Sessions automatically reconnect after a server restart.
+-   **Interactive Web Dashboard:** A user-friendly interface to manage sessions and test the API.
+    -   Create, delete, and view the status of all sessions.
+    -   Generate and scan QR codes for authentication.
+    -   View a live stream of server logs.
+    -   User management interface (Admin only)
+    -   Activity monitoring dashboard
+-   **Full-Featured API Control Center:**
+    -   Visually test all API features directly from the dashboard.
+    -   Send text, images, and documents.
+    -   **NEW:** Send Text + Image + Document together in one request.
+    -   Upload media and see a preview before sending.
+    -   Dynamically generated `cURL` examples for every action.
+-   **Rich RESTful API (v1):**
+    -   Secure endpoints with bearer token authentication.
+    -   Endpoints for sending messages (text, image, document), uploading media, and deleting messages.
+    -   Send media by uploading a file or providing a direct URL.
+    -   Support for large files up to 25MB (images, documents, PDFs, Word, Excel)
+-   **Webhook Support:**
+    -   Configure a webhook URL to receive events for new messages and session status changes.
+-   **Legacy API Support:** Includes backward-compatible endpoints for easier migration from older systems.
 
-- **Dashboard Admin**
-  - Melihat semua session yang dibuat oleh semua customer
-  - Melihat metrics keseluruhan
-  - Melihat log aktivitas sistem
-  - Melihat notifikasi sistem penting
+## Security
 
-- **Customer Management**
-  - Melihat daftar semua customer
-  - Mengatur paket langganan customer
-  - Melihat status pembayaran customer
-  - Mengirim notifikasi ke customer
+### 🔒 Token Encryption (Level 1 - Implemented)
 
-### Customer Features
+Session tokens are now encrypted using AES-256-CBC encryption for enhanced security:
 
-- **Dashboard Customer**
-  - Melihat ringkasan pesan terkirim hari ini
-  - Melihat status session mereka saja
-  - Melihat notifikasi khusus untuk mereka
+-   **Automatic Migration:** Existing plain JSON tokens are automatically encrypted on first run
+-   **Secure Storage:** Tokens stored in `session_tokens.enc` with restricted file permissions
+-   **Environment Configuration:** Encryption key stored in `.env` file (never commit this!)
 
-- **Session Management (Terbatas)**
-  - Hanya bisa melihat session yang mereka miliki sendiri
-  - Tidak bisa membuat session baru (harus melalui admin)
-  - Tidak bisa melakukan QR scan atau phone pairing
+#### Quick Setup:
 
-- **Pesan & Riwayat**
-  - Melihat log pesan yang dikirim dari session mereka
-  - Melihat statistik pengiriman pesan
-  - Melihat pesan masuk (jika ada webhook)
-
-- **Profil**
-  - Mengedit informasi profil pribadi
-  - Mengubah password
-  - Melihat API key milik mereka (hanya untuk session mereka)
-
-- **Laporan Sederhana**
-  - Melihat jumlah pesan terkirim harian/mingguan/bulanan
-  - Melihat statistik dasar pengiriman
-
-## Teknologi
-
-- **Frontend**: HTML, CSS, JavaScript
-- **Backend**: Node.js dengan Express
-- **Database**: PostgreSQL
-- **Deployment**: Vercel (frontend), Node.js runtime (backend)
-- **Database Hosting**: Neon (atau PostgreSQL hosting lainnya)
-
-## Instalasi Lokal
-
-1. Clone repository ini
-2. Install dependensi:
+1. Generate a secure encryption key:
    ```bash
-   cd backend
-   npm install
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    ```
-3. Buat file `.env` di folder backend berdasarkan `.env.example`
-4. Konfigurasi database connection string di `.env`
-5. Jalankan backend:
+
+2. Add to your `.env` file:
+   ```env
+   TOKEN_ENCRYPTION_KEY=your_generated_64_character_hex_key
+   ```
+
+3. Test encryption:
    ```bash
-   npm start
+   node test-encryption.js
    ```
 
-## Deployment - Arsitektur Hybrid
+For advanced security options (token hashing, JWT, database storage), see [SECURITY_IMPROVEMENTS.md](SECURITY_IMPROVEMENTS.md).
 
-WA Gateway menggunakan arsitektur hybrid yang optimal untuk aplikasi dengan koneksi persisten seperti WhatsApp Gateway:
+## Multi-User System
 
-### Arsitektur:
-1. **Frontend** → Vercel (Static assets, dashboard UI)
-2. **Backend/API** → Platform persisten (DigitalOcean, Render, Railway, atau VPS)  
-3. **Database** → Neon (PostgreSQL serverless)
+The application now includes a comprehensive multi-user system with role-based access control:
 
-### Kenapa Arsitektur Hybrid?
-- WhatsApp Gateway membutuhkan koneksi WebSocket persisten
-- Vercel Functions adalah lingkungan serverless (tidak cocok untuk koneksi persisten)
-- Pendekatan hybrid memberikan performa frontend yang cepat dengan kemampuan backend yang full
+### User Roles
 
-### Deployment Langkah-demi-Langkah:
+-   **Admin**: Full system access
+    -   Can create, update, and delete users
+    -   Can view and manage all sessions
+    -   Can monitor all user activities
+    -   Can delete system logs
+    
+-   **User**: Limited access
+    -   Can only view and manage their own sessions
+    -   Cannot delete system logs
+    -   Cannot access user management
 
-#### A. Deploy Frontend ke Vercel:
-1. Fork atau clone repository ini
-2. Buat project baru di Vercel
-3. Pilih framework: `Other` atau gunakan `vercel.json` yang sudah disediakan
-4. Tidak perlu konfigurasi environment variables khusus untuk frontend
-5. Deploy - Vercel akan otomatis menyajikan file-file statis
+### Initial Setup
 
-#### B. Deploy Backend ke Platform Persisten:
-**Pilihan Platform:** DigitalOcean App Platform, Render.com, Railway, atau VPS
+1. On first run, a default admin account is created:
+   - Email: `admin@localhost`
+   - Password: Value of `ADMIN_DASHBOARD_PASSWORD` from `.env`
 
-1. Clone repository di server/lingkungan deployment
-2. Install dependencies:
-   ```bash
-   cd backend  # atau sesuaikan dengan struktur backend Anda
-   npm install
-   ```
-   
-3. Konfigurasi environment variables di platform deployment:
-   - `DATABASE_URL`: Connection string Neon database
-   - `JWT_SECRET`: Secret key untuk JWT
-   - `PORT`: Port untuk backend (misal: 5001)
-   - `NODE_ENV`: production
-   - `FRONTEND_URL`: URL deployment Vercel Anda
-   - `ALLOWED_ORIGINS`: Origins yang diizinkan (termasuk URL Vercel Anda)
+2. Admin users can create additional users through:
+   - Web interface: `/admin/users.html`
+   - API: `POST /api/v1/users` (requires admin role)
 
-4. Jalankan backend:
-   ```bash
-   npm run build
-   npm start
-   ```
+### User Authentication
 
-5. Pastikan backend bisa diakses via URL publik
+Users can log in using:
+- Email and password (for multi-user system)
+- Legacy admin password (for backward compatibility)
 
-#### C. Konfigurasi Database (Neon):
-1. Buat project baru di [Neon Console](https://console.neon.tech/)
-2. Dapatkan connection string
-3. Set `DATABASE_URL` di environment backend
-4. Jalankan `create_full_schema.sql` di database Neon
-5. Tambahkan admin user:
-   ```sql
-   INSERT INTO "public"."config" ("id", "username", "password_hash", "updated_at") 
-   VALUES (1, 'admin', '$2a$10$vDtCxgJ3ORp3NRRqzC727u3nyt6W39e9p4Z/GTi5ac844eNOdC36G', CURRENT_TIMESTAMP);
-   ```
+### Activity Logging
 
-### Konfigurasi API Endpoint:
-Setelah deployment, pastikan frontend di Vercel bisa mengakses backend:
-- Ganti konfigurasi API endpoint di frontend untuk mengarah ke backend deployment
-- Gunakan proxy atau konfigurasi CORS yang sesuai
+All user actions are logged and encrypted:
+- Login attempts
+- Session creation/deletion
+- Message sending
+- User management actions
 
-### Dokumentasi Lengkap:
-Untuk panduan migrasi lengkap, lihat file `MIGRATION_GUIDE.md`.
+Admins can view all activities at `/admin/activities.html`
 
-## Konfigurasi Database
+## Prerequisites
 
-Saat pertama kali deploy, Anda perlu:
+-   Node.js (v16 or higher recommended)
+-   npm (Node Package Manager)
 
-1. Buat database PostgreSQL (disarankan menggunakan [Neon](https://neon.tech/))
-2. Membuat skema database menggunakan file `create_full_schema.sql`
-3. Menambahkan user admin ke tabel `config`:
-   ```sql
-   INSERT INTO "public"."config" ("id", "username", "password_hash", "updated_at") 
-   VALUES (1, 'admin', '$2a$10$vDtCxgJ3ORp3NRRqzC727u3nyt6W39e9p4Z/GTi5ac844eNOdC36G', CURRENT_TIMESTAMP);
-   ```
+## Installation
 
-### Konfigurasi Neon Database
+1.  Clone this repository:
+    ```bash
+    git clone https://github.com/Alucard0x1/Super-Light-Web-WhatsApp-API-Server.git
+    ```
+2.  Navigate to the project directory:
+    ```bash
+    cd Super-Light-Web-WhatsApp-API-Server
+    ```
+3.  Install the dependencies:
+    ```bash
+    npm install
+    ```
+    
+    **For cPanel or environments without Python:**
+    ```bash
+    npm run install:smart
+    ```
+    This will automatically handle bcrypt compatibility issues.
 
-1. Buat proyek baru di [Neon Console](https://console.neon.tech/)
-2. Dapatkan connection string dari tab "Connection Details"
-3. Atur environment variable `DATABASE_URL` di Vercel dengan connection string dari Neon
-4. Tambahkan skema dengan menjalankan file `create_full_schema.sql` di SQL editor Neon
+## Usage
 
-## Pembatasan Hak Akses
+### For Production
 
-- **Customer** tidak bisa mengakses fitur webhook atau phone pairing
-- **Customer** hanya bisa melihat session yang mereka miliki
-- **Customer** tidak bisa mengelola akun customer lain
-- **Admin** bisa melihat dan mengelola semua session, bukan hanya miliknya sendiri
-- **Admin** bisa mengatur hak akses customer
+To start the server, run:
 
-## Cara Menggunakan
-
-1. Akses URL deployment untuk membuka dashboard
-2. Login sebagai admin untuk mengelola sessions
-3. Customer dapat login ke customer dashboard dengan akun yang dibuat admin
-4. Gunakan API endpoints untuk integrasi dengan aplikasi lain
-
-## Struktur Project
-
-```
-├── backend/          # Server backend Node.js
-│   ├── config/       # Konfigurasi database
-│   ├── middleware/   # Middleware Express
-│   ├── routes/       # API routes
-│   └── server.js     # Server utama
-├── frontend/         # File-file frontend
-│   ├── api/          # API helper
-│   ├── assets/       # CSS, JS, dan gambar
-│   └── *.html        # Halaman-halaman
-├── create_full_schema.sql # Skema database
-└── vercel.json       # Konfigurasi Vercel
+```bash
+node index.js
 ```
 
-## Environment Variables
+### For Development
 
-Di file `.env` (atau di Vercel dashboard):
+To start the server with `nodemon` (which automatically restarts on file changes):
 
-```env
-# Database
-DB_HOST=your-db-host
-DB_PORT=5432
-DB_NAME=your-db-name
-DB_USER=your-db-user
-DB_PASSWORD=your-db-password
-DATABASE_URL=postgresql://user:password@host:port/dbname
-
-# API & Security
-JWT_SECRET=your-jwt-secret-key
-WA_GATEWAY_URL=http://localhost:5001
-FRONTEND_URL=https://your-project.vercel.app
-BACKEND_URL=https://your-project.vercel.app/api
-
-# Server Ports
-BACKEND_PORT=3001
-FRONTEND_PORT=5000
-
-# CORS
-ALLOWED_ORIGINS=https://your-project.vercel.app,http://localhost:3000,http://localhost:3001
+```bash
+npm run dev
 ```
 
-## API Endpoints
+The server will start on `http://localhost:3000` (or the port specified in your `PORT` environment variable).
 
-- `POST /api/auth/login` - Login untuk admin dan customer
-- `POST /api/auth/register` - Registrasi customer baru
-- `GET /api/auth/verify` - Verifikasi token
-- `GET /api/sessions` - Dapatkan daftar session
-- `POST /api/sessions` - Buat session baru
-- `GET /api/notifications` - Dapatkan notifikasi
-- `POST /api/test-notification` - Uji notifikasi WebSocket
+## 🚀 Deployment
 
-## Cara Kontribusi
+### cPanel Hosting
 
-1. Fork repository ini
-2. Buat branch fitur baru (`git checkout -b fitur-hebat`)
-3. Commit perubahan (`git commit -m 'Tambah fitur hebat'`)
-4. Push ke branch (`git push origin fitur-hebat`)
-5. Buka Pull Request
+For detailed instructions on deploying to cPanel hosting:
 
-## Lisensi
+📖 **[Complete cPanel Deployment Guide](CPANEL_DEPLOYMENT_GUIDE.md)** - Step-by-step guide for beginners
+⚡ **[cPanel Quick Start](CPANEL_QUICK_START.md)** - Quick reference for experienced users
 
-Proyek ini dilisensikan di bawah [MIT License](LICENSE).
+Key requirements for cPanel:
+- Node.js 14+ support
+- At least 1GB RAM
+- Set `MAX_SESSIONS=5` for optimal performance
+
+### Other Deployment Options
+
+- **VPS/Cloud**: Use the production scripts (`start-production.sh` or `start-production.bat`)
+- **PM2**: Configuration included in `ecosystem.config.js`
+- **Docker**: Coming soon
+
+## Admin Dashboard
+
+Access the dashboard by navigating to `/admin/dashboard.html` in your browser (e.g., `http://localhost:3000/admin/dashboard.html`).
+
+The dashboard is the central hub for managing your WhatsApp gateway. It allows you to:
+-   **Create new sessions:** Simply enter a unique ID and click "Create".
+-   **Monitor session status:** See at a glance which sessions are connected, disconnected, or require a QR scan.
+-   **Authenticate sessions:** Click "Get QR" to generate a code, then scan it with your WhatsApp mobile app.
+-   **Test all API functionality:** Use the "API Control Center" to send messages, upload files with previews, and see example API calls in real-time.
+-   **View live logs:** See a stream of events from the server to monitor activity and debug issues.
+
+## API Documentation
+
+For complete, interactive testing and usage examples, please use the **API Control Center** on the Admin Dashboard. A summary of the API structure is provided below.
+
+### Authentication
+
+All API requests to the `/api/v1/*` endpoints must be authenticated using a Bearer Token in the `Authorization` header, **except for**:
+- `POST /api/v1/sessions` - Requires Master API Key (see below) OR admin dashboard login
+- `GET /api/v1/sessions` - Lists all sessions (public information)
+
+**Session Creation Authentication:**
+- **Via API**: Requires `X-Master-Key` header with the master API key from `.env`
+- **Via Admin Dashboard**: No API key needed when logged in as admin
+
+Your session token is returned when creating a session and also displayed in the dashboard.
+
+**Header Formats:**
+- Session operations: `Authorization: Bearer <your_session_token>`
+- Create session (API): `X-Master-Key: <your_master_api_key>`
+
+*Legacy endpoints do not require authentication.*
+
+---
+
+### V1 API Endpoints
+
+**Base URL:** `/api/v1`
+
+| Method | Endpoint        | Description                                      | Auth Required |
+| :----- | :-------------- | :----------------------------------------------- | :------------ |
+| `POST` | `/sessions`     | Create a new WhatsApp session.                   | Master Key†   |
+| `GET`  | `/sessions`     | List all sessions with their status.             | No            |
+| `DELETE`| `/sessions/:sessionId` | Delete a specific session.                | Yes           |
+| `POST` | `/webhook`      | Set webhook URL for a specific session.          | Yes           |
+| `GET`  | `/webhook?sessionId=xxx` | Get webhook URL for a session.        | Yes           |
+| `DELETE`| `/webhook`     | Remove webhook URL for a session.                | Yes           |
+| `POST` | `/media`        | Upload media file (images/documents, max 25MB).  | Yes           |
+| `POST` | `/messages?sessionId=xxx` | Send text/image/document messages.    | Yes           |
+| `DELETE`| `/message`      | Delete a previously sent message.                | Yes           |
+
+† Master API Key required for API access. Admin dashboard users can create sessions without the key.
+
+*For detailed request/response formats, please refer to the `api_documentation.md` file or use the API Control Center on the dashboard.*
+
+---
+
+### Legacy API Endpoints
+
+**Base URL:** `/api`
+
+| Method | Endpoint        | Description                                      |
+| :----- | :-------------- | :----------------------------------------------- |
+| `POST` | `/send-message` | (JSON body) Send a simple text message.          |
+| `POST` | `/message`      | (Form-data body) Send a simple text message.     |
+
+## Important Notes
+
+-   **Phone Number Format:** When sending messages, use the full international phone number format (e.g., `6281234567890`) without any `+`, spaces, or leading zeros.
+-   **Session Data:** Authentication data for each session is stored in the `auth_info_baileys` directory. Deleting a session via the dashboard or API will remove its corresponding folder.
+-   **Media Storage:** Uploaded files are stored in the `media` directory in the project root.
+-   **Terms of Service:** Ensure your use of this gateway complies with WhatsApp's terms of service.
+
+## Contributions
+
+Contributions, issues, and feature requests are welcome. Please open an issue or submit a pull request.
+
+## License
+
+This project is licensed under the MIT License.

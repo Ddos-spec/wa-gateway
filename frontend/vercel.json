@@ -1,7 +1,0 @@
-{
-  "functions": {
-    "api/auth/login.js": {
-      "methods": ["POST"]
-    }
-  }
-}
