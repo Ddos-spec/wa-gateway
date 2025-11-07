@@ -152,7 +152,7 @@ app.use(
 app.use(
   "/*",
   serveStatic({
-    root: "./frontend/",
+    root: "../frontend/",
   })
 );
 
