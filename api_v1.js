@@ -767,58 +767,41 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
                 });
             }
 
-            // Initialize WhatsApp connection with phone number for pairing
-            // We'll modify the connectToWhatsApp function to accept a phone number parameter
-            const connectToWhatsAppWithPhone = require('./index').connectToWhatsApp;
-
-            // Since we can't directly access the function, we need to trigger reconnection with phone number
-            // Update session to indicate phone number for pairing
+            // Store phone number in session and update status
             session.phoneNumber = formattedPhoneNumber;
             session.status = 'REQUESTING_PAIRING';
             sessions.set(sessionId, session);
 
-            // Trigger reconnection with phone number
-            // This will be handled by the modified connectToWhatsApp function
             log(`Phone pairing initiated for ${formattedPhoneNumber}`, sessionId, {
                 event: 'phone-pair-initiated',
                 sessionId,
                 phoneNumber: formattedPhoneNumber
             });
 
-            // Start the pairing process by calling connectToWhatsApp with phone number
-            // We need to access this from the main module - let's update the session and trigger reconnection
-            const { connectToWhatsApp } = require('./index');
+            // The connectToWhatsApp function will handle the pairing process
+            // and update the session with the pairing code when ready
+            // Start the connection process
+            const connectToWhatsApp = require('./index').connectToWhatsApp;
             await connectToWhatsApp(sessionId, formattedPhoneNumber);
 
-            // Wait for the pairing code to be generated
-            let pairingAttempts = 0;
-            const maxAttempts = 10; // Wait up to 10 seconds
-
-            const waitForPairingCode = async () => {
-                return new Promise((resolve, reject) => {
-                    const checkInterval = setInterval(() => {
-                        pairingAttempts++;
-                        const currentSession = sessions.get(sessionId);
-
-                        if (currentSession && currentSession.pairingCodeFormatted) {
-                            clearInterval(checkInterval);
-                            resolve(currentSession.pairingCodeFormatted);
-                        } else if (pairingAttempts >= maxAttempts) {
-                            clearInterval(checkInterval);
-                            reject(new Error('Failed to generate pairing code'));
-                        }
-                    }, 1000);
+            // Check if pairing code was generated immediately (fast path)
+            const updatedSession = sessions.get(sessionId);
+            if (updatedSession && updatedSession.pairingCodeFormatted) {
+                res.status(200).json({
+                    status: 'success',
+                    pairingCode: updatedSession.pairingCodeFormatted,
+                    sessionId: sessionId,
+                    message: 'Enter this code in your WhatsApp app'
                 });
-            };
-
-            const pairingCode = await waitForPairingCode();
-
-            res.status(200).json({
-                status: 'success',
-                pairingCode: pairingCode,
-                sessionId: sessionId,
-                message: 'Enter this code in your WhatsApp app'
-            });
+            } else {
+                // Return success and let client poll for the code
+                res.status(202).json({
+                    status: 'success',
+                    message: 'Pairing process initiated. The pairing code will be available shortly.',
+                    sessionId: sessionId,
+                    phoneNumber: formattedPhoneNumber
+                });
+            }
 
         } catch (error) {
             log('Phone pairing error', 'SYSTEM', {
@@ -854,7 +837,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             } else {
                 res.status(500).json({
                     status: 'error',
-                    message: 'Failed to generate pairing code. Please try again.'
+                    message: 'Failed to initiate pairing. Please try again.'
                 });
             }
         }
