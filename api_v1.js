@@ -841,8 +841,50 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
                 });
             }
         }
+      });
+
+    // Endpoint to check pairing status
+    router.get('/session/:sessionId/pair-status', (req, res) => {
+        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl });
+
+        const { sessionId } = req.params;
+
+        try {
+            // Check if session exists
+            const session = sessions.get(sessionId);
+            if (!session) {
+                return res.status(404).json({
+                    status: 'error',
+                    message: 'Session not found'
+                });
+            }
+
+            const response = {
+                status: 'success',
+                sessionId: sessionId,
+                sessionStatus: session.status,
+                detail: session.detail || '',
+                phoneNumber: session.phoneNumber || null,
+                pairingCode: session.pairingCodeFormatted || null
+            };
+
+            res.status(200).json(response);
+
+        } catch (error) {
+            log('Pair status check error', 'SYSTEM', {
+                event: 'pair-status-error',
+                error: error.message,
+                endpoint: req.originalUrl,
+                sessionId
+            });
+
+            res.status(500).json({
+                status: 'error',
+                message: 'Failed to check pairing status'
+            });
+        }
     });
-    
+
     // All routes below this are protected by token
     router.use(validateToken);
 
