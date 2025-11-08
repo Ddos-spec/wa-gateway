@@ -1,0 +1,26 @@
+{
+  "pair_6285771518231_1762584547433": {
+    "sessionId": "pair_6285771518231_1762584547433",
+    "phoneNumber": "6285771518231",
+    "owner": "admin@localhost",
+    "status": "PAIRING_FAILED",
+    "detail": "Connection failed: Unauthorized",
+    "pairingCode": "X71G-VKNC",
+    "qr": "",
+    "createdAt": "2025-11-08T06:49:07.434Z",
+    "reason": "Unauthorized",
+    "updatedAt": "2025-11-08T06:49:10.578Z"
+  },
+  "pair_6285771518231_1762584992602": {
+    "sessionId": "pair_6285771518231_1762584992602",
+    "phoneNumber": "6285771518231",
+    "owner": "admin@localhost",
+    "status": "PAIRING_FAILED",
+    "detail": "Connection failed: Unauthorized",
+    "pairingCode": null,
+    "qr": "",
+    "createdAt": "2025-11-08T06:56:32.602Z",
+    "reason": "Unauthorized",
+    "updatedAt": "2025-11-08T06:56:38.341Z"
+  }
+}

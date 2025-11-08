@@ -737,14 +737,20 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
 
         try {
-            const { sessionId, isNew } = await phonePairing.createPairing(currentUser.email, phoneNumber);
-
-            // If it's a new pairing request, we need to initiate the Baileys connection
-            if (isNew) {
-                // This will create a session and start the connection process
-                // The connectToWhatsApp function will see the PENDING_REQUEST and handle pairing
-                await createSession(sessionId, currentUser.email);
+            // Find and delete any stale pairing sessions for this number to ensure a fresh start
+            const stalePairing = phonePairing.findStalePairing(phoneNumber);
+            if (stalePairing && stalePairing.sessionId) {
+                const staleSessionId = stalePairing.sessionId;
+                log(`Deleting stale pairing session ${staleSessionId} for number ${phoneNumber}.`, 'SYSTEM');
+                await deleteSession(staleSessionId); // Deletes auth folder & main session
+                phonePairing.deletePairing(staleSessionId); // Deletes from pairing_statuses.json
             }
+
+            const { sessionId } = await phonePairing.createPairing(currentUser.email, phoneNumber);
+
+            // This will create a session and start the connection process
+            // The connectToWhatsApp function will see the PENDING_REQUEST and handle pairing
+            await createSession(sessionId, currentUser.email);
 
             res.status(202).json({
                 status: 'success',

@@ -41,14 +41,6 @@ class PhonePairing {
     async createPairing(userId, phoneNumber) {
         const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
 
-        // Check for existing pending pairings for this phone number
-        for (const [sessionId, status] of this.pairingStatuses) {
-            if (status.phoneNumber === formattedPhoneNumber && status.status !== 'CONNECTED') {
-                this.log(`Pairing request already exists for ${formattedPhoneNumber}`, sessionId);
-                return { sessionId, isNew: false };
-            }
-        }
-
         const sessionId = `pair_${formattedPhoneNumber.replace(/\D/g, '')}_${Date.now()}`;
 
         const newPairing = {
@@ -92,6 +84,17 @@ class PhonePairing {
     // Get a pairing status by session ID
     getPairingStatus(sessionId) {
         return this.pairingStatuses.get(sessionId);
+    }
+
+    // Find any non-connected pairing session by phone number
+    findStalePairing(phoneNumber) {
+        const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
+        for (const [sessionId, status] of this.pairingStatuses) {
+            if (status.phoneNumber === formattedPhoneNumber && status.status !== 'CONNECTED') {
+                return status;
+            }
+        }
+        return null;
     }
 
     // Find a pending pairing session by phone number

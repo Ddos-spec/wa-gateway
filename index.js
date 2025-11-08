@@ -726,11 +726,9 @@ function updateSessionState(sessionId, status, detail, qr, reason) {
 }
 
 async function connectToWhatsApp(sessionId) {
-    // Check if it's a pairing session
     const pairingInfo = phonePairing.getPairingStatus(sessionId);
     const phoneNumber = pairingInfo ? pairingInfo.phoneNumber : null;
 
-    // Use phonePairing's update method for pairing sessions, otherwise use updateSessionState
     const updateStatus = (status, detail, qr = '', reason = '') => {
         if (pairingInfo) {
             phonePairing.updatePairingStatus(sessionId, { status, detail, qr, reason });
@@ -759,57 +757,25 @@ async function connectToWhatsApp(sessionId) {
         printQRInTerminal: false,
         logger,
         browser: Browsers.windows('Chrome'),
-        generateHighQualityLinkPreview: false, // Disable to save memory
+        generateHighQualityLinkPreview: false,
         shouldIgnoreJid: (jid) => isJidBroadcast(jid),
         qrTimeout: 30000,
-        // Memory optimization settings
-        markOnlineOnConnect: false,
-        syncFullHistory: false,
-        // Reduce message retry count
-        retryRequestDelayMs: 2000,
-        maxMsgRetryCount: 3,
-        // Connection options for stability
         connectTimeoutMs: 30000,
         keepAliveIntervalMs: 30000,
-        // Disable unnecessary features
         fireInitQueries: false,
-        emitOwnEvents: false
+        emitOwnEvents: false,
+        markOnlineOnConnect: false,
+        syncFullHistory: false,
+        retryRequestDelayMs: 2000,
+        maxMsgRetryCount: 3,
     });
 
-    // Handle phone number pairing if it's a pending request
-    if (pairingInfo && pairingInfo.status === 'PENDING_REQUEST' && !state.creds.registered) {
-        try {
-            log(`Requesting pairing code for ${phoneNumber}...`, sessionId);
-            updateStatus('AWAITING_PAIRING', 'Requesting pairing code...');
-
-            const pairingCode = await sock.requestPairingCode(phoneNumber);
-            const formattedCode = pairingCode.slice(0, 4) + '-' + pairingCode.slice(4);
-
-            log(`Pairing code generated: ${formattedCode}`, sessionId);
-            // Update the persistent pairing status
-            phonePairing.updatePairingStatus(sessionId, {
-                status: 'AWAITING_PAIRING',
-                detail: `Enter this code in WhatsApp: ${formattedCode}`,
-                pairingCode: formattedCode
-            });
-            // Also update the in-memory session for immediate UI feedback
-            updateSessionState(sessionId, 'AWAITING_PAIRING', `Enter this code in WhatsApp: ${formattedCode}`, '', '');
-
-        } catch (error) {
-            log(`Failed to request pairing code: ${error.message}`, sessionId);
-            updateStatus('PAIRING_FAILED', `Failed to get pairing code: ${error.message}`);
-            // Fallback to QR code on pairing failure
-            updateSessionState(sessionId, 'GENERATING_QR', 'Pairing failed - QR code available.', '', '');
-        }
-    }
-    
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         if (!msg.key.fromMe) {
             log(`Received new message from ${msg.key.remoteJid}`, sessionId);
-
             const messageData = {
                 event: 'new-message',
                 sessionId,
@@ -822,20 +788,64 @@ async function connectToWhatsApp(sessionId) {
         }
     });
 
-    sock.ev.on('connection.update', (update) => {
-      const { connection, lastDisconnect, qr } = update;
-        const statusCode = (lastDisconnect?.error instanceof Boom) ? lastDisconnect.error.output.statusCode : 0;
+    sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect, qr } = update;
 
-        log(`Connection update: ${connection}, status code: ${statusCode}`, sessionId);
-
-      if (qr) {
+        if (qr) {
             log('QR code generated.', sessionId);
             updateStatus('GENERATING_QR', 'QR code available.', qr);
         }
 
+        if (connection === 'open') {
+            log(`Connection is now open for ${sessionId}.`);
+            
+            if (pairingInfo && pairingInfo.status === 'PENDING_REQUEST' && !state.creds.registered) {
+                try {
+                    log(`Requesting pairing code for ${phoneNumber}...`, sessionId);
+                    updateStatus('AWAITING_PAIRING', 'Requesting pairing code...');
+
+                    const pairingCode = await sock.requestPairingCode(phoneNumber);
+                    const formattedCode = pairingCode.slice(0, 4) + '-' + pairingCode.slice(4);
+                    log(`Pairing code generated: ${formattedCode}`, sessionId);
+
+                    phonePairing.updatePairingStatus(sessionId, {
+                        status: 'AWAITING_PAIRING',
+                        detail: `Enter this code in WhatsApp: ${formattedCode}`,
+                        pairingCode: formattedCode
+                    });
+                    updateSessionState(sessionId, 'AWAITING_PAIRING', `Enter this code in WhatsApp: ${formattedCode}`, '', '');
+
+                } catch (error) {
+                    log(`Failed to request pairing code: ${error.message}`, sessionId, { error });
+                    updateStatus('PAIRING_FAILED', `Failed to get pairing code: ${error.message}`);
+                    updateSessionState(sessionId, 'GENERATING_QR', 'Pairing failed - QR code available.', '', '');
+                }
+            }
+
+            let detailMessage = `Connected as ${sock.user?.name || 'Unknown'}`;
+            if (pairingInfo && pairingInfo.status.includes('AWAITING')) {
+                detailMessage = `Phone number ${pairingInfo.phoneNumber} successfully paired!`;
+                phonePairing.updatePairingStatus(sessionId, {
+                    status: 'CONNECTED',
+                    detail: detailMessage
+                });
+                postToWebhook({
+                    event: 'phone-pair-success',
+                    sessionId,
+                    phoneNumber: pairingInfo.phoneNumber,
+                    message: 'Phone number successfully paired.'
+                });
+                setTimeout(() => {
+                    phonePairing.deletePairing(sessionId);
+                }, 60000);
+            }
+            updateStatus('CONNECTED', detailMessage, '', '');
+        }
+
         if (connection === 'close') {
+            const statusCode = (lastDisconnect?.error instanceof Boom) ? lastDisconnect.error.output.statusCode : 0;
             const reason = new Boom(lastDisconnect?.error)?.output?.payload?.error || 'Unknown';
-            const shouldReconnect = statusCode !== 401 && statusCode !== 403;
+            const shouldReconnect = statusCode !== 401 && statusCode !== 403 && statusCode !== 428;
 
             log(`Connection closed. Reason: ${reason}, statusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`, sessionId);
             updateStatus('DISCONNECTED', 'Connection closed.', '', reason);
@@ -844,53 +854,21 @@ async function connectToWhatsApp(sessionId) {
                 setTimeout(() => connectToWhatsApp(sessionId), 5000);
             } else {
                 log(`Not reconnecting for session ${sessionId} due to fatal error.`, sessionId);
-                // If it was a pairing session, mark it as failed
                 if (pairingInfo) {
                     phonePairing.updatePairingStatus(sessionId, {
                         status: 'PAIRING_FAILED',
                         detail: `Connection failed: ${reason}`
                     });
                 }
-                 const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
-                 if (fs.existsSync(sessionDir)) {
+                const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
+                if (fs.existsSync(sessionDir)) {
                     fs.rmSync(sessionDir, { recursive: true, force: true });
                     log(`Cleared session data for ${sessionId}`, sessionId);
-                 }
+                }
             }
-        } else if (connection === 'open') {
-            log('Connection opened.', sessionId);
-
-            let detailMessage = `Connected as ${sock.user?.name || 'Unknown'}`;
-
-            // If this was a pairing session, finalize it
-            if (pairingInfo && pairingInfo.status.includes('AWAITING')) {
-                detailMessage = `Phone number ${pairingInfo.phoneNumber} successfully paired!`;
-
-                // Update pairing status to CONNECTED
-                phonePairing.updatePairingStatus(sessionId, {
-                    status: 'CONNECTED',
-                    detail: detailMessage
-                });
-
-                // Send webhook notification
-                postToWebhook({
-                    event: 'phone-pair-success',
-                    sessionId,
-                    phoneNumber: pairingInfo.phoneNumber,
-                    message: 'Phone number successfully paired.'
-                });
-
-                // Optional: Clean up the successful pairing entry after a delay
-                setTimeout(() => {
-                    phonePairing.deletePairing(sessionId);
-                }, 60000); // Clean up after 1 minute
-            }
-
-            updateStatus('CONNECTED', detailMessage, '', '');
         }
     });
 
-    // Ensure session exists before setting sock property
     const session = sessions.get(sessionId);
     if (session) {
         session.sock = sock;

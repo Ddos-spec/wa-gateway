@@ -242,7 +242,7 @@
                      <div class="d-flex align-items-center">
                         <input type="text" id="sessionIdInput" class="form-control me-2" placeholder="Create New Session ID">
                         <button id="createSessionBtn" class="btn btn-primary me-2">Create</button>
-                        <a href="/admin/pair-phone.html" class="btn btn-success">Pair Phone Number</a>
+                        <button id="pairPhoneBtn" class="btn btn-success">Pair Phone Number</button>
     </div>
   </div>
                 <div class="card-body">
@@ -2084,19 +2084,55 @@ function copyCurl(id, btn) {
       // Set default user ID from current user
       pairUserId.value = document.getElementById('currentUser').textContent.trim() || '';
       
+      let pollingInterval = null;
+
+      function startPolling(sessionId) {
+        if (pollingInterval) clearInterval(pollingInterval);
+
+        // Show a waiting message
+        pairResult.style.display = 'block';
+        pairCodeDisplay.innerHTML = `<div class="spinner-border spinner-border-sm" role="status"></div> Waiting for code...`;
+
+        pollingInterval = setInterval(async () => {
+          try {
+            const response = await fetch(`/api/v1/session/${sessionId}/pair-status`);
+            if (!response.ok) {
+              clearInterval(pollingInterval);
+              throw new Error(`Polling failed with status ${response.status}`);
+            }
+            const data = await response.json();
+
+            // If pairing code is available, display it
+            if (data.pairingCode) {
+              clearInterval(pollingInterval);
+              pairCodeDisplay.innerHTML = `<strong>${data.pairingCode}</strong>`;
+            } else if (data.sessionStatus === 'CONNECTED' || data.sessionStatus === 'PAIRING_FAILED') {
+              // Stop polling if the session is already connected or failed
+              clearInterval(pollingInterval);
+              pairCodeDisplay.textContent = data.detail || 'Pairing process ended.';
+            }
+          } catch (error) {
+            console.error('Polling error:', error);
+            pairCodeDisplay.textContent = 'Error fetching status.';
+            clearInterval(pollingInterval);
+          }
+        }, 2000); // Poll every 2 seconds
+      }
+
       // Show modal when button is clicked
       pairPhoneBtn.addEventListener('click', function() {
         pairResult.style.display = 'none';
+        pairCodeDisplay.innerHTML = ''; // Clear previous results
+        if (pollingInterval) clearInterval(pollingInterval); // Stop any previous polling
         pairPhoneModal.show();
       });
       
       // Handle form submission
       submitPairBtn.addEventListener('click', async function() {
-        const userId = pairUserId.value.trim();
         const phoneNumber = pairPhoneNumber.value.trim();
         
-        if (!userId || !phoneNumber) {
-          alert('Please fill in both User ID and Phone Number');
+        if (!phoneNumber) {
+          alert('Please fill in the Phone Number');
           return;
         }
         
@@ -2105,37 +2141,31 @@ function copyCurl(id, btn) {
         
         try {
           submitPairBtn.disabled = true;
-          submitPairBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+          submitPairBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Initiating...';
           
-          const response = await fetch('/api/v1/pair-phone', {
+          const response = await fetch('/api/v1/session/pair-phone', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
+            credentials: 'same-origin', // Required to send session cookie
             body: JSON.stringify({
-              userId: userId,
               phoneNumber: formattedPhone
             })
           });
           
-          if (response.status === 409) {
-            alert('This phone number is already paired with this user. Please use a different number or delete the existing pairing first.');
-            return;
-          }
-          
           if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorData = await response.json();
+            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
           }
           
           const data = await response.json();
           
-          if (data.pairCode) {
-            pairCodeDisplay.textContent = data.pairCode;
-            pairResult.style.display = 'block';
-            // Auto-select the generated code to make it easier to copy
-            pairCodeDisplay.select && pairCodeDisplay.select();
+          if (data.sessionId) {
+            // Start polling for the pairing code
+            startPolling(data.sessionId);
           } else {
-            throw new Error('Pair code not returned from server');
+            throw new Error('Session ID not returned from server');
           }
         } catch (error) {
           console.error('Pair phone error:', error);
