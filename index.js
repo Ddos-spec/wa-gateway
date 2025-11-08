@@ -552,9 +552,6 @@ const legacyApiRouter = initializeLegacyApi(sessions, sessionTokens);
 app.use('/api/v1', v1ApiRouter);
 app.use('/api', legacyApiRouter); // Mount legacy routes at /api
 
-// Export connectToWhatsApp for use in API
-module.exports.connectToWhatsApp = connectToWhatsApp;
-
 // Set up campaign sender event listeners for WebSocket updates
 if (v1ApiRouter.campaignSender) {
     v1ApiRouter.campaignSender.on('progress', (data) => {
