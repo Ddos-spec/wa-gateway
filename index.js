@@ -759,12 +759,7 @@ async function connectToWhatsApp(sessionId, phoneNumber = null) {
         keepAliveIntervalMs: 30000,
         // Disable unnecessary features
         fireInitQueries: false,
-        emitOwnEvents: false,
-        // Add pairing code support
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, logger),
-        }
+        emitOwnEvents: false
     });
 
     // Handle phone number pairing if provided
