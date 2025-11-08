@@ -1,128 +1,137 @@
-const { randomBytes } = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { formatPhoneNumber } = require('./phone-utils');
 
+const PAIRING_STATUS_FILE = path.join(__dirname, 'pairing_statuses.json');
+
 class PhonePairing {
-    constructor(sessions, sessionTokens, log) {
-        this.sessions = sessions;
-        this.sessionTokens = sessionTokens;
+    constructor(log) {
         this.log = log;
+        this.pairingStatuses = new Map();
+        this.loadPairingStatuses();
     }
 
-    // Generate 8-character alphanumeric pairing code
-    generatePairCode() {
-        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        let result = '';
-        for (let i = 0; i < 8; i++) {
-            result += characters.charAt(Math.floor(Math.random() * characters.length));
+    // Load pairing statuses from JSON file
+    loadPairingStatuses() {
+        try {
+            if (fs.existsSync(PAIRING_STATUS_FILE)) {
+                const data = fs.readFileSync(PAIRING_STATUS_FILE, 'utf-8');
+                const statuses = JSON.parse(data);
+                for (const [sessionId, status] of Object.entries(statuses)) {
+                    this.pairingStatuses.set(sessionId, status);
+                }
+                this.log('Loaded pairing statuses from file.');
+            }
+        } catch (error) {
+            this.log(`Error loading pairing statuses: ${error.message}`, 'ERROR');
         }
-        return result;
     }
 
-    async pairPhone(userId, phoneNumber) {
-        // Format phone number to international format with +62 prefix
+    // Save pairing statuses to JSON file
+    savePairingStatuses() {
+        try {
+            const statuses = Object.fromEntries(this.pairingStatuses);
+            fs.writeFileSync(PAIRING_STATUS_FILE, JSON.stringify(statuses, null, 2), 'utf-8');
+        } catch (error) {
+            this.log(`Error saving pairing statuses: ${error.message}`, 'ERROR');
+        }
+    }
+
+    // Create a new pairing request
+    async createPairing(userId, phoneNumber) {
         const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
 
-        // Cek apakah kombinasi userId dan phoneNumber sudah ada dalam sessions
-        for (let [sessionId, session] of this.sessions) {
-            if (session.owner && session.phoneNumber && session.owner === userId && session.phoneNumber === formattedPhoneNumber) {
-                throw new Error('Phone number already paired with this user');
+        // Check for existing pending pairings for this phone number
+        for (const [sessionId, status] of this.pairingStatuses) {
+            if (status.phoneNumber === formattedPhoneNumber && status.status !== 'CONNECTED') {
+                this.log(`Pairing request already exists for ${formattedPhoneNumber}`, sessionId);
+                return { sessionId, isNew: false };
             }
         }
 
-        // Generate 8-character pairing code
-        const pairCode = this.generatePairCode();
         const sessionId = `pair_${formattedPhoneNumber.replace(/\D/g, '')}_${Date.now()}`;
 
-        // Simpan data pairing dalam sessions (seperti session biasa)
-        this.sessions.set(sessionId, {
+        const newPairing = {
             sessionId: sessionId,
             phoneNumber: formattedPhoneNumber,
             owner: userId,
-            status: 'PENDING_PAIR',
-            detail: 'Awaiting phone confirmation',
-            pairCode: pairCode,
+            status: 'PENDING_REQUEST',
+            detail: 'Awaiting Baileys connection to request pairing code.',
+            pairingCode: null,
             qr: null,
             createdAt: new Date().toISOString()
-        });
+        };
 
-        // Simpan juga token pairing
-        this.sessionTokens.set(sessionId, pairCode);
+        this.pairingStatuses.set(sessionId, newPairing);
+        this.savePairingStatuses();
 
         this.log(`Phone pairing created for ${formattedPhoneNumber}`, sessionId);
-
-        return { pairCode, sessionId };
+        return { sessionId, isNew: true };
     }
 
-    validatePairCode(pairCode) {
-        // Cari session berdasarkan pairCode
-        for (let [sessionId, session] of this.sessions) {
-            if (session.pairCode === pairCode && session.status === 'PENDING_PAIR') {
-                return { sessionId, phoneNumber: session.phoneNumber, owner: session.owner };
-            }
+    // Update the status of a pairing
+    updatePairingStatus(sessionId, updates) {
+        if (!this.pairingStatuses.has(sessionId)) {
+            this.log(`Attempted to update non-existent pairing session: ${sessionId}`, 'ERROR');
+            return;
         }
 
+        const currentStatus = this.pairingStatuses.get(sessionId);
+        
+        const updatedStatus = {
+            ...currentStatus,
+            ...updates,
+            updatedAt: new Date().toISOString()
+        };
+
+        this.pairingStatuses.set(sessionId, updatedStatus);
+        this.savePairingStatuses();
+        this.log(`Pairing status updated for ${sessionId}: ${updates.status || currentStatus.status}`);
+    }
+
+    // Get a pairing status by session ID
+    getPairingStatus(sessionId) {
+        return this.pairingStatuses.get(sessionId);
+    }
+
+    // Find a pending pairing session by phone number
+    findPendingPairingByPhone(phoneNumber) {
+        const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
+        for (const [sessionId, status] of this.pairingStatuses) {
+            if (status.phoneNumber === formattedPhoneNumber && status.status === 'PENDING_REQUEST') {
+                return status;
+            }
+        }
         return null;
     }
 
-    // Method to validate an incoming message as a pairing code
-    validateIncomingMessage(message, senderJid) {
-        // Extract phone number from sender JID (format: 1234567890@s.whatsapp.net)
-        const senderPhoneNumber = senderJid.split('@')[0];
-        
-        // Get the message text (for text messages)
-        let messageText = '';
-        if (message.message && message.message.conversation) {
-            messageText = message.message.conversation;
-        } else if (message.message && message.message.extendedTextMessage && message.message.extendedTextMessage.text) {
-            messageText = message.message.extendedTextMessage.text;
-        }
-
-        // Trim and uppercase the message text for comparison
-        messageText = messageText.trim().toUpperCase();
-
-        // Check if the message text matches any pending pairing code
-        for (let [sessionId, session] of this.sessions) {
-            if (session.status === 'PENDING_PAIR' && 
-                session.pairCode === messageText && 
-                session.phoneNumber.endsWith(senderPhoneNumber)) {
-                
-                // Valid pairing code received
-                this.log(`Valid pairing code received from ${senderJid} for session ${sessionId}`, sessionId);
-                
-                // Update session status to PAIRED
-                session.status = 'PAIRED';
-                session.detail = 'Phone number successfully paired';
-                this.sessions.set(sessionId, session);
-
-                return {
-                    success: true,
-                    sessionId: sessionId,
-                    phoneNumber: session.phoneNumber,
-                    owner: session.owner
-                };
-            }
-        }
-
-        return {
-            success: false,
-            message: 'Invalid or expired pairing code'
-        };
-    }
-
-    getPairingByUserId(userId) {
+    // Get all pairings for a specific user
+    getPairingsByUserId(userId) {
         const pairings = [];
-        for (let [sessionId, session] of this.sessions) {
-            if (session.owner === userId && session.status && session.status.includes('PAIR')) {
+        for (let [sessionId, session] of this.pairingStatuses) {
+            if (session.owner === userId) {
                 pairings.push({
                     sessionId: sessionId,
                     phoneNumber: `+${session.phoneNumber}`, // Display with + prefix
                     status: session.status,
                     detail: session.detail,
+                    pairingCode: session.pairingCode,
                     createdAt: session.createdAt
                 });
             }
         }
         return pairings;
+    }
+
+    // Remove a pairing from the system
+    deletePairing(sessionId) {
+        if (this.pairingStatuses.has(sessionId)) {
+            this.pairingStatuses.delete(sessionId);
+            this.savePairingStatuses();
+            this.log(`Pairing data for session ${sessionId} has been deleted.`);
+            return true;
+        }
+        return false;
     }
 }
 
