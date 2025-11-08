@@ -30,7 +30,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger) {
+function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing) {
 
     // Security middlewares
     router.use(helmet());
@@ -724,13 +724,11 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         if (!phoneNumber) {
             return res.status(400).json({
                 status: 'error',
-                message: 'phoneNumber are required'
+                message: 'phoneNumber is required'
             });
         }
-        const sessionId = `${currentUser.email}_${phoneNumber}`.replace(/[^a-zA-Z0-9_-]/g, '');
 
         // Validate phone number format
-        const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
         if (!isValidPhoneNumber(phoneNumber)) {
             return res.status(400).json({
                 status: 'error',
@@ -739,102 +737,35 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
 
         try {
-            // If session does not exist, create it
-            if (!sessions.has(sessionId)) {
+            const { sessionId, isNew } = await phonePairing.createPairing(currentUser.email, phoneNumber);
+
+            // If it's a new pairing request, we need to initiate the Baileys connection
+            if (isNew) {
+                // This will create a session and start the connection process
+                // The connectToWhatsApp function will see the PENDING_REQUEST and handle pairing
                 await createSession(sessionId, currentUser.email);
             }
-            const session = sessions.get(sessionId);
 
-            // Check if session is already connected or in pairing process
-            if (session.status === 'CONNECTED') {
-                return res.status(409).json({
-                    status: 'error',
-                    message: 'Session is already connected'
-                });
-            }
-
-            if (session.status === 'AWAITING_PAIRING') {
-                return res.status(409).json({
-                    status: 'error',
-                    message: 'Pairing already in progress for this session'
-                });
-            }
-
-            // Store phone number in session and update status
-            session.phoneNumber = formattedPhoneNumber;
-            session.status = 'REQUESTING_PAIRING';
-            sessions.set(sessionId, session);
-
-            log(`Phone pairing initiated for ${formattedPhoneNumber}`, sessionId, {
-                event: 'phone-pair-initiated',
-                sessionId,
-                phoneNumber: formattedPhoneNumber
+            res.status(202).json({
+                status: 'success',
+                message: 'Pairing process initiated. Please check the session status for updates.',
+                sessionId: sessionId
             });
-
-            // The connectToWhatsApp function will handle the pairing process
-            // and update the session with the pairing code when ready
-            // Start the connection process
-            const connectToWhatsApp = require('./index').connectToWhatsApp;
-            await connectToWhatsApp(sessionId, formattedPhoneNumber);
-
-            // Check if pairing code was generated immediately (fast path)
-            const updatedSession = sessions.get(sessionId);
-            if (updatedSession && updatedSession.pairingCodeFormatted) {
-                res.status(200).json({
-                    status: 'success',
-                    pairingCode: updatedSession.pairingCodeFormatted,
-                    sessionId: sessionId,
-                    message: 'Enter this code in your WhatsApp app'
-                });
-            } else {
-                // Return success and let client poll for the code
-                res.status(202).json({
-                    status: 'success',
-                    message: 'Pairing process initiated. The pairing code will be available shortly.',
-                    sessionId: sessionId,
-                    phoneNumber: formattedPhoneNumber
-                });
-            }
 
         } catch (error) {
             log('Phone pairing error', 'SYSTEM', {
                 event: 'phone-pair-error',
                 error: error.message,
                 endpoint: req.originalUrl,
-                sessionId,
-                phoneNumber: formattedPhoneNumber
+                phoneNumber: phoneNumber
             });
 
-            // Update session status to indicate failure
-            const currentSession = sessions.get(sessionId);
-            if (currentSession) {
-                currentSession.status = 'PAIRING_FAILED';
-                sessions.set(sessionId, currentSession);
-            }
-
-            if (error.message.includes('already')) {
-                res.status(409).json({
-                    status: 'error',
-                    message: 'Phone number already paired with this session'
-                });
-            } else if (error.message.includes('not found')) {
-                res.status(404).json({
-                    status: 'error',
-                    message: 'Session not found'
-                });
-            } else if (error.message.includes('Invalid phone number')) {
-                res.status(400).json({
-                    status: 'error',
-                    message: 'Invalid phone number format'
-                });
-            } else {
-                res.status(500).json({
-                    status: 'error',
-                    message: 'Failed to initiate pairing. Please try again.'
-                });
-            }
+            res.status(500).json({
+                status: 'error',
+                message: 'Failed to initiate pairing. Please try again.'
+            });
         }
-      });
+    });
 
     // Endpoint to check pairing status
     router.get('/session/:sessionId/pair-status', (req, res) => {
@@ -843,25 +774,36 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         const { sessionId } = req.params;
 
         try {
-            // Check if session exists
-            const session = sessions.get(sessionId);
-            if (!session) {
+            const pairingStatus = phonePairing.getPairingStatus(sessionId);
+
+            if (!pairingStatus) {
+                // Also check regular sessions for non-pairing statuses
+                const regularSession = sessions.get(sessionId);
+                if (regularSession) {
+                    return res.status(200).json({
+                        status: 'success',
+                        sessionId: sessionId,
+                        sessionStatus: regularSession.status,
+                        detail: regularSession.detail || '',
+                        phoneNumber: regularSession.phoneNumber || null,
+                        pairingCode: null // No pairing code for regular sessions
+                    });
+                }
+
                 return res.status(404).json({
                     status: 'error',
-                    message: 'Session not found'
+                    message: 'Session or pairing request not found'
                 });
             }
 
-            const response = {
+            res.status(200).json({
                 status: 'success',
                 sessionId: sessionId,
-                sessionStatus: session.status,
-                detail: session.detail || '',
-                phoneNumber: session.phoneNumber || null,
-                pairingCode: session.pairingCodeFormatted || null
-            };
-
-            res.status(200).json(response);
+                sessionStatus: pairingStatus.status,
+                detail: pairingStatus.detail || '',
+                phoneNumber: pairingStatus.phoneNumber || null,
+                pairingCode: pairingStatus.pairingCode || null
+            });
 
         } catch (error) {
             log('Pair status check error', 'SYSTEM', {
