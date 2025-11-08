@@ -9,7 +9,7 @@ const rateLimit = require('express-rate-limit');
 const csurf = require('csurf');
 const validator = require('validator');
 const PhonePairing = require('./phone-pairing');
-const { formatPhoneNumber, toWhatsAppFormat } = require('./phone-utils');
+const { formatPhoneNumber, toWhatsAppFormat, isValidPhoneNumber } = require('./phone-utils');
 // Remove: const { log } = require('./index');
 
 const router = express.Router();
