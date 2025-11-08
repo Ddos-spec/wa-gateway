@@ -8,8 +8,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const csurf = require('csurf');
 const validator = require('validator');
-const PhonePairing = require('./phone-pairing');
-const { formatPhoneNumber, toWhatsAppFormat } = require('./phone-utils');
+const { formatPhoneNumber, toWhatsAppFormat, isValidPhoneNumber } = require('./phone-utils');
 // Remove: const { log } = require('./index');
 
 const router = express.Router();
@@ -32,11 +31,6 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger) {
-    // Initialize Phone Pairing
-    const phonePairing = new PhonePairing(sessions, sessionTokens, log);
-    
-    // Make phonePairing globally accessible for message processing
-    global.phonePairing = phonePairing;
 
     // Security middlewares
     router.use(helmet());
@@ -720,124 +714,171 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         res.json(debugInfo);
     });
 
-    // Phone Pairing Endpoints
-    router.post('/pair-phone', async (req, res) => {
+    // Official WhatsApp Phone Pairing Endpoint
+    router.post('/session/pair-phone', async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
 
-        const { userId, phoneNumber } = req.body;
+        const { sessionId, phoneNumber } = req.body;
 
-        if (!userId || !phoneNumber) {
+        if (!sessionId || !phoneNumber) {
             return res.status(400).json({
                 status: 'error',
-                message: 'userId and phoneNumber are required'
+                message: 'sessionId and phoneNumber are required'
+            });
+        }
+
+        // Validate phone number format
+        const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
+        if (!isValidPhoneNumber(phoneNumber)) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Invalid phone number format. Use international format (e.g., 628123456789)'
             });
         }
 
         try {
-            const result = await phonePairing.pairPhone(userId, phoneNumber);
-            log(`Phone pairing initiated for ${phoneNumber}`, 'SYSTEM', {
+            // Check if session exists
+            const session = sessions.get(sessionId);
+            if (!session) {
+                return res.status(404).json({
+                    status: 'error',
+                    message: 'Session not found'
+                });
+            }
+
+            // Check if session is already connected or in pairing process
+            if (session.status === 'CONNECTED') {
+                return res.status(409).json({
+                    status: 'error',
+                    message: 'Session is already connected'
+                });
+            }
+
+            if (session.status === 'AWAITING_PAIRING') {
+                return res.status(409).json({
+                    status: 'error',
+                    message: 'Pairing already in progress for this session'
+                });
+            }
+
+            // Store phone number in session and update status
+            session.phoneNumber = formattedPhoneNumber;
+            session.status = 'REQUESTING_PAIRING';
+            sessions.set(sessionId, session);
+
+            log(`Phone pairing initiated for ${formattedPhoneNumber}`, sessionId, {
                 event: 'phone-pair-initiated',
-                userId,
-                phoneNumber,
-                sessionId: result.sessionId
+                sessionId,
+                phoneNumber: formattedPhoneNumber
             });
 
-            res.status(200).json({
-                status: 'success',
-                pairCode: result.pairCode,
-                sessionId: result.sessionId
-            });
+            // The connectToWhatsApp function will handle the pairing process
+            // and update the session with the pairing code when ready
+            // Start the connection process
+            const connectToWhatsApp = require('./index').connectToWhatsApp;
+            await connectToWhatsApp(sessionId, formattedPhoneNumber);
+
+            // Check if pairing code was generated immediately (fast path)
+            const updatedSession = sessions.get(sessionId);
+            if (updatedSession && updatedSession.pairingCodeFormatted) {
+                res.status(200).json({
+                    status: 'success',
+                    pairingCode: updatedSession.pairingCodeFormatted,
+                    sessionId: sessionId,
+                    message: 'Enter this code in your WhatsApp app'
+                });
+            } else {
+                // Return success and let client poll for the code
+                res.status(202).json({
+                    status: 'success',
+                    message: 'Pairing process initiated. The pairing code will be available shortly.',
+                    sessionId: sessionId,
+                    phoneNumber: formattedPhoneNumber
+                });
+            }
+
         } catch (error) {
             log('Phone pairing error', 'SYSTEM', {
                 event: 'phone-pair-error',
                 error: error.message,
-                endpoint: req.originalUrl
+                endpoint: req.originalUrl,
+                sessionId,
+                phoneNumber: formattedPhoneNumber
             });
 
-            if (error.message === 'Phone number already paired with this user') {
+            // Update session status to indicate failure
+            const currentSession = sessions.get(sessionId);
+            if (currentSession) {
+                currentSession.status = 'PAIRING_FAILED';
+                sessions.set(sessionId, currentSession);
+            }
+
+            if (error.message.includes('already')) {
                 res.status(409).json({
                     status: 'error',
-                    message: error.message
+                    message: 'Phone number already paired with this session'
+                });
+            } else if (error.message.includes('not found')) {
+                res.status(404).json({
+                    status: 'error',
+                    message: 'Session not found'
+                });
+            } else if (error.message.includes('Invalid phone number')) {
+                res.status(400).json({
+                    status: 'error',
+                    message: 'Invalid phone number format'
                 });
             } else {
                 res.status(500).json({
                     status: 'error',
-                    message: 'Internal server error'
+                    message: 'Failed to initiate pairing. Please try again.'
                 });
             }
         }
-    });
+      });
 
-    // Endpoint to validate pair code (for confirmation)
-    router.post('/validate-pair-code', (req, res) => {
-        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
+    // Endpoint to check pairing status
+    router.get('/session/:sessionId/pair-status', (req, res) => {
+        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl });
 
-        const { pairCode } = req.body;
-
-        if (!pairCode) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'pairCode is required'
-            });
-        }
+        const { sessionId } = req.params;
 
         try {
-            const pairing = phonePairing.validatePairCode(pairCode);
-
-            if (!pairing) {
+            // Check if session exists
+            const session = sessions.get(sessionId);
+            if (!session) {
                 return res.status(404).json({
                     status: 'error',
-                    message: 'Invalid or expired pair code'
+                    message: 'Session not found'
                 });
             }
 
-            res.status(200).json({
+            const response = {
                 status: 'success',
-                sessionId: pairing.sessionId,
-                phoneNumber: pairing.phoneNumber
-            });
+                sessionId: sessionId,
+                sessionStatus: session.status,
+                detail: session.detail || '',
+                phoneNumber: session.phoneNumber || null,
+                pairingCode: session.pairingCodeFormatted || null
+            };
+
+            res.status(200).json(response);
+
         } catch (error) {
-            log('Validate pair code error', 'SYSTEM', {
-                event: 'validate-pair-code-error',
+            log('Pair status check error', 'SYSTEM', {
+                event: 'pair-status-error',
                 error: error.message,
-                endpoint: req.originalUrl
+                endpoint: req.originalUrl,
+                sessionId
             });
 
             res.status(500).json({
                 status: 'error',
-                message: 'Internal server error'
+                message: 'Failed to check pairing status'
             });
         }
     });
 
-    // Endpoint to get current user's pairings
-    router.get('/my-pairings', checkCampaignAccess, (req, res) => {
-        const currentUser = req.session && req.session.adminAuthed ? {
-            email: req.session.userEmail,
-            role: req.session.userRole
-        } : null;
-
-        if (!currentUser) {
-            return res.status(401).json({ status: 'error', message: 'Authentication required' });
-        }
-
-        try {
-            const pairings = phonePairing.getPairingByUserId(currentUser.email);
-            res.json(pairings);
-        } catch (error) {
-            log('Get pairings error', 'SYSTEM', {
-                event: 'get-pairings-error',
-                error: error.message,
-                endpoint: req.originalUrl
-            });
-
-            res.status(500).json({
-                status: 'error',
-                message: 'Internal server error'
-            });
-        }
-    });
-    
     // All routes below this are protected by token
     router.use(validateToken);
 

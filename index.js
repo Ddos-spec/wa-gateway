@@ -723,7 +723,7 @@ function updateSessionState(sessionId, status, detail, qr, reason) {
     });
 }
 
-async function connectToWhatsApp(sessionId) {
+async function connectToWhatsApp(sessionId, phoneNumber = null) {
     updateSessionState(sessionId, 'CONNECTING', 'Initializing session...', '', '');
     log('Starting session...', sessionId);
 
@@ -731,7 +731,7 @@ async function connectToWhatsApp(sessionId) {
     if (!fs.existsSync(sessionDir)) {
         fs.mkdirSync(sessionDir, { recursive: true });
     }
-    
+
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     const { version, isLatest } = await fetchLatestBaileysVersion();
     log(`Using WA version: ${version.join('.')}, isLatest: ${isLatest}`, sessionId);
@@ -761,6 +761,45 @@ async function connectToWhatsApp(sessionId) {
         fireInitQueries: false,
         emitOwnEvents: false
     });
+
+    // Handle phone number pairing if provided
+    if (phoneNumber && !state.creds.registered) {
+        try {
+            log(`Requesting pairing code for ${phoneNumber}...`, sessionId);
+            updateSessionState(sessionId, 'AWAITING_PAIRING', 'Requesting pairing code...', '', '');
+
+            const pairingCode = await sock.requestPairingCode(phoneNumber);
+
+            // Format the 8-digit code with dash (XXXX-XXXX)
+            const formattedCode = pairingCode.slice(0, 4) + '-' + pairingCode.slice(4);
+
+            log(`Pairing code generated: ${formattedCode}`, sessionId);
+            updateSessionState(sessionId, 'AWAITING_PAIRING', `Enter this code in WhatsApp: ${formattedCode}`, '', '');
+
+            // Store pairing info in session
+            const session = sessions.get(sessionId);
+            if (session) {
+                session.pairingCode = pairingCode;
+                session.phoneNumber = phoneNumber;
+                session.pairingCodeFormatted = formattedCode;
+                sessions.set(sessionId, session);
+            }
+
+            // Set pairing timeout (30 seconds)
+            setTimeout(() => {
+                const currentSession = sessions.get(sessionId);
+                if (currentSession && currentSession.status === 'AWAITING_PAIRING') {
+                    log('Pairing timeout, falling back to QR code', sessionId);
+                    updateSessionState(sessionId, 'GENERATING_QR', 'Pairing timeout - QR code available.', '', '');
+                }
+            }, 30000);
+
+        } catch (error) {
+            log(`Failed to request pairing code: ${error.message}`, sessionId);
+            // Fallback to QR code on pairing failure
+            updateSessionState(sessionId, 'GENERATING_QR', 'Pairing failed - QR code available.', '', '');
+        }
+    }
     
     sock.ev.on('creds.update', saveCreds);
 
@@ -768,27 +807,6 @@ async function connectToWhatsApp(sessionId) {
         const msg = m.messages[0];
         if (!msg.key.fromMe) {
             log(`Received new message from ${msg.key.remoteJid}`, sessionId);
-
-            // Check if this is a pairing code message
-            if (global.phonePairing) {
-                const pairingResult = global.phonePairing.validateIncomingMessage(msg, msg.key.remoteJid);
-                if (pairingResult.success) {
-                    log(`Successfully paired phone number ${pairingResult.phoneNumber} for session ${pairingResult.sessionId}`, pairingResult.sessionId);
-                    
-                    // Update session state to reflect the pairing
-                    updateSessionState(pairingResult.sessionId, 'PAIRED', 'Phone number successfully paired', '', '');
-                    
-                    // Send success notification to webhook
-                    await postToWebhook({
-                        event: 'phone-pair-success',
-                        sessionId: pairingResult.sessionId,
-                        phoneNumber: pairingResult.phoneNumber,
-                        message: 'Phone number successfully paired'
-                    });
-                    
-                    return; // Return early to avoid webhook notification for pairing
-                }
-            }
 
             const messageData = {
                 event: 'new-message',
@@ -818,7 +836,7 @@ async function connectToWhatsApp(sessionId) {
 
             // Allow reconnection on a 515 error, which is a "stream error" often seen after pairing.
             const shouldReconnect = statusCode !== 401 && statusCode !== 403;
-            
+
             log(`Connection closed. Reason: ${reason}, statusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`, sessionId);
             updateSessionState(sessionId, 'DISCONNECTED', 'Connection closed.', '', reason);
 
@@ -833,8 +851,25 @@ async function connectToWhatsApp(sessionId) {
                  }
             }
         } else if (connection === 'open') {
-            log('Connection opened.', sessionId);
-            updateSessionState(sessionId, 'CONNECTED', `Connected as ${sock.user?.name || 'Unknown'}`, '', '');
+            log('Connection opened - pairing successful or session reconnected.', sessionId);
+
+            // Get session info to check if this was a successful pairing
+            const sessionInfo = sessions.get(sessionId);
+            let detailMessage = `Connected as ${sock.user?.name || 'Unknown'}`;
+
+            if (sessionInfo && sessionInfo.status === 'AWAITING_PAIRING') {
+                detailMessage = `Phone number ${sessionInfo.phoneNumber} successfully paired! Connected as ${sock.user?.name || 'Unknown'}`;
+
+                // Send pairing success notification to webhook
+                postToWebhook({
+                    event: 'phone-pair-success',
+                    sessionId,
+                    phoneNumber: sessionInfo.phoneNumber,
+                    message: 'Phone number successfully paired using official WhatsApp pairing'
+                });
+            }
+
+            updateSessionState(sessionId, 'CONNECTED', detailMessage, '', '');
         }
     });
 
@@ -1022,5 +1057,8 @@ async function checkAndStartScheduledCampaigns() {
         return { error: 'API router not initialized' };
     }
 }
+
+// Export connectToWhatsApp for use in API
+module.exports.connectToWhatsApp = connectToWhatsApp;
 
 
