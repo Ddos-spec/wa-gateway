@@ -175,7 +175,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     const recipientListManager = new RecipientListManager(process.env.TOKEN_ENCRYPTION_KEY || 'default-key');
     
     // Middleware to check campaign access (session-based)
-    const checkCampaignAccess = async (req, res, next) => {
+    const checkAuth = async (req, res, next) => {
         const currentUser = req.session && req.session.adminAuthed ? {
             email: req.session.userEmail,
             role: req.session.userRole
@@ -188,6 +188,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         req.currentUser = currentUser;
         next();
     };
+    const checkCampaignAccess = checkAuth;
     
     // Campaign routes - these use session auth, not token auth
     router.get('/campaigns', checkCampaignAccess, (req, res) => {
@@ -715,17 +716,18 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     });
 
     // Official WhatsApp Phone Pairing Endpoint
-    router.post('/session/pair-phone', async (req, res) => {
+    router.post('/session/pair-phone', checkAuth, async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
+        const { phoneNumber } = req.body;
+        const currentUser = req.currentUser;
 
-        const { sessionId, phoneNumber } = req.body;
-
-        if (!sessionId || !phoneNumber) {
+        if (!phoneNumber) {
             return res.status(400).json({
                 status: 'error',
-                message: 'sessionId and phoneNumber are required'
+                message: 'phoneNumber are required'
             });
         }
+        const sessionId = `${currentUser.email}_${phoneNumber}`.replace(/[^a-zA-Z0-9_-]/g, '');
 
         // Validate phone number format
         const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
@@ -737,14 +739,11 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
 
         try {
-            // Check if session exists
-            const session = sessions.get(sessionId);
-            if (!session) {
-                return res.status(404).json({
-                    status: 'error',
-                    message: 'Session not found'
-                });
+            // If session does not exist, create it
+            if (!sessions.has(sessionId)) {
+                await createSession(sessionId, currentUser.email);
             }
+            const session = sessions.get(sessionId);
 
             // Check if session is already connected or in pairing process
             if (session.status === 'CONNECTED') {
