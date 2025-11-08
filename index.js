@@ -792,14 +792,8 @@ async function connectToWhatsApp(sessionId) {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-            log('QR code generated.', sessionId);
-            updateStatus('GENERATING_QR', 'QR code available.', qr);
-        }
-
-        if (connection === 'open') {
-            log(`Connection is now open for ${sessionId}.`);
-            
-            if (pairingInfo && pairingInfo.status === 'PENDING_REQUEST' && !state.creds.registered) {
+            if (pairingInfo) {
+                // This is a pairing session. Request a phone code instead of using the QR.
                 try {
                     log(`Requesting pairing code for ${phoneNumber}...`, sessionId);
                     updateStatus('AWAITING_PAIRING', 'Requesting pairing code...');
@@ -818,10 +812,17 @@ async function connectToWhatsApp(sessionId) {
                 } catch (error) {
                     log(`Failed to request pairing code: ${error.message}`, sessionId, { error });
                     updateStatus('PAIRING_FAILED', `Failed to get pairing code: ${error.message}`);
-                    updateSessionState(sessionId, 'GENERATING_QR', 'Pairing failed - QR code available.', '', '');
                 }
+            } else {
+                // This is a regular session, so use the QR code.
+                log('QR code generated.', sessionId);
+                updateStatus('GENERATING_QR', 'QR code available.', qr);
             }
+        }
 
+        if (connection === 'open') {
+            log(`Connection is now open for ${sessionId}.`);
+            
             let detailMessage = `Connected as ${sock.user?.name || 'Unknown'}`;
             if (pairingInfo && pairingInfo.status.includes('AWAITING')) {
                 detailMessage = `Phone number ${pairingInfo.phoneNumber} successfully paired!`;
