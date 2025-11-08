@@ -150,32 +150,35 @@
 
                         <!-- Step 2: Show Pairing Code and Instructions -->
                         <div id="step2" class="pairing-step-2" style="display: none;">
-                            <h4>Step 2: Send Pairing Code to WhatsApp</h4>
+                            <h4>Step 2: Enter Pairing Code on Your Phone</h4>
                             
                             <div class="alert alert-info">
-                                <i class="bi bi-info-circle"></i> <strong>Important:</strong> Send the code below to WhatsApp number 
-                                <strong><span id="gatewayNumber">+1234567890</span></strong> (our service number)
+                                <i class="bi bi-info-circle"></i> <strong>Important:</strong> On your phone, go to WhatsApp Settings > Linked Devices > Link with phone number.
                             </div>
                             
                             <div class="mb-4">
-                                <p>Your pairing code:</p>
-                                <div class="code-display" id="pairingCodeDisplay">ABCD1234</div>
-                                <p class="text-center text-muted">Send this exact code to the WhatsApp number</p>
+                                <p>Your pairing code is:</p>
+                                <div class="code-display" id="pairingCodeDisplay">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <span class="ms-2">Waiting for code...</span>
+                                </div>
+                                <p class="text-center text-muted">Enter this code on your phone to link your WhatsApp account.</p>
                             </div>
                             
                             <div class="mb-4">
                                 <h5>Instructions:</h5>
                                 <ol>
-                                    <li class="mb-2">Open WhatsApp on your phone</li>
-                                    <li class="mb-2">Open a chat with the gateway number: <strong><span id="gatewayNumber2">+1234567890</span></strong></li>
-                                    <li class="mb-2">Send the pairing code: <strong id="pairingCodeForInstructions">ABCD1234</strong></li>
-                                    <li>Wait for confirmation that your number is paired</li>
+                                    <li class="mb-2">Open WhatsApp on the phone you want to pair.</li>
+                                    <li class="mb-2">Go to <strong>Settings</strong> > <strong>Linked Devices</strong>.</li>
+                                    <li class="mb-2">Tap on <strong>Link a device</strong>, then select <strong>Link with phone number instead</strong>.</li>
+                                    <li>Enter the 8-digit code shown above.</li>
                                 </ol>
                             </div>
                             
                             <div class="d-flex gap-2 justify-content-center">
                                 <button class="btn btn-secondary" id="backToStep1">Back</button>
-                                <button class="btn btn-success" id="checkPairingStatus">Check Status</button>
                             </div>
                         </div>
                         
@@ -288,33 +291,48 @@
             const step2 = document.getElementById('step2');
             const step3 = document.getElementById('step3');
             const pairingCodeDisplay = document.getElementById('pairingCodeDisplay');
-            const pairingCodeForInstructions = document.getElementById('pairingCodeForInstructions');
-            const gatewayNumber = document.getElementById('gatewayNumber');
-            const gatewayNumber2 = document.getElementById('gatewayNumber2');
             const backToStep1 = document.getElementById('backToStep1');
-            const checkPairingStatus = document.getElementById('checkPairingStatus');
             const pairedPhoneNumber = document.getElementById('pairedPhoneNumber');
             const pairedSessionId = document.getElementById('pairedSessionId');
 
-            // Gateway number - get from server configuration or use default
-            let GATEWAY_NUMBER = '+1234567890'; // Default fallback
-            
-            // Try to get the gateway number from server or configuration
-            fetch('/api/v1/me')
-                .then(response => response.json())
-                .then(user => {
-                    // You could potentially get the gateway number from server configuration
-                    // For now, we'll use a default, but in real implementation you might fetch from settings
-                    GATEWAY_NUMBER = localStorage.getItem('gatewayNumber') || '+1234567890';
-                    gatewayNumber.textContent = GATEWAY_NUMBER;
-                    gatewayNumber2.textContent = GATEWAY_NUMBER;
-                })
-                .catch(error => {
-                    console.error('Error getting user info:', error);
-                    // Use default if there's an error
-                    gatewayNumber.textContent = GATEWAY_NUMBER;
-                    gatewayNumber2.textContent = GATEWAY_NUMBER;
-                });
+            let pollingInterval = null;
+
+            // Function to start polling for pairing status
+            function startPolling(sessionId) {
+                if (pollingInterval) clearInterval(pollingInterval);
+
+                pollingInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch(`/api/v1/session/${sessionId}/pair-status`);
+                        if (!response.ok) {
+                            // Stop polling on error
+                            clearInterval(pollingInterval);
+                            console.error(`Polling failed with status: ${response.status}`);
+                            return;
+                        }
+
+                        const data = await response.json();
+
+                        // If pairing code is available, display it
+                        if (data.pairingCode) {
+                            pairingCodeDisplay.innerHTML = `<strong>${data.pairingCode}</strong>`;
+                        }
+
+                        // If session is connected, show success and stop polling
+                        if (data.sessionStatus === 'CONNECTED') {
+                            clearInterval(pollingInterval);
+                            pairedPhoneNumber.textContent = data.phoneNumber || 'N/A';
+                            pairedSessionId.textContent = sessionId;
+                            step2.style.display = 'none';
+                            step3.style.display = 'block';
+                        }
+
+                    } catch (error) {
+                        console.error('Error during polling:', error);
+                        clearInterval(pollingInterval);
+                    }
+                }, 2000); // Poll every 2 seconds
+            }
 
             // Handle form submission - Step 1
             if (pairingForm) {
@@ -327,74 +345,25 @@
                         return;
                     }
 
+                    // Disable button to prevent multiple submissions
+                    const submitButton = this.querySelector('button[type="submit"]');
+                    submitButton.disabled = true;
+                    submitButton.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Initiating...';
+
                     try {
-                        // Format phone number to remove spaces and special characters
+                        // Format phone number
                         const formattedPhone = phoneNumber.replace(/\D/g, '');
                         
-                        // Call API to generate pairing code
-                        const response = await fetch('/api/v1/pair-phone', {
+                        // Call API to initiate pairing
+                        const response = await fetch('/api/v1/session/pair-phone', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
+                            credentials: 'same-origin',
                             body: JSON.stringify({
-                                userId: document.getElementById('currentUser').textContent.trim() || 'default-user',
                                 phoneNumber: formattedPhone
                             })
-                        });
-
-                        if (response.status === 409) {
-                            alert('This phone number is already paired with this user. Please use a different number or delete the existing pairing first.');
-                            return;
-                        }
-
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-
-                        const data = await response.json();
-                        
-                        if (data.pairCode) {
-                            // Show step 2 with pairing code
-                            pairingCodeDisplay.textContent = data.pairCode;
-                            pairingCodeForInstructions.textContent = data.pairCode;
-                            step1.style.display = 'none';
-                            step2.style.display = 'block';
-                        } else {
-                            throw new Error('Pair code not returned from server');
-                        }
-                    } catch (error) {
-                        console.error('Error generating pairing code:', error);
-                        alert('Error generating pairing code: ' + error.message);
-                    }
-                });
-            }
-
-            // Back to step 1
-            if (backToStep1) {
-                backToStep1.addEventListener('click', function() {
-                    step2.style.display = 'none';
-                    step1.style.display = 'block';
-                });
-            }
-
-            // Check pairing status
-            if (checkPairingStatus) {
-                checkPairingStatus.addEventListener('click', async function() {
-                    const currentUser = document.getElementById('currentUser').textContent.trim();
-                    
-                    if (!currentUser) {
-                        alert('User not authenticated');
-                        return;
-                    }
-
-                    try {
-                        const response = await fetch(`/api/v1/my-pairings`, {
-                            method: 'GET',
-                            credentials: 'same-origin',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            }
                         });
 
                         if (response.status === 401) {
@@ -402,28 +371,41 @@
                             return;
                         }
 
+                        if (response.status === 409) {
+                            alert('This phone number is already paired or in the process of pairing. Please use a different number or delete the existing session first.');
+                            return;
+                        }
+
                         if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
+                            const errorData = await response.json();
+                            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
                         }
 
                         const data = await response.json();
                         
-                        // Check for any paired numbers
-                        const paired = data.find(p => p.status === 'PAIRED');
-                        
-                        if (paired) {
-                            // Show success step
-                            pairedPhoneNumber.textContent = `+${paired.phoneNumber}`;
-                            pairedSessionId.textContent = paired.sessionId;
-                            step2.style.display = 'none';
-                            step3.style.display = 'block';
-                        } else {
-                            alert('No paired phone number found yet. Please make sure you have sent the code to the gateway number.');
-                        }
+                        // Switch to step 2 and start polling
+                        step1.style.display = 'none';
+                        step2.style.display = 'block';
+                        startPolling(data.sessionId);
+
                     } catch (error) {
-                        console.error('Error checking pairing status:', error);
-                        alert('Error checking pairing status: ' + error.message);
+                        console.error('Error initiating pairing:', error);
+                        alert('Error initiating pairing: ' + error.message);
+                    } finally {
+                        // Re-enable button
+                        submitButton.disabled = false;
+                        submitButton.textContent = 'Generate Pairing Code';
                     }
+                });
+            }
+
+            // Back to step 1
+            if (backToStep1) {
+                backToStep1.addEventListener('click', function() {
+                    if (pollingInterval) clearInterval(pollingInterval); // Stop polling
+                    step2.style.display = 'none';
+                    step1.style.display = 'block';
+                    pairingCodeDisplay.innerHTML = `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><span class="ms-2">Waiting for code...</span>`;
                 });
             }
         });
