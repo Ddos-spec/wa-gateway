@@ -744,7 +744,7 @@ async function connectToWhatsApp(sessionId, phoneNumber = null) {
         },
         printQRInTerminal: false,
         logger,
-        browser: Browsers.macOS('Desktop'),
+        browser: Browsers.chrome('Desktop'),
         generateHighQualityLinkPreview: false, // Disable to save memory
         shouldIgnoreJid: (jid) => isJidBroadcast(jid),
         qrTimeout: 30000,
