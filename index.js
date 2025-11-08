@@ -836,7 +836,7 @@ async function connectToWhatsApp(sessionId, phoneNumber = null) {
 
             // Allow reconnection on a 515 error, which is a "stream error" often seen after pairing.
             const shouldReconnect = statusCode !== 401 && statusCode !== 403;
-            
+
             log(`Connection closed. Reason: ${reason}, statusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`, sessionId);
             updateSessionState(sessionId, 'DISCONNECTED', 'Connection closed.', '', reason);
 
@@ -851,8 +851,25 @@ async function connectToWhatsApp(sessionId, phoneNumber = null) {
                  }
             }
         } else if (connection === 'open') {
-            log('Connection opened.', sessionId);
-            updateSessionState(sessionId, 'CONNECTED', `Connected as ${sock.user?.name || 'Unknown'}`, '', '');
+            log('Connection opened - pairing successful or session reconnected.', sessionId);
+
+            // Get session info to check if this was a successful pairing
+            const sessionInfo = sessions.get(sessionId);
+            let detailMessage = `Connected as ${sock.user?.name || 'Unknown'}`;
+
+            if (sessionInfo && sessionInfo.status === 'AWAITING_PAIRING') {
+                detailMessage = `Phone number ${sessionInfo.phoneNumber} successfully paired! Connected as ${sock.user?.name || 'Unknown'}`;
+
+                // Send pairing success notification to webhook
+                postToWebhook({
+                    event: 'phone-pair-success',
+                    sessionId,
+                    phoneNumber: sessionInfo.phoneNumber,
+                    message: 'Phone number successfully paired using official WhatsApp pairing'
+                });
+            }
+
+            updateSessionState(sessionId, 'CONNECTED', detailMessage, '', '');
         }
     });
 
