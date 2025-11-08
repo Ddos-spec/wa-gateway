@@ -1058,4 +1058,7 @@ async function checkAndStartScheduledCampaigns() {
     }
 }
 
+// Export connectToWhatsApp for use in API
+module.exports.connectToWhatsApp = connectToWhatsApp;
+
 
