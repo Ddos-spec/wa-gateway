@@ -723,7 +723,7 @@ function updateSessionState(sessionId, status, detail, qr, reason) {
     });
 }
 
-async function connectToWhatsApp(sessionId) {
+async function connectToWhatsApp(sessionId, phoneNumber = null) {
     updateSessionState(sessionId, 'CONNECTING', 'Initializing session...', '', '');
     log('Starting session...', sessionId);
 
@@ -731,7 +731,7 @@ async function connectToWhatsApp(sessionId) {
     if (!fs.existsSync(sessionDir)) {
         fs.mkdirSync(sessionDir, { recursive: true });
     }
-    
+
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     const { version, isLatest } = await fetchLatestBaileysVersion();
     log(`Using WA version: ${version.join('.')}, isLatest: ${isLatest}`, sessionId);
@@ -759,8 +759,52 @@ async function connectToWhatsApp(sessionId) {
         keepAliveIntervalMs: 30000,
         // Disable unnecessary features
         fireInitQueries: false,
-        emitOwnEvents: false
+        emitOwnEvents: false,
+        // Add pairing code support
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, logger),
+        }
     });
+
+    // Handle phone number pairing if provided
+    if (phoneNumber && !state.creds.registered) {
+        try {
+            log(`Requesting pairing code for ${phoneNumber}...`, sessionId);
+            updateSessionState(sessionId, 'AWAITING_PAIRING', 'Requesting pairing code...', '', '');
+
+            const pairingCode = await sock.requestPairingCode(phoneNumber);
+
+            // Format the 8-digit code with dash (XXXX-XXXX)
+            const formattedCode = pairingCode.slice(0, 4) + '-' + pairingCode.slice(4);
+
+            log(`Pairing code generated: ${formattedCode}`, sessionId);
+            updateSessionState(sessionId, 'AWAITING_PAIRING', `Enter this code in WhatsApp: ${formattedCode}`, '', '');
+
+            // Store pairing info in session
+            const session = sessions.get(sessionId);
+            if (session) {
+                session.pairingCode = pairingCode;
+                session.phoneNumber = phoneNumber;
+                session.pairingCodeFormatted = formattedCode;
+                sessions.set(sessionId, session);
+            }
+
+            // Set pairing timeout (30 seconds)
+            setTimeout(() => {
+                const currentSession = sessions.get(sessionId);
+                if (currentSession && currentSession.status === 'AWAITING_PAIRING') {
+                    log('Pairing timeout, falling back to QR code', sessionId);
+                    updateSessionState(sessionId, 'GENERATING_QR', 'Pairing timeout - QR code available.', '', '');
+                }
+            }, 30000);
+
+        } catch (error) {
+            log(`Failed to request pairing code: ${error.message}`, sessionId);
+            // Fallback to QR code on pairing failure
+            updateSessionState(sessionId, 'GENERATING_QR', 'Pairing failed - QR code available.', '', '');
+        }
+    }
     
     sock.ev.on('creds.update', saveCreds);
 
