@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Docs - WhatsApp Gateway</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        :root {
+            --bs-body-bg-rgb: 248, 249, 250;
+        }
+
+        body {
+            background-color: rgb(var(--bs-body-bg-rgb));
+            transition: background-color 0.3s ease;
+        }
+        
+        [data-bs-theme="dark"] pre code {
+            background-color: #212529 !important;
+            color: #e9ecef !important;
+            border-color: var(--bs-border-color);
+        }
+    </style>
+</head>
+
+<body>
+        <div id="navbar-placeholder"></div>
+
+    <main class="container mt-4">
+        <section id="api-reference" class="mb-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                <h5 class="mb-0">API Reference & Example cURL Commands</h5>
+                </div>
+                <div class="card-body">
+                <ul class="nav nav-tabs mb-3" id="curlExampleTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="curl-sessions-tab" data-bs-toggle="tab" data-bs-target="#curl-sessions" type="button" role="tab">Session Management</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="curl-text-tab" data-bs-toggle="tab" data-bs-target="#curl-text" type="button" role="tab">Text</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="curl-text-image-tab" data-bs-toggle="tab" data-bs-target="#curl-text-image" type="button" role="tab">Text + Image</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="curl-text-image-doc-tab" data-bs-toggle="tab" data-bs-target="#curl-text-image-doc" type="button" role="tab">Text + Image + Document</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="curl-text-doc-tab" data-bs-toggle="tab" data-bs-target="#curl-text-doc" type="button" role="tab">Text + Document</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="curl-formatting-tab" data-bs-toggle="tab" data-bs-target="#curl-formatting" type="button" role="tab">Formatting</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="curl-webhook-tab" data-bs-toggle="tab" data-bs-target="#curl-webhook" type="button" role="tab">Webhook</button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="curlExampleTabsContent">
+                    <div class="tab-pane fade show active" id="curl-sessions" role="tabpanel">
+                        <div class="mb-2"><strong>Session Management</strong></div>
+                        <div class="mb-3">
+                            <strong>Create Session (API Access)</strong>
+                            <pre><code id="curl-create-session">curl -X POST "http://localhost:3000/api/v1/sessions" \
+-H "X-Master-Key: YOUR_MASTER_API_KEY" \
+-H "Content-Type: application/json" \
+-d '{
+  "sessionId": "myNewSession"
+}'</code></pre>
+                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-create-session', this)">Copy</button>
+                            <div class="alert alert-info mt-2">
+                            <i class="bi bi-info-circle"></i> <strong>Note:</strong> The Master API Key is required for creating sessions via API. Find it in your <code>.env</code> file. Admin dashboard users don't need the key.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <strong>List All Sessions</strong>
+                            <pre><code id="curl-list-sessions">curl -X GET "http://localhost:3000/api/v1/sessions"</code></pre>
+                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-list-sessions', this)">Copy</button>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Delete Session</strong>
+                            <pre><code id="curl-delete-session">curl -X DELETE "http://localhost:3000/api/v1/sessions/mySession" \
+-H "Authorization: Bearer YOUR_SESSION_TOKEN"</code></pre>
+                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-delete-session', this)">Copy</button>
+                        </div>
+                        <div class="text-muted small mt-2">
+                            <ul>
+                            <li><b>Create Session:</b> Requires Master API Key for API access. Returns a session token.</li>
+                            <li><b>List Sessions:</b> Public endpoint - no authentication required.</li>
+                            <li><b>Delete Session:</b> Requires the session's Bearer token.</li>
+                            <li>Save the token returned from session creation - it's needed for all other operations.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="curl-text" role="tabpanel">
+                    <div class="mb-2"><strong>Send Text Message</strong></div>
+                    <pre><code id="curl-send-text">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{
+  "recipient_type": "individual",
+  "to": "6281234567890",
+  "type": "text",
+  "text": { "body": "Hello from the API!" }
+}'</code></pre>
+                    <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-text', this)">Copy</button>
+                    </div>
+                    <div class="tab-pane fade" id="curl-text-image" role="tabpanel">
+                    <div class="mb-2"><strong>Send Text + Image</strong></div>
+                    <pre><code id="curl-send-text-image">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{
+  "recipient_type": "individual",
+  "to": "6281234567890",
+  "type": "image",
+  "image": {
+    "link": "https://picsum.photos/200",
+    "caption": "This is a test image.\nWith a new line!"
+  }
+}'</code></pre>
+                    <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-text-image', this)">Copy</button>
+                    </div>
+                    <div class="tab-pane fade" id="curl-text-image-doc" role="tabpanel">
+                    <div class="mb-2"><strong>Send Text + Image + Document</strong></div>
+                    <pre><code id="curl-send-text-image-doc">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-H "Content-Type: application/json" \
+-d '[
+  {
+    "recipient_type": "individual",
+    "to": "6281234567890",
+    "type": "text",
+    "text": { "body": "Here is an image and a document!" }
+  },
+  {
+    "recipient_type": "individual",
+    "to": "6281234567890",
+    "type": "image",
+    "image": {
+      "link": "https://picsum.photos/200",
+      "caption": "Image caption."
+    }
+  },
+  {
+    "recipient_type": "individual",
+    "to": "6281234567890",
+    "type": "document",
+    "document": {
+      "link": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+      "mimetype": "application/pdf",
+      "filename": "dummy.pdf"
+    }
+  }
+]'</code></pre>
+                    <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-text-image-doc', this)">Copy</button>
+                    </div>
+                    <div class="tab-pane fade" id="curl-text-doc" role="tabpanel">
+                    <div class="mb-2"><strong>Send Text + Document</strong></div>
+                    <pre><code id="curl-send-text-doc">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-H "Content-Type: application/json" \
+-d '[
+  {
+    "recipient_type": "individual",
+    "to": "6281234567890",
+    "type": "text",
+    "text": { "body": "Here is a document!" }
+  },
+  {
+    "recipient_type": "individual",
+    "to": "6281234567890",
+    "type": "document",
+    "document": {
+      "link": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+      "mimetype": "application/pdf",
+      "filename": "dummy.pdf"
+    }
+  }
+]'</code></pre>
+                    <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-text-doc', this)">Copy</button>
+                    </div>
+                    <div class="tab-pane fade" id="curl-formatting" role="tabpanel">
+                    <div class="mb-2"><strong>Formatting: New Lines, Bold, and Links</strong></div>
+                    <pre><code id="curl-send-formatting">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{
+  "recipient_type": "individual",
+  "to": "6281234567890",
+  "type": "text",
+  "text": { "body": "Hello!\nThis is a new line.\n*This is bold text!*\nVisit: https://example.com" }
+}'</code></pre>
+                    <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-formatting', this)">Copy</button>
+                    <div class="text-muted small mt-2">
+                        <ul>
+                        <li>Use <code>\n</code> for new lines.</li>
+                        <li>Use <code>*bold text*</code> for <b>bold</b> (WhatsApp formatting).</li>
+                        <li>Paste a URL directly to make it clickable in WhatsApp.</li>
+                        </ul>
+                    </div>
+                    </div>
+                    <div class="tab-pane fade" id="curl-webhook" role="tabpanel">
+                        <div class="mb-2"><strong>Manage Webhook for a Session</strong></div>
+                        <div class="mb-3">
+                            <strong>Set Webhook</strong>
+                            <pre><code id="curl-set-webhook">curl -X POST "http://localhost:3000/api/v1/webhook" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{
+  "sessionId": "YOUR_SESSION_ID",
+  "url": "https://your-webhook-receiver.com/events"
+}'</code></pre>
+                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-set-webhook', this)">Copy</button>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Get Webhook</strong>
+                            <pre><code id="curl-get-webhook">curl -X GET "http://localhost:3000/api/v1/webhook?sessionId=YOUR_SESSION_ID" \
+-H "Authorization: Bearer YOUR_TOKEN"</code></pre>
+                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-get-webhook', this)">Copy</button>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Delete Webhook</strong>
+                            <pre><code id="curl-delete-webhook">curl -X DELETE "http://localhost:3000/api/v1/webhook" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{
+  "sessionId": "YOUR_SESSION_ID"
+}'</code></pre>
+                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-delete-webhook', this)">Copy</button>
+                        </div>
+                        <div class="text-muted small mt-2">
+                            <ul>
+                            <li><b>Set Webhook:</b> Assigns a webhook URL for a specific session. All events for that session will be sent to the specified URL.</li>
+                            <li><b>Get Webhook:</b> Retrieves the current webhook URL for a session.</li>
+                            <li><b>Delete Webhook:</b> Removes the webhook for a session. No events will be sent until a new webhook is set.</li>
+                            <li>Each session can have its own webhook URL. To update, call <b>Set Webhook</b> again with the same <code>sessionId</code>.</li>
+                            <li>Events include: new messages, session status changes, and more.</li>
+                            <li>Webhook payloads always include <code>sessionId</code> for context.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="text-center text-muted py-4">
+        <small>Super-Light-Web-WhatsApp-API-Server by Alucard0x1</small>
+    </footer>
+
+    <script src="/admin/js/bootstrap.bundle.min.js"></script>
+    <script src="/admin/js/utils.js"></script>
+    <script src="/admin/js/auth-check.js"></script>
+    <script src="/admin/js/loadNavbar.js"></script>
+</body>
+</html>
