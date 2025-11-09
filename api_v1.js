@@ -203,24 +203,42 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
     });
 
-    router.get('/sessions', (req, res) => {
-        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl });
-        
-        // Get current user from session
-        const currentUser = req.session && req.session.adminAuthed ? {
-            email: req.session.userEmail,
-            role: req.session.userRole
-        } : null;
-        
-        if (currentUser) {
-            // If authenticated, filter sessions based on role
-            res.status(200).json(getSessionsDetails(currentUser.email, currentUser.role === 'admin'));
-        } else {
-            // For API access without authentication, show all sessions (backward compatibility)
-            res.status(200).json(getSessionsDetails());
-        }
-    });
-
+            router.get('/sessions', (req, res) => {
+                log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl });
+                
+                // Get current user from session
+                const currentUser = req.session && req.session.adminAuthed ? {
+                    email: req.session.userEmail,
+                    role: req.session.userRole
+                } : null;
+                
+                if (currentUser) {
+                    // If authenticated, filter sessions based on role
+                    res.status(200).json(getSessionsDetails(currentUser.email, currentUser.role === 'admin'));
+                } else {
+                    // For API access without authentication, show all sessions (backward compatibility)
+                    res.status(200).json(getSessionsDetails());
+                }
+            });
+    
+            // Health check endpoint to verify Redis connection
+            router.get('/health-check', async (req, res) => {
+                log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl });
+                if (redisClient && redisClient.isOpen) {
+                    try {
+                        const pingResponse = await redisClient.ping();
+                        if (pingResponse === 'PONG') {
+                            res.status(200).json({ status: 'ok', redis: 'connected', details: 'Successfully received PONG from Redis.' });
+                        } else {
+                            res.status(500).json({ status: 'error', redis: 'ping_failed', details: `Received an unexpected response from Redis: ${pingResponse}` });
+                        }
+                    } catch (error) {
+                        res.status(500).json({ status: 'error', redis: 'connection_error', details: `Failed to ping Redis: ${error.message}` });
+                    }
+                } else {
+                    res.status(500).json({ status: 'error', redis: 'client_not_available', details: 'Redis client is not initialized or not open.' });
+                }
+            });
     // Campaign Management Endpoints (Session-based auth, not token-based)
     const CampaignManager = require('./campaigns');
     const CampaignSender = require('./campaign-sender');
