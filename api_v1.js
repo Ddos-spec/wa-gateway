@@ -94,8 +94,6 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             // Skip rate limiting for authenticated admin users
             return req.session && req.session.adminAuthed;
         },
-        // Trust proxy headers for proper IP detection
-        trustProxy: true,
         standardHeaders: true,
         legacyHeaders: false
     });

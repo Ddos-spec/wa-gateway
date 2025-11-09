@@ -2,6 +2,7 @@ const bcrypt = require('./bcrypt-compat');
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const { encrypt, decrypt } = require('./crypto-utils');
 
 class UserManager {
     constructor(encryptionKey) {
@@ -11,38 +12,10 @@ class UserManager {
         this.loadUsers();
     }
 
-    // Encryption/decryption methods
-    encrypt(text) {
-        const algorithm = 'aes-256-cbc';
-        const key = Buffer.from(this.encryptionKey.slice(0, 64), 'hex');
-        const iv = crypto.randomBytes(16);
-        
-        const cipher = crypto.createCipheriv(algorithm, key, iv);
-        let encrypted = cipher.update(text, 'utf8', 'hex');
-        encrypted += cipher.final('hex');
-        
-        return iv.toString('hex') + ':' + encrypted;
-    }
-
-    decrypt(text) {
-        const algorithm = 'aes-256-cbc';
-        const key = Buffer.from(this.encryptionKey.slice(0, 64), 'hex');
-        
-        const parts = text.split(':');
-        const iv = Buffer.from(parts[0], 'hex');
-        const encryptedText = parts[1];
-        
-        const decipher = crypto.createDecipheriv(algorithm, key, iv);
-        let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');
-        
-        return decrypted;
-    }
-
     async loadUsers() {
         try {
             const encryptedData = await fs.readFile(this.usersFile, 'utf8');
-            const decryptedData = this.decrypt(encryptedData);
+            const decryptedData = decrypt(encryptedData, this.encryptionKey);
             const userData = JSON.parse(decryptedData);
             
             this.users = new Map(userData.map(user => [user.email, user]));
@@ -65,7 +38,7 @@ class UserManager {
     async saveUsers() {
         const userData = Array.from(this.users.values());
         const jsonData = JSON.stringify(userData, null, 2);
-        const encryptedData = this.encrypt(jsonData);
+        const encryptedData = encrypt(jsonData, this.encryptionKey);
         
         await fs.writeFile(this.usersFile, encryptedData);
     }

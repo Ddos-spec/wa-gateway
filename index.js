@@ -68,40 +68,14 @@ const userManager = new UserManager(ENCRYPTION_KEY);
 const activityLogger = new ActivityLogger(ENCRYPTION_KEY);
 
 
-// Encryption functions
-function encrypt(text) {
-    const algorithm = 'aes-256-cbc';
-    const key = Buffer.from(ENCRYPTION_KEY.slice(0, 64), 'hex');
-    const iv = crypto.randomBytes(16);
-    
-    const cipher = crypto.createCipheriv(algorithm, key, iv);
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    
-    return iv.toString('hex') + ':' + encrypted;
-}
-
-function decrypt(text) {
-    const algorithm = 'aes-256-cbc';
-    const key = Buffer.from(ENCRYPTION_KEY.slice(0, 64), 'hex');
-    
-    const parts = text.split(':');
-    const iv = Buffer.from(parts[0], 'hex');
-    const encryptedText = parts[1];
-    
-    const decipher = crypto.createDecipheriv(algorithm, key, iv);
-    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    
-    return decrypted;
-}
+const { encrypt, decrypt } = require('./crypto-utils');
 
 // Enhanced token management with encryption
 function saveTokens() {
     try {
         const tokensToSave = Object.fromEntries(sessionTokens);
         const jsonString = JSON.stringify(tokensToSave, null, 2);
-        const encrypted = encrypt(jsonString);
+        const encrypted = encrypt(jsonString, ENCRYPTION_KEY);
         
         fs.writeFileSync(ENCRYPTED_TOKENS_FILE, encrypted, 'utf-8');
         
@@ -125,7 +99,7 @@ function loadTokens() {
         // Try to load encrypted file first
         if (fs.existsSync(ENCRYPTED_TOKENS_FILE)) {
             const encrypted = fs.readFileSync(ENCRYPTED_TOKENS_FILE, 'utf-8');
-            const decrypted = decrypt(encrypted);
+            const decrypted = decrypt(encrypted, ENCRYPTION_KEY);
             const tokensFromFile = JSON.parse(decrypted);
             
             sessionTokens.clear();
@@ -184,8 +158,6 @@ app.use(rateLimit({
     windowMs: 1 * 60 * 1000,
     max: 100,
     message: { status: 'error', message: 'Too many requests, please try again later.' },
-    // Trust only first proxy, not all (security fix)
-    trustProxy: 1,
     standardHeaders: true,
     legacyHeaders: false
 }));

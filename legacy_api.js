@@ -26,8 +26,6 @@ const legacyLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute
     max: 10, // limit each IP to 10 requests per minute
     message: { status: 'error', message: 'Too many requests, please try again later.' },
-    // Trust proxy headers for proper IP detection
-    trustProxy: true,
     standardHeaders: true,
     legacyHeaders: false
 });
