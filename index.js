@@ -1,5 +1,5 @@
 // Memory optimization for production environments
-global.crypto = require('crypto'); // Ensure crypto is globally available for Baileys
+globalThis.crypto = require('node:crypto').webcrypto; // Ensure Web Crypto API is globally available for Baileys
 
 if (process.env.NODE_ENV === 'production') {
     // Limit V8 heap if not already set
