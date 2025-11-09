@@ -44,7 +44,7 @@ const FileStore = require('session-file-store')(session);
 const UserManager = require('./users');
 const ActivityLogger = require('./activity-logger');
 const PhonePairing = require('./phone-pairing');
-const { Curve } = require('@whiskeysockets/baileys/lib/Utils/crypto'); // Import Curve for key generation
+const { Curve, signedKeyPair } = require('@whiskeysockets/baileys/lib/Utils/crypto'); // Import Curve and signedKeyPair for key generation
 
 const redis = require('redis');
 const sessions = new Map();
@@ -840,6 +840,32 @@ async function connectToWhatsApp(sessionId) {
                 creds.noiseKey = Curve.generateKeyPair();
                 log(`Generated new noiseKey for session ${sessionId}`, sessionId);
                 // Also save this new creds to Redis immediately
+                await RedisAuthState.prototype.saveCreds.call({ redis: redisClient, sessionId }, creds);
+            }
+
+            // Ensure signedIdentityKey is initialized for new sessions or if missing
+            if (!creds.signedIdentityKey) {
+                creds.signedIdentityKey = Curve.generateKeyPair();
+                log(`Generated new signedIdentityKey for session ${sessionId}`, sessionId);
+                // Save immediately
+                await RedisAuthState.prototype.saveCreds.call({ redis: redisClient, sessionId }, creds);
+            }
+
+            // Ensure signedPreKey is initialized for new sessions or if missing
+            // signedPreKey requires a keyId and keyPair
+            if (!creds.signedPreKey) {
+                // keyId is usually 1, but can be any unique ID
+                creds.signedPreKey = signedKeyPair(creds.signedIdentityKey, 1);
+                log(`Generated new signedPreKey for session ${sessionId}`, sessionId);
+                // Save immediately
+                await RedisAuthState.prototype.saveCreds.call({ redis: redisClient, sessionId }, creds);
+            }
+
+            // Ensure registrationId is initialized for new sessions or if missing
+            if (!creds.registrationId) {
+                creds.registrationId = Math.floor(Math.random() * 16383) + 1; // Random 1-16383
+                log(`Generated new registrationId for session ${sessionId}`, sessionId);
+                // Save immediately
                 await RedisAuthState.prototype.saveCreds.call({ redis: redisClient, sessionId }, creds);
             }
         
