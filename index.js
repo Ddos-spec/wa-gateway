@@ -1,10 +1,4 @@
-// Gemini Final Fix - Version 2.1 (Increased Timeout)
-const SCRIPT_VERSION = "GEMINI_FIX_V2.1";
-console.log(`Starting Super-Light-Web-Whatsapp-API-Server - Version: ${SCRIPT_VERSION}`);
-
 // Memory optimization for production environments
-globalThis.crypto = require('node:crypto').webcrypto; // Ensure Web Crypto API is globally available for Baileys
-
 if (process.env.NODE_ENV === 'production') {
     // Limit V8 heap if not already set
     if (!process.env.NODE_OPTIONS) {
@@ -48,7 +42,6 @@ const FileStore = require('session-file-store')(session);
 const UserManager = require('./users');
 const ActivityLogger = require('./activity-logger');
 const PhonePairing = require('./phone-pairing');
-const { Curve, signedKeyPair } = require('@whiskeysockets/baileys/lib/Utils/crypto'); // Import Curve and signedKeyPair for key generation
 
 const redis = require('redis');
 const sessions = new Map();
@@ -56,14 +49,11 @@ const retries = new Map();
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
-let schedulerInterval;
 
 // Initialize Redis client
 const redisClient = redis.createClient({
-  socket: {
-    host: process.env.REDIS_HOST || '127.0.0.1',
-    port: process.env.REDIS_PORT || 6379,
-  },
+  host: process.env.REDIS_HOST || '127.0.0.1',
+  port: process.env.REDIS_PORT || 6379,
   password: process.env.REDIS_PASSWORD
 });
 
@@ -194,28 +184,11 @@ function loadTokens() {
     }
 }
 
-// --- PATH DEBUGGING ---
-console.log(`[PATH_DEBUG] __dirname: ${__dirname}`);
-// Persistent directory paths
-const SESSION_PATH = process.env.SESSION_PATH || path.join(__dirname, 'sessions');
-const AUTH_PATH = process.env.AUTH_PATH || path.join(__dirname, 'auth_info_baileys');
+// Ensure media directory exists
 const mediaDir = path.join(__dirname, 'media');
-console.log(`[PATH_DEBUG] SESSION_PATH: ${SESSION_PATH}`);
-console.log(`[PATH_DEBUG] AUTH_PATH: ${AUTH_PATH}`);
-console.log(`[PATH_DEBUG] mediaDir: ${mediaDir}`);
-
-// Ensure all necessary directories exist
-[SESSION_PATH, AUTH_PATH, mediaDir].forEach(dir => {
-  try {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-      console.log(`[SYSTEM] Created directory: ${dir}`);
-    }
-  } catch (error) {
-      console.error(`[SYSTEM] FATAL: Could not create directory ${dir}. Please check permissions. Error: ${error.message}`);
-      process.exit(1);
-  }
-});
+if (!fs.existsSync(mediaDir)) {
+    fs.mkdirSync(mediaDir);
+}
 
 // Trust proxy for cPanel and other reverse proxy environments
 // Only trust first proxy, not all (prevents security issues)
@@ -250,10 +223,6 @@ const ADMIN_PASSWORD = process.env.ADMIN_DASHBOARD_PASSWORD;
 // Session limits configuration
 const MAX_SESSIONS = parseInt(process.env.MAX_SESSIONS) || 10;
 const SESSION_TIMEOUT_HOURS = parseInt(process.env.SESSION_TIMEOUT_HOURS) || 24;
-
-// Reconnection logic
-const MAX_RETRIES = 5;
-const RETRY_DELAYS = [5000, 10000, 30000, 60000, 120000]; // ms
 
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
@@ -292,28 +261,24 @@ wss.on('connection', (ws, req) => {
     });
 });
 
+// Use file-based session store for production
+const sessionStore = new FileStore({
+    path: './sessions',
+    ttl: 86400, // 1 day
+    retries: 3,
+    secret: process.env.SESSION_SECRET || 'change_this_secret'
+});
+
 app.use(session({
-  store: new FileStore({
-    path: SESSION_PATH,
-    retries: 5, // Tambah retry attempts
-    minTimeout: 100,
-    maxTimeout: 500,
-    reapInterval: 3600, // Cleanup expired sessions setiap 1 jam
-    ttl: 86400, // Session TTL 24 jam
-    logFn: (msg) => {
-      // Suppress retry errors yang tidak fatal
-      if (!msg.includes('will retry')) {
-        console.log('[session-file-store]', msg);
-      }
+    store: sessionStore,
+    secret: process.env.SESSION_SECRET || 'change_this_secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { 
+        httpOnly: true, 
+        secure: false, // Set secure: true if using HTTPS
+        maxAge: 86400000 // 1 day
     }
-  }),
-  secret: process.env.SESSION_SECRET || 'your-secret-key-here',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 86400000 // 24 jam
-  }
 }));
 
 // Serve homepage
@@ -355,7 +320,7 @@ app.post('/admin/login', express.json(), async (req, res) => {
             req.session.userRole = user.role;
             req.session.userId = user.id;
             await activityLogger.logLogin(user.email, ip, userAgent, true);
-            return res.json({
+            return res.json({ 
                 success: true, 
                 role: user.role,
                 email: user.email 
@@ -574,7 +539,7 @@ app.get('/admin/test-logs', requireAdminAuth, (req, res) => {
     } catch (error) {
         console.error('Test endpoint error:', error);
     }
-    res.json({
+    res.json({ 
         logFileExists: fs.existsSync(SYSTEM_LOG_FILE),
         logCount: logData.length,
         logs: logData
@@ -806,21 +771,12 @@ function updateSessionState(sessionId, status, detail, qr, reason) {
         sessionId: sessionId, // Explicitly ensure sessionId is preserved
         status,
         detail,
-        qr, // This is the QR code string when available
+        qr,
         reason
     };
     sessions.set(sessionId, newSession);
 
-    try {
-        // Log QR code availability for debugging
-        if (qr) {
-            log(`QR code updated for ${sessionId}, broadcasting to clients`, sessionId);
-        }
-        
-        broadcast({ type: 'session-update', data: getSessionsDetails() });
-    } catch (error) {
-        log(`Error broadcasting session update for ${sessionId}: ${error.message}`, sessionId, { error });
-    }
+    broadcast({ type: 'session-update', data: getSessionsDetails() });
 
     postToWebhook({
         event: 'session-status',
@@ -831,11 +787,7 @@ function updateSessionState(sessionId, status, detail, qr, reason) {
     });
 }
 
-async function createSessionWithRetry(sessionId, retryCount = 0) {
-    const session = sessions.get(sessionId);
-    if (session) {
-        session.retryCount = retryCount;
-    }
+async function connectToWhatsApp(sessionId) {
     const pairingInfo = phonePairing.getPairingStatus(sessionId);
     const phoneNumber = pairingInfo ? pairingInfo.phoneNumber : null;
 
@@ -855,71 +807,32 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
         sessions.get(sessionId).settings = settings;
     }
 
-    try {
-            // Use Redis auth state instead of file-based
-            const { creds, keys } = await RedisAuthState.createAuthState(redisClient, sessionId);
-        
-            // Ensure noiseKey is initialized for new sessions or if missing
-            if (!creds.noiseKey) {
-                creds.noiseKey = Curve.generateKeyPair();
-                log(`Generated new noiseKey for session ${sessionId}`, sessionId);
-                // Also save this new creds to Redis immediately
-                await RedisAuthState.prototype.saveCreds.call({ redis: redisClient, sessionId }, creds);
-            }
+    // Use Redis auth state instead of file-based
+    const { creds, keys } = await RedisAuthState.createAuthState(redisClient, sessionId);
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    log(`Using WA version: ${version.join('.')}, isLatest: ${isLatest}`, sessionId);
 
-            // Ensure signedIdentityKey is initialized for new sessions or if missing
-            if (!creds.signedIdentityKey) {
-                creds.signedIdentityKey = Curve.generateKeyPair();
-                log(`Generated new signedIdentityKey for session ${sessionId}`, sessionId);
-                // Save immediately
-                await RedisAuthState.prototype.saveCreds.call({ redis: redisClient, sessionId }, creds);
-            }
-
-            // Ensure signedPreKey is initialized for new sessions or if missing
-            // signedPreKey requires a keyId and keyPair
-            if (!creds.signedPreKey) {
-                // keyId is usually 1, but can be any unique ID
-                creds.signedPreKey = signedKeyPair(creds.signedIdentityKey, 1);
-                log(`Generated new signedPreKey for session ${sessionId}`, sessionId);
-                // Save immediately
-                await RedisAuthState.prototype.saveCreds.call({ redis: redisClient, sessionId }, creds);
-            }
-
-            // Ensure registrationId is initialized for new sessions or if missing
-            if (!creds.registrationId) {
-                creds.registrationId = Math.floor(Math.random() * 16383) + 1; // Random 1-16383
-                log(`Generated new registrationId for session ${sessionId}`, sessionId);
-                // Save immediately
-                await RedisAuthState.prototype.saveCreds.call({ redis: redisClient, sessionId }, creds);
-            }
-        
-            const { version, isLatest } = await fetchLatestBaileysVersion();
-            log(`Using WA version: ${version.join('.')}, isLatest: ${isLatest}`, sessionId);
-        const sock = makeWASocket({
-            version,
-            auth: {
-                creds: creds,
-                keys: makeCacheableSignalKeyStore(keys, logger),
-            },
-            printQRInTerminal: false,
-            logger,
-            browser: Browsers.macOS('Chrome'), // Changed to macOS browser
-            virtualLinkPreviewEnabled: false,  // More aggressive optimization
-            shouldIgnoreJid: (jid) => isJidBroadcast(jid),
-            qrTimeout: 60000, // Increased timeout to 60 seconds
-            connectTimeoutMs: 180000, // Increased timeout to 180 seconds (3 minutes)
-            keepAliveIntervalMs: 45000,  // Increased from 30000 to reduce connection overhead
-            fireInitQueries: false,
-            emitOwnEvents: false,
-            markOnlineOnConnect: false,
-            syncFullHistory: false,
-            retryRequestDelayMs: 3000,  // Increased from 2000 to reduce retry frequency
-            maxMsgRetryCount: 3,
-            // Add timeout for socket connection
-            connectOpts: {
-                timeout: 90000, // 90 seconds
-            }
-        });
+    const sock = makeWASocket({
+        version,
+        auth: {
+            creds: creds,
+            keys: makeCacheableSignalKeyStore(keys, logger),
+        },
+        printQRInTerminal: false,
+        logger,
+        browser: Browsers.windows('Chrome'),
+        virtualLinkPreviewEnabled: false,  // More aggressive optimization
+        shouldIgnoreJid: (jid) => isJidBroadcast(jid),
+        qrTimeout: 30000,
+        connectTimeoutMs: 30000,
+        keepAliveIntervalMs: 45000,  // Increased from 30000 to reduce connection overhead
+        fireInitQueries: false,
+        emitOwnEvents: false,
+        markOnlineOnConnect: false,
+        syncFullHistory: false,
+        retryRequestDelayMs: 3000,  // Increased from 2000 to reduce retry frequency
+        maxMsgRetryCount: 3,
+    });
 
     sock.ev.on('creds.update', async (creds) => {
         await RedisAuthState.prototype.saveCreds.call(
@@ -941,8 +854,8 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
         
         // Check if we have either session-specific webhooks or a default webhook
         const hasWebhooks = settings.webhooks && settings.webhooks.length > 0;
-        const initialDefaultWebhookUrl = await getWebhookUrl(sessionId); // Get default webhook for this session
-        if (!hasWebhooks && !initialDefaultWebhookUrl) {
+        const defaultWebhookUrl = await getWebhookUrl(sessionId); // Get default webhook for this session
+        if (!hasWebhooks && !defaultWebhookUrl) {
             return; // No webhooks configured for this session
         }
         const msg = message.messages[0];
@@ -998,9 +911,9 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
         }
         
         // Add default webhook for this session if it's different from session-specific ones
-        const sessionDefaultWebhookUrl = await getWebhookUrl(sessionId);
-        if (sessionDefaultWebhookUrl && !allWebhookUrls.includes(sessionDefaultWebhookUrl)) {
-            allWebhookUrls.push(sessionDefaultWebhookUrl);
+        const defaultWebhookUrl = await getWebhookUrl(sessionId);
+        if (defaultWebhookUrl && !allWebhookUrls.includes(defaultWebhookUrl)) {
+            allWebhookUrls.push(defaultWebhookUrl);
         }
 
         // Only proceed if we have URLs to send to
@@ -1034,8 +947,6 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
     });
 
     sock.ev.on('connection.update', async (update) => {
-        log(`Connection update for ${sessionId}: ${JSON.stringify(update)}`, sessionId); // Added detailed log
-
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
@@ -1069,10 +980,6 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
 
         if (connection === 'open') {
             log(`Connection is now open for ${sessionId}.`);
-            const session = sessions.get(sessionId);
-            if (session) {
-                session.retryCount = 0; // Reset retry count on successful connection
-            }
             
             let detailMessage = `Connected as ${sock.user?.name || 'Unknown'}`;
             if (pairingInfo && pairingInfo.status.includes('AWAITING')) {
@@ -1091,47 +998,31 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
                     phonePairing.deletePairing(sessionId);
                 }, 60000);
             }
-            updateSessionState('CONNECTED', detailMessage, '', '');
+            updateStatus('CONNECTED', detailMessage, '', '');
         }
 
         if (connection === 'close') {
             const statusCode = (lastDisconnect?.error instanceof Boom) ? lastDisconnect.error.output.statusCode : 0;
             const reason = new Boom(lastDisconnect?.error)?.output?.payload?.error || 'Unknown';
+            const shouldReconnect = statusCode !== 401 && statusCode !== 403 && statusCode !== 428;
 
-            if (statusCode === 428) {
-                log(`[RECONNECT_LOGIC] Detected statusCode 428 for session ${sessionId}.`, sessionId);
-                if (retryCount < MAX_RETRIES) {
-                    const delay = RETRY_DELAYS[retryCount];
-                    log(`Connection timeout (428). Retrying in ${delay/1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`, sessionId);
-                    updateStatus('RECONNECTING', `Connection timeout. Retrying in ${delay/1000}s...`);
-                    setTimeout(() => {
-                        createSessionWithRetry(sessionId, retryCount + 1);
-                    }, delay);
-                } else {
-                    log(`Max retries reached for 428 error. Manual intervention required.`, sessionId);
-                    updateStatus('CONNECTION_FAILED', 'Connection timeout - QR not scanned', '', reason);
-                }
+            log(`Connection closed. Reason: ${reason}, statusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`, sessionId);
+            updateStatus('DISCONNECTED', 'Connection closed.', '', reason);
+
+            if (shouldReconnect) {
+                setTimeout(() => connectToWhatsApp(sessionId), 5000);
             } else {
-                const shouldReconnect = statusCode !== 401 && statusCode !== 403;
-                log(`Connection closed. Reason: ${reason}, statusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`, sessionId);
-                updateSessionState('DISCONNECTED', 'Connection closed.', '', reason);
-
-                if (shouldReconnect) {
-                    setTimeout(() => createSessionWithRetry(sessionId, 0), 5000);
-                } else {
-                    log(`Not reconnecting for session ${sessionId} due to fatal error: ${reason}`, sessionId);
-                    if (pairingInfo) {
-                        phonePairing.updatePairingStatus(sessionId, {
-                            status: 'PAIRING_FAILED',
-                            detail: `Connection failed: ${reason}`
-                        });
-                    }
-                    // On fatal, non-reconnectable errors, clear the session data to force a fresh start next time.
-                    const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
-                    if (fs.existsSync(sessionDir)) {
-                        fs.rmSync(sessionDir, { recursive: true, force: true });
-                        log(`Cleared session data for ${sessionId} due to fatal error.`, sessionId);
-                    }
+                log(`Not reconnecting for session ${sessionId} due to fatal error.`, sessionId);
+                if (pairingInfo) {
+                    phonePairing.updatePairingStatus(sessionId, {
+                        status: 'PAIRING_FAILED',
+                        detail: `Connection failed: ${reason}`
+                    });
+                }
+                const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
+                if (fs.existsSync(sessionDir)) {
+                    fs.rmSync(sessionDir, { recursive: true, force: true });
+                    log(`Cleared session data for ${sessionId}`, sessionId);
                 }
             }
         }
@@ -1144,13 +1035,6 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
     } else {
         log(`Warning: Session ${sessionId} not found when trying to set socket`, sessionId);
     }
-} catch (error) {
-    log(`Error in createSessionWithRetry for ${sessionId}: ${error.message}`, sessionId, { error: error.stack });
-    updateStatus('CONNECTION_FAILED', `Connection failed: ${error.message}`);
-    // Remove the session from sessions map to avoid stuck status
-    sessions.delete(sessionId);
-    broadcast({ type: 'session-update', data: getSessionsDetails() });
-}
 }
 
 function getSessionsDetails(userEmail = null, isAdmin = false) {
@@ -1198,7 +1082,7 @@ async function createSession(sessionId, createdBy = null) {
     saveTokens();
     
     // Set a placeholder before async connection with owner info
-    sessions.set(sessionId, {
+    sessions.set(sessionId, { 
         sessionId: sessionId, 
         status: 'CREATING', 
         detail: 'Session is being created.',
@@ -1221,11 +1105,21 @@ async function createSession(sessionId, createdBy = null) {
         }
     }, timeoutMs);
     
-    createSessionWithRetry(sessionId);
+    connectToWhatsApp(sessionId);
     return { status: 'success', message: `Session ${sessionId} created.`, token };
 }
 
-
+app.get('/api/v1/sessions/:sessionId/qr', async (req, res) => {
+    const { sessionId } = req.params;
+    const session = sessions.get(sessionId);
+    if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
+    }
+    log(`QR code requested for ${sessionId}`, sessionId);
+    updateSessionState(sessionId, 'GENERATING_QR', 'QR code requested by user.', '', '');
+    // The connection logic will handle the actual QR generation and broadcast.
+    res.status(200).json({ message: 'QR generation triggered.' });
+});
 
 async function deleteSession(sessionId) {
     const session = sessions.get(sessionId);
@@ -1250,26 +1144,132 @@ async function deleteSession(sessionId) {
     sessions.delete(sessionId);
     sessionTokens.delete(sessionId);
     saveTokens();
-
-    // Delete Redis keys for the session
-    const credsKey = `whatsapp:auth:creds:${sessionId}`;
-    const keysKey = `whatsapp:auth:keys:${sessionId}`;
-    try {
-        await redisClient.del(credsKey);
-        await redisClient.del(keysKey);
-        log(`Deleted Redis auth state for session ${sessionId}`, 'SYSTEM');
-    } catch (error) {
-        log(`Error deleting Redis auth state for session ${sessionId}: ${error.message}`, 'ERROR');
-    }
-
-    // Delete from phone pairing statuses
-    phonePairing.deletePairing(sessionId);
-
-    const sessionDir = path.join(AUTH_PATH, sessionId);
+    const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
     if (fs.existsSync(sessionDir)) {
         fs.rmSync(sessionDir, { recursive: true, force: true });
     }
     log(`Session ${sessionId} deleted and data cleared.`, 'SYSTEM');
+    broadcast({ type: 'session-update', data: getSessionsDetails() });
+}
+
+// Function to regenerate API token for a session
+async function regenerateSessionToken(sessionId) {
+    if (!sessions.has(sessionId)) {
+        throw new Error('Session not found');
+    }
+    const newToken = randomUUID();
+    sessionTokens.set(sessionId, newToken);
+    saveTokens();
+    log(`API Token regenerated for session ${sessionId}`, 'SYSTEM');
+    return newToken;
+}
+
+const PORT = process.env.PORT || 3000;
+
+// Handle memory errors gracefully
+process.on('uncaughtException', (error) => {
+    if (error.message && error.message.includes('Out of memory')) {
+        console.error('FATAL: Out of memory error. The application will exit.');
+        console.error('Consider reducing MAX_SESSIONS or upgrading your hosting plan.');
+        process.exit(1);
+    }
+    console.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+async function initializeExistingSessions() {
+    const sessionsDir = path.join(__dirname, 'auth_info_baileys');
+    if (fs.existsSync(sessionsDir)) {
+        const sessionFolders = fs.readdirSync(sessionsDir);
+        log(`Found ${sessionFolders.length} existing session(s). Initializing...`);
+        for (const sessionId of sessionFolders) {
+            const sessionPath = path.join(sessionsDir, sessionId);
+            if (fs.statSync(sessionPath).isDirectory()) {
+                log(`Re-initializing session: ${sessionId}`);
+                await createSession(sessionId); // Await creation to prevent race conditions
+            }
+        }
+    }
+}
+
+loadSystemLogFromDisk();
+server.listen(PORT, () => {
+    log(`Server is running on port ${PORT}`);
+    log('Admin dashboard available at http://localhost:3000/admin/dashboard.html');
+    loadTokens(); // Load tokens at startup
+    initializeExistingSessions();
+    
+    // Start campaign scheduler
+    startCampaignScheduler();
+});
+
+// Campaign scheduler to automatically start campaigns at their scheduled time
+function startCampaignScheduler() {
+    console.log('📅 Campaign scheduler started - checking every minute for scheduled campaigns');
+    
+    setInterval(async () => {
+        await checkAndStartScheduledCampaigns();
+    }, 60000); // Check every minute (60,000 ms)
+}
+
+// Use the scheduler function from the API router
+async function checkAndStartScheduledCampaigns() {
+    if (v1ApiRouter && v1ApiRouter.checkAndStartScheduledCampaigns) {
+        return await v1ApiRouter.checkAndStartScheduledCampaigns();
+    } else {
+        console.log('⏳ API router not initialized yet, skipping scheduler check');
+        return { error: 'API router not initialized' };
+    }
+}
+
+// Graceful shutdown to clean up Redis connections
+process.on('SIGTERM', async () => {
+    console.log('SIGTERM received, shutting down gracefully...');
+    
+    try {
+        // Close webhook queue if initialized
+        if (webhookQueue) {
+            await webhookQueue.close();
+        }
+        
+        // Close Redis client
+        if (redisClient && redisClient.isOpen) {
+            await redisClient.quit();
+        }
+        
+        console.log('Cleanup completed, exiting process.');
+        process.exit(0);
+    } catch (error) {
+        console.error('Error during shutdown:', error);
+        process.exit(1);
+    }
+});
+
+process.on('SIGINT', async () => {
+    console.log('SIGINT received, shutting down gracefully...');
+    
+    try {
+        // Close webhook queue if initialized
+        if (webhookQueue) {
+            await webhookQueue.close();
+        }
+        
+        // Close Redis client
+        if (redisClient && redisClient.isOpen) {
+            await redisClient.quit();
+        }
+        
+        console.log('Cleanup completed, exiting process.');
+        process.exit(0);
+    } catch (error) {
+        console.error('Error during shutdown:', error);
+        process.exit(1);
+    }
+});
+
     broadcast({ type: 'session-update', data: getSessionsDetails() });
 }
 
