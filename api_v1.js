@@ -247,6 +247,61 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     };
     const checkCampaignAccess = checkAuth;
     
+    // QR code endpoint - accessible to dashboard users (before token validation)
+    // Uses session-based authentication instead of token-based
+    router.get('/sessions/:sessionId/qr', checkAuth, async (req, res) => {
+        const { sessionId } = req.params;
+        const session = sessions.get(sessionId);
+        if (!session) {
+            log('API request', 'SYSTEM', { 
+                event: 'api-request', 
+                method: req.method, 
+                endpoint: req.originalUrl,
+                sessionId: sessionId
+            });
+            return res.status(404).json({ 
+                status: 'error', 
+                message: 'Session not found' 
+            });
+        }
+        
+        // Check if user has permission to access this session
+        const userCanAccess = req.currentUser.role === 'admin' || 
+                             (session.owner === req.currentUser.email);
+        if (!userCanAccess) {
+            return res.status(403).json({ 
+                status: 'error', 
+                message: 'You do not have permission to access this session' 
+            });
+        }
+
+        log('API request', 'SYSTEM', { 
+            event: 'api-request', 
+            method: req.method, 
+            endpoint: req.originalUrl,
+            sessionId: sessionId
+        });
+        
+        // Update session state to trigger QR generation in the connection logic
+        const oldSession = sessions.get(sessionId) || {};
+        const newSession = {
+            ...oldSession,
+            sessionId: sessionId,
+            status: 'GENERATING_QR',
+            detail: 'QR code requested by user.',
+            qr: oldSession.qr,
+            reason: oldSession.reason
+        };
+        sessions.set(sessionId, newSession);
+
+        // The connection logic in index.js will handle the actual QR generation and broadcast.
+        res.status(200).json({ 
+            status: 'success',
+            message: 'QR generation triggered.',
+            sessionId: sessionId
+        });
+    });
+
     // Campaign routes - these use session auth, not token auth
     router.get('/campaigns', checkCampaignAccess, (req, res) => {
         const campaigns = campaignManager.getAllCampaigns(
@@ -900,6 +955,68 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
                 message: `Failed to check pairing status: ${error.message}`
             });
         }
+    });
+
+    // Endpoint for requesting QR code - accessible to dashboard users
+    // Uses session-based authentication instead of token-based
+    // This must be placed BEFORE the validateToken middleware
+    router.get('/sessions/:sessionId/qr', checkAuth, async (req, res) => {
+        const { sessionId } = req.params;
+        const session = sessions.get(sessionId);
+        if (!session) {
+            log('API request', 'SYSTEM', { 
+                event: 'api-request', 
+                method: req.method, 
+                endpoint: req.originalUrl,
+                body: req.body,
+                sessionId: sessionId
+            });
+            return res.status(404).json({ 
+                status: 'error', 
+                message: 'Session not found' 
+            });
+        }
+        
+        // Check if user has permission to access this session
+        const userCanAccess = req.currentUser.role === 'admin' || 
+                             (session.owner === req.currentUser.email);
+        if (!userCanAccess) {
+            return res.status(403).json({ 
+                status: 'error', 
+                message: 'You do not have permission to access this session' 
+            });
+        }
+
+        log('API request', 'SYSTEM', { 
+            event: 'api-request', 
+            method: req.method, 
+            endpoint: req.originalUrl,
+            sessionId: sessionId
+        });
+        
+        // Update session state to trigger QR generation in the connection logic
+        // We'll update the session directly in the sessions Map
+        const oldSession = sessions.get(sessionId) || {};
+        const newSession = {
+            ...oldSession,
+            sessionId: sessionId,
+            status: 'GENERATING_QR',
+            detail: 'QR code requested by user.',
+            qr: oldSession.qr,
+            reason: oldSession.reason
+        };
+        sessions.set(sessionId, newSession);
+
+        // Trigger session update broadcast (this requires access to external functions)
+        // Since broadcast function is not available in this scope, we'll just update the session
+        // The WebSocket broadcasting happens in the main index.js file
+        
+        // The connection logic in index.js will handle the actual QR generation and broadcast.
+        res.status(200).json({ 
+            status: 'success',
+            message: 'QR generation triggered.',
+            sessionId: sessionId
+        });
     });
 
     // All routes below this are protected by token

@@ -1127,23 +1127,7 @@ async function createSession(sessionId, createdBy = null) {
     return { status: 'success', message: `Session ${sessionId} created.`, token };
 }
 
-app.get('/api/v1/sessions/:sessionId/qr', async (req, res) => {
-    log(`QR code endpoint accessed for ${req.params.sessionId}`, 'SYSTEM', { event: 'qr-request', endpoint: req.originalUrl, ip: req.ip });
-    const { sessionId } = req.params;
-    const session = sessions.get(sessionId);
-    if (!session) {
-        log(`QR code requested for non-existent session: ${sessionId}`, 'SYSTEM');
-        return res.status(404).json({ error: 'Session not found' });
-    }
-    log(`QR code requested for ${sessionId}`, sessionId);
-    updateSessionState(sessionId, 'GENERATING_QR', 'QR code requested by user.', '', '');
-    // The connection logic will handle the actual QR generation and broadcast.
-    res.status(200).json({ 
-        message: 'QR generation triggered.',
-        sessionId: sessionId,
-        status: 'success'
-    });
-});
+
 
 async function deleteSession(sessionId) {
     const session = sessions.get(sessionId);
