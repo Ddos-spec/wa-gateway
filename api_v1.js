@@ -6,7 +6,6 @@ const fs = require('fs');
 const { randomUUID } = require('crypto');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const csurf = require('csurf');
 const validator = require('validator');
 const { formatPhoneNumber, toWhatsAppFormat, isValidPhoneNumber } = require('./phone-utils');
 // Remove: const { log } = require('./index');
@@ -108,8 +107,6 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     });
     
     router.use(apiLimiter);
-    // CSRF protection for dashboard and sensitive endpoints (not for API clients)
-    // router.use(csurf()); // Uncomment if you want CSRF for all POST/DELETE
 
     const validateToken = (req, res, next) => {
         const authHeader = req.headers['authorization'];

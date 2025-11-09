@@ -23,7 +23,6 @@ const {
 const pino = require('pino');
 const { Boom } = require('@hapi/boom');
 const express = require('express');
-const bodyParser = require('body-parser');
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const path = require('path');
@@ -167,7 +166,7 @@ if (!fs.existsSync(mediaDir)) {
 // Only trust first proxy, not all (prevents security issues)
 app.set('trust proxy', 1);
 
-app.use(bodyParser.json({ limit: '10mb' })); // Increased limit to handle larger requests
+app.use(express.json({ limit: '10mb' })); // Increased limit to handle larger requests
 app.use('/admin', express.static(path.join(__dirname, 'admin')));
 app.use('/media', express.static(mediaDir)); // Serve uploaded media
 app.use(express.urlencoded({ extended: true, limit: '10mb' })); // Increased limit for urlencoded data
