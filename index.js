@@ -809,32 +809,37 @@ async function connectToWhatsApp(sessionId) {
         sessions.get(sessionId).settings = settings;
     }
 
-    // Use Redis auth state instead of file-based
-    const { creds, keys } = await RedisAuthState.createAuthState(redisClient, sessionId);
-    const { version, isLatest } = await fetchLatestBaileysVersion();
-    log(`Using WA version: ${version.join('.')}, isLatest: ${isLatest}`, sessionId);
+    try {
+        // Use Redis auth state instead of file-based
+        const { creds, keys } = await RedisAuthState.createAuthState(redisClient, sessionId);
+        const { version, isLatest } = await fetchLatestBaileysVersion();
+        log(`Using WA version: ${version.join('.')}, isLatest: ${isLatest}`, sessionId);
 
-    const sock = makeWASocket({
-        version,
-        auth: {
-            creds: creds,
-            keys: makeCacheableSignalKeyStore(keys, logger),
-        },
-        printQRInTerminal: false,
-        logger,
-        browser: Browsers.windows('Chrome'),
-        virtualLinkPreviewEnabled: false,  // More aggressive optimization
-        shouldIgnoreJid: (jid) => isJidBroadcast(jid),
-        qrTimeout: 30000,
-        connectTimeoutMs: 30000,
-        keepAliveIntervalMs: 45000,  // Increased from 30000 to reduce connection overhead
-        fireInitQueries: false,
-        emitOwnEvents: false,
-        markOnlineOnConnect: false,
-        syncFullHistory: false,
-        retryRequestDelayMs: 3000,  // Increased from 2000 to reduce retry frequency
-        maxMsgRetryCount: 3,
-    });
+        const sock = makeWASocket({
+            version,
+            auth: {
+                creds: creds,
+                keys: makeCacheableSignalKeyStore(keys, logger),
+            },
+            printQRInTerminal: false,
+            logger,
+            browser: Browsers.windows('Chrome'),
+            virtualLinkPreviewEnabled: false,  // More aggressive optimization
+            shouldIgnoreJid: (jid) => isJidBroadcast(jid),
+            qrTimeout: 45000, // Increased timeout to 45 seconds
+            connectTimeoutMs: 60000, // Increased timeout to 60 seconds
+            keepAliveIntervalMs: 45000,  // Increased from 30000 to reduce connection overhead
+            fireInitQueries: false,
+            emitOwnEvents: false,
+            markOnlineOnConnect: false,
+            syncFullHistory: false,
+            retryRequestDelayMs: 3000,  // Increased from 2000 to reduce retry frequency
+            maxMsgRetryCount: 3,
+            // Add timeout for socket connection
+            connectOpts: {
+                timeout: 60000, // 60 seconds
+            }
+        });
 
     sock.ev.on('creds.update', async (creds) => {
         await RedisAuthState.prototype.saveCreds.call(
@@ -1037,6 +1042,13 @@ async function connectToWhatsApp(sessionId) {
     } else {
         log(`Warning: Session ${sessionId} not found when trying to set socket`, sessionId);
     }
+} catch (error) {
+    log(`Error in connectToWhatsApp for ${sessionId}: ${error.message}`, sessionId, { error: error.stack });
+    updateStatus('CONNECTION_FAILED', `Connection failed: ${error.message}`);
+    // Remove the session from sessions map to avoid stuck status
+    sessions.delete(sessionId);
+    broadcast({ type: 'session-update', data: getSessionsDetails() });
+}
 }
 
 function getSessionsDetails(userEmail = null, isAdmin = false) {

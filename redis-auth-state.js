@@ -60,7 +60,24 @@ class RedisAuthState {
 
   static async createAuthState(redisClient, sessionId) {
     const authState = new RedisAuthState(redisClient, sessionId);
-    return await authState.getAuthState();
+    try {
+      return await authState.getAuthState();
+    } catch (error) {
+      console.error(`Failed to create auth state for session ${sessionId}:`, error.message);
+      // Return a default auth state to allow connection to proceed
+      return {
+        creds: {},
+        keys: {
+          get: async (type, ids) => {
+            console.warn(`Redis auth keys get failed for ${type}, returning empty:`, error.message);
+            return {};
+          },
+          set: async (data) => {
+            console.warn(`Redis auth keys set failed, data not saved:`, error.message);
+          }
+        }
+      };
+    }
   }
 }
 

@@ -333,17 +333,50 @@ document.addEventListener('auth-success', function() {
         try {
             const response = await fetch(`/api/v1/sessions/${sessionId}`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${Auth.token}` }
+                headers: { 
+                    'Authorization': `Bearer ${Auth.token}`,
+                    'Content-Type': 'application/json'
+                }
             });
-            const result = await response.json();
-            if (response.ok) {
-                alert(result.message);
-                fetchSessions();
-            } else {
-                throw new Error(result.message || 'Failed to delete session');
+            
+            if (!response.ok) {
+                // Handle different response codes
+                if (response.status === 401) {
+                    alert('Authentication required. Please log in again.');
+                    window.location.href = '/admin/login.html';
+                    return;
+                } else if (response.status === 403) {
+                    alert('You do not have permission to delete this session.');
+                    return;
+                } else if (response.status === 404) {
+                    alert('Session not found. It may have already been deleted.');
+                    // Remove the session card from UI even if not found on server
+                    const sessionCard = document.getElementById(`session-${sessionId}`);
+                    if (sessionCard) sessionCard.remove();
+                    return;
+                }
+                
+                const result = await response.json().catch(() => ({}));
+                throw new Error(result.message || `HTTP error! status: ${response.status}`);
             }
+            
+            const result = await response.json();
+            alert(result.message || 'Session deleted successfully!');
+            
+            // Remove the session card from the UI immediately
+            const sessionCard = document.getElementById(`session-${sessionId}`);
+            if (sessionCard) {
+                sessionCard.remove();
+            }
+            
+            // Refresh session list
+            fetchSessions();
         } catch (error) {
+            console.error('Error deleting session:', error);
             alert(`An error occurred while deleting the session: ${error.message}`);
+            
+            // Still refresh the session list to ensure UI is up-to-date
+            fetchSessions();
         }
     }
 
