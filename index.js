@@ -1170,6 +1170,21 @@ async function deleteSession(sessionId) {
     sessions.delete(sessionId);
     sessionTokens.delete(sessionId);
     saveTokens();
+
+    // Delete Redis keys for the session
+    const credsKey = `whatsapp:auth:creds:${sessionId}`;
+    const keysKey = `whatsapp:auth:keys:${sessionId}`;
+    try {
+        await redisClient.del(credsKey);
+        await redisClient.del(keysKey);
+        log(`Deleted Redis auth state for session ${sessionId}`, 'SYSTEM');
+    } catch (error) {
+        log(`Error deleting Redis auth state for session ${sessionId}: ${error.message}`, 'ERROR');
+    }
+
+    // Delete from phone pairing statuses
+    phonePairing.deletePairing(sessionId);
+
     const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
     if (fs.existsSync(sessionDir)) {
         fs.rmSync(sessionDir, { recursive: true, force: true });
