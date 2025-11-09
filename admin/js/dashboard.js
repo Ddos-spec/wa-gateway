@@ -164,7 +164,10 @@ document.addEventListener('auth-success', function() {
             modalQrStatus.textContent = 'Fetching QR code...';
             
             // 2. Get the QR code
-            const qrResponse = await fetch(`/api/v1/sessions/${newSessionId}/qr`, { credentials: 'same-origin' });
+            const qrResponse = await fetch(`/api/v1/sessions/${newSessionId}/qr`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${Auth.token}` }
+            });
             const qrResult = await qrResponse.json();
 
             if (!qrResponse.ok) {

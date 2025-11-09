@@ -582,7 +582,7 @@ function log(message, sessionId = 'SYSTEM', details = {}) {
 
 const phonePairing = new PhonePairing(log);
 
-const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, regenerateSessionToken);
+const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, regenerateSessionToken, updateSessionState);
 const legacyApiRouter = initializeLegacyApi(sessions, sessionTokens);
 app.use('/api/v1', v1ApiRouter);
 app.use('/api', legacyApiRouter); // Mount legacy routes at /api
@@ -982,58 +982,6 @@ app.get('/sessions', (req, res) => {
 });
 
 async function createSession(sessionId, createdBy = null) {
-    if (sessions.has(sessionId)) {
-        throw new Error('Session already exists');
-    }
-    
-    // Check session limit
-    if (sessions.size >= MAX_SESSIONS) {
-        throw new Error(`Maximum session limit (${MAX_SESSIONS}) reached. Please delete unused sessions.`);
-    }
-    
-    const token = randomUUID();
-    sessionTokens.set(sessionId, token);
-    saveTokens();
-    
-    // Set a placeholder before async connection with owner info
-    sessions.set(sessionId, { 
-        sessionId: sessionId, 
-        status: 'CREATING', 
-        detail: 'Session is being created.',
-        owner: createdBy // Track who created this session
-    });
-    
-    // Track session ownership in user manager
-    if (createdBy) {
-        await userManager.addSessionToUser(createdBy, sessionId);
-    }
-    
-    // Auto-cleanup inactive sessions after timeout
-    // Fix for timeout overflow on 32-bit systems - cap at 24 hours max
-    const timeoutMs = Math.min(SESSION_TIMEOUT_HOURS * 60 * 60 * 1000, 24 * 60 * 60 * 1000);
-    setTimeout(async () => {
-        const session = sessions.get(sessionId);
-        if (session && session.status !== 'CONNECTED') {
-            await deleteSession(sessionId);
-            log(`Auto-deleted inactive session after ${SESSION_TIMEOUT_HOURS} hours: ${sessionId}`, 'SYSTEM');
-        }
-    }, timeoutMs);
-    
-    connectToWhatsApp(sessionId);
-    return { status: 'success', message: `Session ${sessionId} created.`, token };
-}
-
-app.get('/api/v1/sessions/:sessionId/qr', async (req, res) => {
-    const { sessionId } = req.params;
-    const session = sessions.get(sessionId);
-    if (!session) {
-        return res.status(404).json({ error: 'Session not found' });
-    }
-    log(`QR code requested for ${sessionId}`, sessionId);
-    updateSessionState(sessionId, 'GENERATING_QR', 'QR code requested by user.', '', '');
-    // The connection logic will handle the actual QR generation and broadcast.
-    res.status(200).json({ message: 'QR generation triggered.' });
-});
 
 async function deleteSession(sessionId) {
     const session = sessions.get(sessionId);

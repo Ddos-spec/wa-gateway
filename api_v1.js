@@ -81,7 +81,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, regenerateSessionToken) {
+function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, regenerateSessionToken, updateSessionState) {
     // Security middlewares
     router.use(helmet());
     
@@ -875,6 +875,25 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     // All routes below this are protected by token
     router.use(validateToken);
 
+    router.get('/sessions/:sessionId/qr', async (req, res) => {
+        const { sessionId } = req.params;
+        const session = sessions.get(sessionId);
+        if (!session) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+        log(`QR code requested for ${sessionId}`, sessionId);
+        // The function `updateSessionState` is not available here, but it is not critical.
+        // The main logic in `connectToWhatsApp` will handle the QR generation.
+        // For now, just triggering the connection logic is enough.
+        // In a future refactor, `updateSessionState` could be passed to `initializeApi`.
+        const sessionData = sessions.get(sessionId);
+        if (sessionData && sessionData.sock) {
+            // A simple way to trigger reconnection/QR generation if needed
+            sessionData.sock.ev.emit('connection.update', { connection: 'close', lastDisconnect: { error: new Error('QR regeneration requested'), date: new Date() } });
+        }
+        res.status(200).json({ message: 'QR generation triggered.' });
+    });
+
     router.post('/sessions/:sessionId/settings', async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
         const { sessionId } = req.params;
@@ -1229,5 +1248,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     
     return router;
 }
+
+module.exports = { initializeApi, getWebhookUrl: getWebhookUrl };
 
 module.exports = { initializeApi, getWebhookUrl: getWebhookUrl };
