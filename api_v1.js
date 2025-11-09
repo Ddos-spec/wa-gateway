@@ -8,67 +8,65 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const validator = require('validator');
 const { formatPhoneNumber, toWhatsAppFormat, isValidPhoneNumber } = require('./phone-utils');
-// Remove: const { log } = require('./index');
 
 const router = express.Router();
 
-// Webhook URLs will be stored in Redis by default
-let redisClient = null;
-const webhookUrls = new Map(); // fallback in-memory storage
-
-// Function to set Redis client if available
-function setRedisClient(client) {
-  redisClient = client;
+// --- Unified Webhook Settings Management ---
+function getSettingsFilePath(sessionId) {
+    const sessionPath = path.join(__dirname, 'auth_info_baileys', sessionId);
+    if (!fs.existsSync(sessionPath)) {
+        fs.mkdirSync(sessionPath, { recursive: true });
+    }
+    return path.join(sessionPath, 'settings.json');
 }
 
+async function loadSessionSettings(sessionId) {
+    try {
+        const filePath = getSettingsFilePath(sessionId);
+        if (fs.existsSync(filePath)) {
+            const data = await fs.promises.readFile(filePath, 'utf-8');
+            return JSON.parse(data);
+        }
+    } catch (error) {
+        console.error(`Error loading settings for session ${sessionId}: ${error.message}`);
+    }
+    return {}; // Return empty object if no settings found or error
+}
+
+async function saveSessionSettings(sessionId, settings) {
+    try {
+        const filePath = getSettingsFilePath(sessionId);
+        await fs.promises.writeFile(filePath, JSON.stringify(settings, null, 2));
+    } catch (error) {
+        console.error(`Error saving settings for session ${sessionId}: ${error.message}`);
+        throw error;
+    }
+}
+
+// This function is now used to get the "default" or first webhook URL for simple cases.
+// The main logic in index.js handles multiple webhooks.
 async function getWebhookUrl(sessionId) {
-  if (redisClient) {
-    try {
-      const url = await redisClient.get(`webhook:url:${sessionId}`);
-      if (url) return url;
-    } catch (error) {
-      console.error('Redis error in getWebhookUrl, falling back to in-memory:', error.message);
+    const settings = await loadSessionSettings(sessionId);
+    if (settings && settings.webhooks && settings.webhooks.length > 0) {
+        return settings.webhooks[0]; // Return the first URL as the default
     }
-  }
-  // Fallback to in-memory map
-  return webhookUrls.get(sessionId) || process.env.WEBHOOK_URL || '';
+    return process.env.WEBHOOK_URL || ''; // Fallback to environment variable
 }
 
+// This function sets the "default" (first) webhook URL.
 async function setWebhookUrl(sessionId, url) {
-  if (redisClient) {
-    try {
-      if (url) {
-        await redisClient.setEx(`webhook:url:${sessionId}`, 86400 * 30, url); // 30 days TTL
-      } else {
-        await redisClient.del(`webhook:url:${sessionId}`);
-      }
-      return true;
-    } catch (error) {
-      console.error('Redis error in setWebhookUrl, falling back to in-memory:', error.message);
-    }
-  }
-  // Fallback to in-memory map
-  if (url) {
-    webhookUrls.set(sessionId, url);
-  } else {
-    webhookUrls.delete(sessionId);
-  }
-  return false;
+    const settings = await loadSessionSettings(sessionId);
+    settings.webhooks = [url]; // Overwrite with a single URL
+    await saveSessionSettings(sessionId, settings);
 }
 
+// This function clears all webhook URLs.
 async function deleteWebhookUrl(sessionId) {
-  if (redisClient) {
-    try {
-      await redisClient.del(`webhook:url:${sessionId}`);
-      return true;
-    } catch (error) {
-      console.error('Redis error in deleteWebhookUrl, falling back to in-memory:', error.message);
-    }
-  }
-  // Fallback to in-memory map
-  webhookUrls.delete(sessionId);
-  return false;
+    const settings = await loadSessionSettings(sessionId);
+    settings.webhooks = [];
+    await saveSessionSettings(sessionId, settings);
 }
+// --- End of Unified Webhook Settings Management ---
 
 // Multer setup for file uploads
 const mediaDir = path.join(__dirname, 'media');
@@ -83,11 +81,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, saveSessionSettings, regenerateSessionToken, redisClient) {
-    if (redisClient) {
-        setRedisClient(redisClient);
-    }
-
+function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, regenerateSessionToken) {
     // Security middlewares
     router.use(helmet());
     

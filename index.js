@@ -610,7 +610,7 @@ function log(message, sessionId = 'SYSTEM', details = {}) {
 
 const phonePairing = new PhonePairing(log);
 
-const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, saveSessionSettings);
+const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, regenerateSessionToken);
 const legacyApiRouter = initializeLegacyApi(sessions, sessionTokens);
 app.use('/api/v1', v1ApiRouter);
 app.use('/api', legacyApiRouter); // Mount legacy routes at /api
@@ -686,19 +686,8 @@ function getSettingsFilePath(sessionId) {
     return path.join(__dirname, 'auth_info_baileys', sessionId, 'settings.json');
 }
 
-async function saveSessionSettings(sessionId, settings) {
-    try {
-        const filePath = getSettingsFilePath(sessionId);
-        await fs.promises.writeFile(filePath, JSON.stringify(settings, null, 2));
-        // Update in-memory session object
-        if (sessions.has(sessionId)) {
-            sessions.get(sessionId).settings = settings;
-        }
-        log(`Webhook settings saved for session ${sessionId}`, sessionId);
-    } catch (error) {
-        log(`Error saving settings for session ${sessionId}: ${error.message}`, sessionId, { error });
-        throw error;
-    }
+function getSettingsFilePath(sessionId) {
+    return path.join(__dirname, 'auth_info_baileys', sessionId, 'settings.json');
 }
 
 async function loadSessionSettings(sessionId) {
