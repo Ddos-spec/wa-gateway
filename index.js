@@ -1,5 +1,5 @@
-// Gemini Final Fix - Version 2.0
-const SCRIPT_VERSION = "GEMINI_FIX_V2";
+// Gemini Final Fix - Version 2.1 (Increased Timeout)
+const SCRIPT_VERSION = "GEMINI_FIX_V2.1";
 console.log(`Starting Super-Light-Web-Whatsapp-API-Server - Version: ${SCRIPT_VERSION}`);
 
 // Memory optimization for production environments
@@ -907,7 +907,7 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
             virtualLinkPreviewEnabled: false,  // More aggressive optimization
             shouldIgnoreJid: (jid) => isJidBroadcast(jid),
             qrTimeout: 60000, // Increased timeout to 60 seconds
-            connectTimeoutMs: 90000, // Increased timeout to 90 seconds
+            connectTimeoutMs: 180000, // Increased timeout to 180 seconds (3 minutes)
             keepAliveIntervalMs: 45000,  // Increased from 30000 to reduce connection overhead
             fireInitQueries: false,
             emitOwnEvents: false,
@@ -1091,7 +1091,7 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
                     phonePairing.deletePairing(sessionId);
                 }, 60000);
             }
-            updateStatus('CONNECTED', detailMessage, '', '');
+            updateSessionState('CONNECTED', detailMessage, '', '');
         }
 
         if (connection === 'close') {
@@ -1114,7 +1114,7 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
             } else {
                 const shouldReconnect = statusCode !== 401 && statusCode !== 403;
                 log(`Connection closed. Reason: ${reason}, statusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`, sessionId);
-                updateStatus('DISCONNECTED', 'Connection closed.', '', reason);
+                updateSessionState('DISCONNECTED', 'Connection closed.', '', reason);
 
                 if (shouldReconnect) {
                     setTimeout(() => createSessionWithRetry(sessionId, 0), 5000);
@@ -1127,7 +1127,7 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
                         });
                     }
                     // On fatal, non-reconnectable errors, clear the session data to force a fresh start next time.
-                    const sessionDir = path.join(AUTH_PATH, sessionId);
+                    const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
                     if (fs.existsSync(sessionDir)) {
                         fs.rmSync(sessionDir, { recursive: true, force: true });
                         log(`Cleared session data for ${sessionId} due to fatal error.`, sessionId);
