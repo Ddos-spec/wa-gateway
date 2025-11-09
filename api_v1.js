@@ -302,6 +302,153 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         });
     });
 
+    // Session management endpoints - these use session auth, not token auth
+    router.get('/sessions/:sessionId/qr', checkAuth, async (req, res) => {
+        const { sessionId } = req.params;
+        const session = sessions.get(sessionId);
+        if (!session) {
+            log('API request', 'SYSTEM', { 
+                event: 'api-request', 
+                method: req.method, 
+                endpoint: req.originalUrl,
+                sessionId: sessionId
+            });
+            return res.status(404).json({ 
+                status: 'error', 
+                message: 'Session not found' 
+            });
+        }
+        
+        // Check if user has permission to access this session
+        const userCanAccess = req.currentUser.role === 'admin' || 
+                             (session.owner === req.currentUser.email);
+        if (!userCanAccess) {
+            return res.status(403).json({ 
+                status: 'error', 
+                message: 'You do not have permission to access this session' 
+            });
+        }
+
+        log('API request', 'SYSTEM', { 
+            event: 'api-request', 
+            method: req.method, 
+            endpoint: req.originalUrl,
+            sessionId: sessionId
+        });
+        
+        // Update session state to trigger QR generation in the connection logic
+        const oldSession = sessions.get(sessionId) || {};
+        const newSession = {
+            ...oldSession,
+            sessionId: sessionId,
+            status: 'GENERATING_QR',
+            detail: 'QR code requested by user.',
+            qr: oldSession.qr,
+            reason: oldSession.reason
+        };
+        sessions.set(sessionId, newSession);
+
+        // The connection logic in index.js will handle the actual QR generation and broadcast.
+        res.status(200).json({ 
+            status: 'success',
+            message: 'QR generation triggered.',
+            sessionId: sessionId
+        });
+    });
+
+    // DELETE session endpoint - handles both dashboard (session) and API (token) auth
+    // Uses a custom middleware to check both auth types
+    router.delete('/sessions/:sessionId', async (req, res, next) => {
+        // Check for token-based auth first (like validateToken does)
+        const authHeader = req.headers['authorization'];
+        const token = authHeader && authHeader.split(' ')[1];
+
+        if (token != null) {
+            // This looks like a token-based request
+            // Verify the token like validateToken does
+            let expectedToken = null;
+            
+            const sessionIdFromRequest = req.query.sessionId || req.body.sessionId || req.params.sessionId;
+            if (sessionIdFromRequest) {
+                expectedToken = sessionTokens.get(sessionIdFromRequest);
+                if (expectedToken && token === expectedToken) {
+                    // Token is valid, proceed with token-based auth
+                    return await handleDeleteSession(req, res, null); // No currentUser for token auth
+                }
+            }
+
+            const isAnyTokenValid = Array.from(sessionTokens.values()).includes(token);
+            if (isAnyTokenValid) {
+                if (sessionIdFromRequest) {
+                    return res.status(403).json({ status: 'error', message: `Invalid token for session ${sessionIdFromRequest}` });
+                }
+                return await handleDeleteSession(req, res, null);
+            }
+
+            return res.status(403).json({ status: 'error', message: 'Invalid token' });
+        } else {
+            // No token, check for session-based auth (like checkAuth does)
+            const currentUser = req.session && req.session.adminAuthed ? {
+                email: req.session.userEmail,
+                role: req.session.userRole
+            } : null;
+
+            if (!currentUser) {
+                return res.status(401).json({ status: 'error', message: 'Authentication required' });
+            }
+
+            req.currentUser = currentUser;
+            // Proceed with session-based auth
+            return await handleDeleteSession(req, res, currentUser);
+        }
+    });
+
+    // Helper function for delete session logic
+    async function handleDeleteSession(req, res, currentUser) {
+        log('API request', 'SYSTEM', { 
+            event: 'api-request', 
+            method: req.method, 
+            endpoint: req.originalUrl, 
+            params: req.params 
+        });
+        const { sessionId } = req.params;
+
+        try {
+            // If we have a current user (session auth), check ownership
+            if (currentUser) {
+                const session = sessions.get(sessionId);
+                if (currentUser.role !== 'admin' && session) {
+                    // If session has an owner, verify it matches current user
+                    if (session.owner && session.owner !== currentUser.email) {
+                        return res.status(403).json({
+                            status: 'error',
+                            message: 'You can only delete your own sessions'
+                        });
+                    }
+                }
+            }
+
+            await deleteSession(sessionId);
+
+            // Log activity
+            if (activityLogger) {
+                const userEmail = currentUser ? currentUser.email : 'api-user';
+                await activityLogger.logSessionDelete(
+                    userEmail,
+                    sessionId,
+                    req.ip,
+                    req.headers['user-agent']
+                );
+            }
+
+            log('Session deleted', sessionId, { event: 'session-deleted', sessionId });
+            res.status(200).json({ status: 'success', message: `Session ${sessionId} deleted.` });
+        } catch (error) {
+            log('API error', 'SYSTEM', { event: 'api-error', error: error.message, endpoint: req.originalUrl });
+            res.status(500).json({ status: 'error', message: `Failed to delete session: ${error.message}` });
+        }
+    }
+
     // Campaign routes - these use session auth, not token auth
     router.get('/campaigns', checkCampaignAccess, (req, res) => {
         const campaigns = campaignManager.getAllCampaigns(

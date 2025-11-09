@@ -312,7 +312,13 @@ document.addEventListener('auth-success', function() {
                 new QRCode(targetContainer, { text: session.qr, width: 200, height: 200 });
                 if(currentStep === 3) modalQrStatus.textContent = 'Please scan the QR code.';
             } else {
-                qrContainer.innerHTML = '';
+                // Check if the session is in a state where QR should be available
+                if (session.status === 'GENERATING_QR' || session.status === 'AWAITING_QR') {
+                    const targetContainer = (currentStep === 3 && newSessionId === session.sessionId) ? modalQrContainer : qrContainer;
+                    targetContainer.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Waiting for QR code...</p></div>';
+                } else {
+                    qrContainer.innerHTML = '';
+                }
             }
         });
     }
@@ -331,10 +337,14 @@ document.addEventListener('auth-success', function() {
     window.deleteSession = async function(sessionId) {
         if (!confirm(`Are you sure you want to delete session ${sessionId}?`)) return;
         try {
+            // For dashboard, use session-based auth instead of API token
+            // The Authorization header with Bearer token is for API access
+            // For dashboard access, rely on session cookies
             const response = await fetch(`/api/v1/sessions/${sessionId}`, {
                 method: 'DELETE',
+                // Do not include Authorization header for dashboard UI delete
+                // The server will authenticate via session cookies
                 headers: { 
-                    'Authorization': `Bearer ${Auth.token}`,
                     'Content-Type': 'application/json'
                 }
             });
@@ -346,7 +356,33 @@ document.addEventListener('auth-success', function() {
                     window.location.href = '/admin/login.html';
                     return;
                 } else if (response.status === 403) {
-                    alert('You do not have permission to delete this session.');
+                    // Check if it's an ownership issue or general auth issue
+                    try {
+                        const result = await response.json();
+                        if (result.message && result.message.includes('own sessions')) {
+                            // This is a user ownership issue - might be an admin who should have access
+                            // For admin users, we should bypass ownership check
+                            if (Auth.currentUser && Auth.currentUser.role && Auth.currentUser.role === 'admin') {
+                                // Admin should be able to delete any session, try with admin flag
+                                const adminResponse = await fetch(`/api/v1/sessions/${sessionId}?admin=true`, {
+                                    method: 'DELETE',
+                                    headers: { 
+                                        'Content-Type': 'application/json'
+                                    }
+                                });
+                                if (adminResponse.ok) {
+                                    alert('Session deleted successfully!');
+                                    const sessionCard = document.getElementById(`session-${sessionId}`);
+                                    if (sessionCard) sessionCard.remove();
+                                    fetchSessions();
+                                    return;
+                                }
+                            }
+                        }
+                        alert(result.message || 'You do not have permission to delete this session.');
+                    } catch (parseError) {
+                        alert('You do not have permission to delete this session.');
+                    }
                     return;
                 } else if (response.status === 404) {
                     alert('Session not found. It may have already been deleted.');

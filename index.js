@@ -773,12 +773,17 @@ function updateSessionState(sessionId, status, detail, qr, reason) {
         sessionId: sessionId, // Explicitly ensure sessionId is preserved
         status,
         detail,
-        qr,
+        qr, // This is the QR code string when available
         reason
     };
     sessions.set(sessionId, newSession);
 
     try {
+        // Log QR code availability for debugging
+        if (qr) {
+            log(`QR code updated for ${sessionId}, broadcasting to clients`, sessionId);
+        }
+        
         broadcast({ type: 'session-update', data: getSessionsDetails() });
     } catch (error) {
         log(`Error broadcasting session update for ${sessionId}: ${error.message}`, sessionId, { error });
