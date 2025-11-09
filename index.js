@@ -1245,7 +1245,7 @@ async function initializeExistingSessions() {
 loadSystemLogFromDisk();
 server.listen(PORT, () => {
     log(`Server is running on port ${PORT}`);
-    log('Admin dashboard available at http://localhost:3000/admin/dashboard.html');
+    log(`Admin dashboard available at http://${process.env.APP_HOST || 'localhost'}:${PORT}/admin/dashboard.html`);
     loadTokens(); // Load tokens at startup
     initializeExistingSessions();
     
