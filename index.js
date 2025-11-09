@@ -20,6 +20,7 @@ const {
     isJidBroadcast,
     Browsers
 } = require('@whiskeysockets/baileys');
+const RedisAuthState = require('./redis-auth-state');
 const pino = require('pino');
 const { Boom } = require('@hapi/boom');
 const express = require('express');
@@ -42,11 +43,37 @@ const UserManager = require('./users');
 const ActivityLogger = require('./activity-logger');
 const PhonePairing = require('./phone-pairing');
 
+const redis = require('redis');
 const sessions = new Map();
 const retries = new Map();
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
+
+// Initialize Redis client
+const redisClient = redis.createClient({
+  host: process.env.REDIS_HOST || '127.0.0.1',
+  port: process.env.REDIS_PORT || 6379,
+  password: process.env.REDIS_PASSWORD
+});
+
+// Initialize webhook queue
+const WebhookQueue = require('./webhook-queue');
+let webhookQueue;
+
+// Initialize Redis connection
+(async () => {
+  try {
+    await redisClient.connect();
+    console.log('✅ Redis client connected successfully');
+    
+    // Initialize webhook queue after Redis connection
+    webhookQueue = new WebhookQueue();
+  } catch (error) {
+    console.error('❌ Failed to connect to Redis:', error.message);
+    process.exit(1);
+  }
+})();
 
 // Track WebSocket connections with their associated users
 const wsClients = new Map(); // Maps WebSocket client to user info
@@ -117,6 +144,7 @@ function saveTokens() {
         }
     } catch (error) {
         console.error('Error saving encrypted tokens:', error);
+        throw error; // Rethrow the error so the caller can handle it
     }
 }
 
@@ -549,7 +577,7 @@ app.post('/admin/update-logs', requireAdminAuth, express.json(), (req, res) => {
     }
 });
 
-const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing);
+const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, saveSessionSettings, undefined, redisClient);
 const legacyApiRouter = initializeLegacyApi(sessions, sessionTokens);
 app.use('/api/v1', v1ApiRouter);
 app.use('/api', legacyApiRouter); // Mount legacy routes at /api
@@ -679,26 +707,60 @@ function log(message, sessionId = 'SYSTEM', details = {}) {
     broadcast(logEntry);
 }
 
-// Export system log as JSON
-app.get('/api/v1/logs/export', requireAdminAuth, (req, res) => {
-    res.setHeader('Content-Disposition', 'attachment; filename="system-log.json"');
-    res.setHeader('Content-Type', 'application/json');
-    res.send(JSON.stringify(systemLog, null, 2));
-});
+// --- Start Webhook Settings Management ---
+function getSettingsFilePath(sessionId) {
+    return path.join(__dirname, 'auth_info_baileys', sessionId, 'settings.json');
+}
+
+async function saveSessionSettings(sessionId, settings) {
+    try {
+        const filePath = getSettingsFilePath(sessionId);
+        await fs.promises.writeFile(filePath, JSON.stringify(settings, null, 2));
+        // Update in-memory session object
+        if (sessions.has(sessionId)) {
+            sessions.get(sessionId).settings = settings;
+        }
+        log(`Webhook settings saved for session ${sessionId}`, sessionId);
+    } catch (error) {
+        log(`Error saving settings for session ${sessionId}: ${error.message}`, sessionId, { error });
+        throw error;
+    }
+}
+
+async function loadSessionSettings(sessionId) {
+    try {
+        const filePath = getSettingsFilePath(sessionId);
+        if (fs.existsSync(filePath)) {
+            const data = await fs.promises.readFile(filePath, 'utf-8');
+            return JSON.parse(data);
+        }
+    } catch (error) {
+        log(`Error loading settings for session ${sessionId}: ${error.message}`, sessionId, { error });
+    }
+    return {}; // Return empty object if no settings found or error
+}
+// --- End Webhook Settings Management ---
 
 // Update postToWebhook to accept sessionId and use getWebhookUrl(sessionId)
 async function postToWebhook(data) {
     const sessionId = data.sessionId || 'SYSTEM';
-    const webhookUrl = getWebhookUrl(sessionId);
+    const webhookUrl = await getWebhookUrl(sessionId); // Changed to await since it's now async
     if (!webhookUrl) return;
 
     try {
-        await axios.post(webhookUrl, data, {
-            headers: { 'Content-Type': 'application/json' }
-        });
-        log(`Successfully posted to webhook: ${webhookUrl}`);
+        if (webhookQueue) {
+            // Add to queue for asynchronous processing
+            await webhookQueue.addToQueue(sessionId, webhookUrl, data);
+            log(`Webhook job queued for: ${webhookUrl}`, sessionId);
+        } else {
+            // Fallback to direct call if queue is not available
+            await axios.post(webhookUrl, data, {
+                headers: { 'Content-Type': 'application/json' }
+            });
+            log(`Successfully posted to webhook: ${webhookUrl}`);
+        }
     } catch (error) {
-        log(`Failed to post to webhook: ${error.message}`);
+        log(`Failed to queue/post to webhook: ${error.message}`);
     }
 }
 
@@ -739,53 +801,149 @@ async function connectToWhatsApp(sessionId) {
     updateStatus('CONNECTING', 'Initializing session...');
     log('Starting session...', sessionId);
 
-    const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
-    if (!fs.existsSync(sessionDir)) {
-        fs.mkdirSync(sessionDir, { recursive: true });
+    // Load settings for the session
+    const settings = await loadSessionSettings(sessionId);
+    if (sessions.has(sessionId)) {
+        sessions.get(sessionId).settings = settings;
     }
 
-    const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+    // Use Redis auth state instead of file-based
+    const { creds, keys } = await RedisAuthState.createAuthState(redisClient, sessionId);
     const { version, isLatest } = await fetchLatestBaileysVersion();
     log(`Using WA version: ${version.join('.')}, isLatest: ${isLatest}`, sessionId);
 
     const sock = makeWASocket({
         version,
         auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, logger),
+            creds: creds,
+            keys: makeCacheableSignalKeyStore(keys, logger),
         },
         printQRInTerminal: false,
         logger,
         browser: Browsers.windows('Chrome'),
-        generateHighQualityLinkPreview: false,
+        virtualLinkPreviewEnabled: false,  // More aggressive optimization
         shouldIgnoreJid: (jid) => isJidBroadcast(jid),
         qrTimeout: 30000,
         connectTimeoutMs: 30000,
-        keepAliveIntervalMs: 30000,
+        keepAliveIntervalMs: 45000,  // Increased from 30000 to reduce connection overhead
         fireInitQueries: false,
         emitOwnEvents: false,
         markOnlineOnConnect: false,
         syncFullHistory: false,
-        retryRequestDelayMs: 2000,
+        retryRequestDelayMs: 3000,  // Increased from 2000 to reduce retry frequency
         maxMsgRetryCount: 3,
     });
 
-    sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('creds.update', async (creds) => {
+        await RedisAuthState.prototype.saveCreds.call(
+            { redis: redisClient, sessionId }, 
+            creds
+        );
+    });
+
+    // --- Start Advanced Webhook Handler ---
+    async function handleWebhookForMessage(message, sessionId) {
+        const session = sessions.get(sessionId);
+        // Ensure settings are loaded
+        if (!session) {
+            return;
+        }
+        
+        // Ensure settings exist, default to empty object if not
+        const settings = session.settings || {};
+        
+        // Check if we have either session-specific webhooks or a default webhook
+        const hasWebhooks = settings.webhooks && settings.webhooks.length > 0;
+        const defaultWebhookUrl = await getWebhookUrl(sessionId); // Get default webhook for this session
+        if (!hasWebhooks && !defaultWebhookUrl) {
+            return; // No webhooks configured for this session
+        }
+        const msg = message.messages[0];
+        if (!msg.message) return; // Ignore empty messages, notifications, etc.
+
+        const fromMe = msg.key.fromMe;
+        const isGroup = msg.key.remoteJid.endsWith('@g.us');
+        
+        // Get the primary key of the message content to determine its type
+        const messageType = Object.keys(msg.message)[0];
+
+        // --- Apply Filters based on settings ---
+        if (fromMe && !settings.webhook_from_me) return;
+        if (isGroup && !settings.webhook_group) return;
+        if (!isGroup && !settings.webhook_individual) return;
+
+        // Map Baileys message types to our setting keys
+        const typeFilterMap = {
+            'imageMessage': 'save_image',
+            'videoMessage': 'save_video',
+            'audioMessage': 'save_audio',
+            'stickerMessage': 'save_sticker',
+            'documentMessage': 'save_document',
+            'documentWithCaptionMessage': 'save_document' // Treat this as a document
+        };
+
+        const settingKeyForType = typeFilterMap[messageType];
+        if (settingKeyForType && !settings[settingKeyForType]) {
+            // This message type is explicitly disabled in the settings, so we stop here.
+            return;
+        }
+        
+        // --- If all filters pass, prepare and send the webhook ---
+        const payload = {
+            event: 'message',
+            sessionId,
+            from: msg.key.remoteJid,
+            fromMe: fromMe,
+            isGroup: isGroup,
+            messageId: msg.key.id,
+            timestamp: msg.messageTimestamp,
+            data: msg
+        };
+
+        log(`Message from ${payload.from} passed filters. Sending to webhooks...`, sessionId);
+
+        // Array to hold all webhook URLs to send to
+        const allWebhookUrls = [];
+        
+        // Add session-specific webhooks if they exist
+        if (settings.webhooks && Array.isArray(settings.webhooks) && settings.webhooks.length > 0) {
+            allWebhookUrls.push(...settings.webhooks);
+        }
+        
+        // Add default webhook for this session if it's different from session-specific ones
+        const defaultWebhookUrl = await getWebhookUrl(sessionId);
+        if (defaultWebhookUrl && !allWebhookUrls.includes(defaultWebhookUrl)) {
+            allWebhookUrls.push(defaultWebhookUrl);
+        }
+
+        // Only proceed if we have URLs to send to
+        if (allWebhookUrls.length === 0) {
+            return; // No webhooks configured
+        }
+
+        for (const url of allWebhookUrls) {
+            try {
+                // Add webhook to queue for asynchronous processing
+                if (webhookQueue) {
+                    await webhookQueue.addToQueue(sessionId, url, payload);
+                    log(`Webhook job queued for ${url}`, sessionId);
+                } else {
+                    // Fallback to direct call if queue is not available
+                    await axios.post(url, payload, {
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    log(`Sent message webhook to ${url}`, sessionId);
+                }
+            } catch (error) {
+                log(`Failed to queue/send message webhook to ${url}: ${error.message}`, sessionId, { error });
+            }
+        }
+    }
+    // --- End Advanced Webhook Handler ---
 
     sock.ev.on('messages.upsert', async (m) => {
-        const msg = m.messages[0];
-        if (!msg.key.fromMe) {
-            log(`Received new message from ${msg.key.remoteJid}`, sessionId);
-            const messageData = {
-                event: 'new-message',
-                sessionId,
-                from: msg.key.remoteJid,
-                messageId: msg.key.id,
-                timestamp: msg.messageTimestamp,
-                data: msg
-            };
-            await postToWebhook(messageData);
-        }
+        // Pass the entire message object to our new handler
+        await handleWebhookForMessage(m, sessionId);
     });
 
     sock.ev.on('connection.update', async (update) => {
@@ -893,7 +1051,8 @@ function getSessionsDetails(userEmail = null, isAdmin = false) {
             detail: s.detail,
             qr: s.qr,
             token: sessionTokens.get(s.sessionId) || null,
-            owner: s.owner || 'system' // Include owner info
+            owner: s.owner || 'system', // Include owner info
+            settings: s.settings || {} // Include session settings
         }));
 }
 
@@ -993,6 +1152,18 @@ async function deleteSession(sessionId) {
     broadcast({ type: 'session-update', data: getSessionsDetails() });
 }
 
+// Function to regenerate API token for a session
+async function regenerateSessionToken(sessionId) {
+    if (!sessions.has(sessionId)) {
+        throw new Error('Session not found');
+    }
+    const newToken = randomUUID();
+    sessionTokens.set(sessionId, newToken);
+    saveTokens();
+    log(`API Token regenerated for session ${sessionId}`, 'SYSTEM');
+    return newToken;
+}
+
 const PORT = process.env.PORT || 3000;
 
 // Handle memory errors gracefully
@@ -1054,4 +1225,48 @@ async function checkAndStartScheduledCampaigns() {
     }
 }
 
+// Graceful shutdown to clean up Redis connections
+process.on('SIGTERM', async () => {
+    console.log('SIGTERM received, shutting down gracefully...');
+    
+    try {
+        // Close webhook queue if initialized
+        if (webhookQueue) {
+            await webhookQueue.close();
+        }
+        
+        // Close Redis client
+        if (redisClient && redisClient.isOpen) {
+            await redisClient.quit();
+        }
+        
+        console.log('Cleanup completed, exiting process.');
+        process.exit(0);
+    } catch (error) {
+        console.error('Error during shutdown:', error);
+        process.exit(1);
+    }
+});
+
+process.on('SIGINT', async () => {
+    console.log('SIGINT received, shutting down gracefully...');
+    
+    try {
+        // Close webhook queue if initialized
+        if (webhookQueue) {
+            await webhookQueue.close();
+        }
+        
+        // Close Redis client
+        if (redisClient && redisClient.isOpen) {
+            await redisClient.quit();
+        }
+        
+        console.log('Cleanup completed, exiting process.');
+        process.exit(0);
+    } catch (error) {
+        console.error('Error during shutdown:', error);
+        process.exit(1);
+    }
+});
 

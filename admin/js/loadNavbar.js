@@ -1,9 +1,9 @@
 // admin/js/loadNavbar.js
 
 document.addEventListener('DOMContentLoaded', function () {
-    const placeholder = document.getElementById('navbar-placeholder');
-    if (!placeholder) {
-        console.error('Navbar placeholder not found!');
+    const offcanvasContainer = document.getElementById('offcanvas-container');
+    if (!offcanvasContainer) {
+        console.error('Offcanvas container not found!');
         return;
     }
 
@@ -15,11 +15,11 @@ document.addEventListener('DOMContentLoaded', function () {
             return response.text();
         })
         .then(data => {
-            placeholder.innerHTML = data;
+            offcanvasContainer.innerHTML = data;
             
             // Set the active nav link based on the current page
             const currentPage = window.location.pathname;
-            const navLinks = placeholder.querySelectorAll('.nav-link');
+            const navLinks = offcanvasContainer.querySelectorAll('.nav-link');
             navLinks.forEach(link => {
                 const linkPath = new URL(link.href).pathname;
                 if (linkPath === currentPage) {
@@ -27,6 +27,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     link.setAttribute('aria-current', 'page');
                 }
             });
+
+            // Initialize Offcanvas toggle for main content adjustment
+            const offcanvasElement = document.getElementById('offcanvasNavbar');
+            if (offcanvasElement) {
+                offcanvasElement.addEventListener('show.bs.offcanvas', function () {
+                    document.body.classList.add('offcanvas-open');
+                });
+                offcanvasElement.addEventListener('hide.bs.offcanvas', function () {
+                    document.body.classList.remove('offcanvas-open');
+                });
+            }
 
             // Now that the navbar is loaded, initialize the authentication check.
             // This ensures all navbar elements (like #currentUser, #logout-btn) are in the DOM.
@@ -38,6 +49,6 @@ document.addEventListener('DOMContentLoaded', function () {
         })
         .catch(error => {
             console.error('Error loading navbar:', error);
-            placeholder.innerHTML = '<div class="alert alert-danger m-3">Failed to load navigation bar. Please try refreshing the page.</div>';
+            offcanvasContainer.innerHTML = '<div class="alert alert-danger m-3">Failed to load navigation bar. Please try refreshing the page.</div>';
         });
 });

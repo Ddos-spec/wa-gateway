@@ -15,12 +15,24 @@
     "sessionId": "pair_6285771518231_1762586594664",
     "phoneNumber": "6285771518231",
     "owner": "admin@localhost",
-    "status": "CONNECTED",
-    "detail": "Connected as Dons Pablos",
+    "status": "CONNECTING",
+    "detail": "Initializing session...",
     "pairingCode": "83JB-XCB1",
     "qr": "",
     "createdAt": "2025-11-08T07:23:14.664Z",
     "reason": "",
-    "updatedAt": "2025-11-08T09:39:30.368Z"
+    "updatedAt": "2025-11-09T05:35:13.340Z"
+  },
+  "pair_6289660152525_1762596447505": {
+    "sessionId": "pair_6289660152525_1762596447505",
+    "phoneNumber": "6289660152525",
+    "owner": "admin@localhost",
+    "status": "CONNECTING",
+    "detail": "Initializing session...",
+    "pairingCode": "TRV4-TAE4",
+    "qr": "",
+    "createdAt": "2025-11-08T10:07:27.505Z",
+    "reason": "",
+    "updatedAt": "2025-11-09T05:35:13.410Z"
   }
 }

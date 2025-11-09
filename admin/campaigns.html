@@ -20,9 +20,19 @@
             height: 200px;
         }
     </style>
+    <link rel="stylesheet" href="/admin/css/custom.css">
 </head>
 <body>
-    <div id="navbar-placeholder"></div>
+    <div id="offcanvas-container"></div>
+    <div class="main-content-wrapper">
+        <header class="py-3 mb-4 border-bottom">
+            <div class="container-fluid d-flex align-items-center">
+                <button class="btn btn-primary me-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
+                    <i class="bi bi-list"></i>
+                </button>
+                <h4 class="mb-0">Campaign Management</h4>
+            </div>
+        </header>
 
     <!-- Main Content -->
     <div class="container-fluid mt-4">
@@ -136,5 +146,6 @@
     <script src="/admin/js/auth-check.js"></script>
     <script src="/admin/js/loadNavbar.js"></script>
     <script src="/admin/js/campaigns.js"></script>
+</div> <!-- End of main-content-wrapper -->
 </body>
 </html>

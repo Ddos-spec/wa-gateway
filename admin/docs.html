@@ -24,10 +24,20 @@
             border-color: var(--bs-border-color);
         }
     </style>
+    <link rel="stylesheet" href="/admin/css/custom.css">
 </head>
 
 <body>
-        <div id="navbar-placeholder"></div>
+    <div id="offcanvas-container"></div>
+    <div class="main-content-wrapper">
+        <header class="py-3 mb-4 border-bottom">
+            <div class="container-fluid d-flex align-items-center">
+                <button class="btn btn-primary me-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
+                    <i class="bi bi-list"></i>
+                </button>
+                <h4 class="mb-0">API Documentation</h4>
+            </div>
+        </header>
 
     <main class="container mt-4">
         <section id="api-reference" class="mb-5">
@@ -252,6 +262,7 @@
     <footer class="text-center text-muted py-4">
         <small>Super-Light-Web-WhatsApp-API-Server by Alucard0x1</small>
     </footer>
+</div> <!-- End of main-content-wrapper -->
 
     <script src="/admin/js/bootstrap.bundle.min.js"></script>
     <script src="/admin/js/utils.js"></script>

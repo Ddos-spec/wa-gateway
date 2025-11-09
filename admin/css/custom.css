@@ -1,0 +1,64 @@
+/* admin/css/custom.css */
+
+body {
+    overflow-x: hidden; /* Prevent horizontal scroll when offcanvas is open */
+}
+
+.offcanvas-backdrop {
+    z-index: 1040; /* Ensure backdrop is below offcanvas but above other content */
+}
+
+.offcanvas {
+    z-index: 1045; /* Ensure offcanvas is above other content */
+}
+
+/* Adjust main content when offcanvas is open */
+/* This is a basic example, more sophisticated solutions might involve JS or different Bootstrap utilities */
+@media (min-width: 992px) { /* Bootstrap's 'lg' breakpoint */
+    body.offcanvas-open {
+        padding-left: 250px; /* Width of the offcanvas */
+    }
+}
+
+/* Style for the main content wrapper to allow for smooth transitions */
+.main-content-wrapper {
+    transition: margin-left .3s ease-in-out;
+}
+
+.offcanvas-open .main-content-wrapper {
+    margin-left: 250px; /* Same as offcanvas width */
+}
+
+/* Adjustments for the offcanvas body to make buttons full width and text aligned */
+.offcanvas-body .navbar-text {
+    display: block; /* Make span take full width */
+    text-align: left;
+    margin-bottom: 0.5rem; /* Add some space below username */
+    padding-left: 0.5rem; /* Align with nav links */
+}
+
+.offcanvas-body .btn {
+    margin-bottom: 0.5rem; /* Space between buttons */
+}
+
+.offcanvas-body .btn:last-child {
+    margin-bottom: 0;
+}
+
+.offcanvas-header .offcanvas-title {
+    color: white;
+}
+
+.offcanvas-header {
+    background-color: #25D366;
+    color: white;
+}
+
+.offcanvas-header .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%); /* Make close button white */
+}
+
+.offcanvas-body .nav-link.active {
+    background-color: rgba(0, 0, 0, 0.1); /* Highlight active link */
+    border-radius: 0.25rem;
+}

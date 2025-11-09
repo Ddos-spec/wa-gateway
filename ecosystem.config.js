@@ -6,10 +6,10 @@ module.exports = {
     autorestart: true,
     watch: false,
     max_memory_restart: '1G',
-    node_args: '--max-old-space-size=1024 --optimize-for-size --gc-interval=100',
+    node_args: '--max-old-space-size=512 --optimize-for-size --gc-interval=100',
     env: {
       NODE_ENV: 'production',
-      NODE_OPTIONS: '--max-old-space-size=1024'
+      NODE_OPTIONS: '--max-old-space-size=512'
     },
     error_file: './logs/err.log',
     out_file: './logs/out.log',

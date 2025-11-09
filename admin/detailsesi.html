@@ -24,9 +24,19 @@
             height: 250px;
         }
     </style>
+    <link rel="stylesheet" href="/admin/css/custom.css">
 </head>
 <body class="bg-light">
-    <div id="navbar-placeholder"></div>
+    <div id="offcanvas-container"></div>
+    <div class="main-content-wrapper">
+        <header class="py-3 mb-4 border-bottom">
+            <div class="container-fluid d-flex align-items-center">
+                <button class="btn btn-primary me-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
+                    <i class="bi bi-list"></i>
+                </button>
+                <h4 class="mb-0">Session Detail</h4>
+            </div>
+        </header>
 
     <!-- Main Content -->
     <div class="container my-4">
@@ -77,9 +87,19 @@
                 <div class="card shadow-sm h-100">
                     <div class="card-body">
                         <h5 class="card-title mb-4">Configuration</h5>
-                        <form id="settings-form">
+                        
+                        <div id="config-loader" class="text-center p-5">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mt-2">Loading Configuration...</p>
+                        </div>
+
+                        <form id="settings-form" style="display: none;">
                             <!-- API Key -->
+                            <h6 class="mb-3">API</h6>
                             <div class="input-group mb-3">
+                                <span class="input-group-text">API Key</span>
                                 <input id="apikey-input" type="text" class="form-control" readonly placeholder="Click Generate API Key">
                                 <button type="button" id="generate-apikey" class="btn btn-outline-secondary">Generate</button>
                             </div>
@@ -177,7 +197,7 @@
                                 <button type="button" id="add-webhook" class="btn btn-sm btn-outline-primary mt-2"><i class="bi bi-plus-lg me-1"></i> Add URL</button>
                             </div>
 
-                            <button type="submit" class="btn btn-primary w-100">Save Configuration</button>
+                            <button type="button" id="save-config-btn" class="btn btn-primary w-100">Save Configuration</button>
                         </form>
                     </div>
                 </div>
@@ -212,6 +232,25 @@
                         <button type="submit" class="btn btn-primary w-100 mb-3">Next</button>
                         <div id="pairing-code-display" class="text-center fs-4 fw-bold"></div>
                     </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generic Confirmation Modal -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="confirmationModalTitle">Confirmation</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="confirmationModalBody">
+                    Are you sure?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+                    <button type="button" class="btn btn-primary" id="confirmationModalConfirmBtn">Yes</button>
                 </div>
             </div>
         </div>
@@ -272,5 +311,6 @@
         addLog('info', 'Dashboard loaded');
     </script>
     <script src="/admin/js/detailsesi.js"></script>
+</div> <!-- End of main-content-wrapper -->
 </body>
 </html>

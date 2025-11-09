@@ -13,9 +13,63 @@ const { formatPhoneNumber, toWhatsAppFormat, isValidPhoneNumber } = require('./p
 
 const router = express.Router();
 
-const webhookUrls = new Map();
+// Webhook URLs will be stored in Redis by default
+let redisClient = null;
+const webhookUrls = new Map(); // fallback in-memory storage
 
-const getWebhookUrl = (sessionId) => webhookUrls.get(sessionId) || process.env.WEBHOOK_URL || '';
+// Function to set Redis client if available
+function setRedisClient(client) {
+  redisClient = client;
+}
+
+async function getWebhookUrl(sessionId) {
+  if (redisClient) {
+    try {
+      const url = await redisClient.get(`webhook:url:${sessionId}`);
+      if (url) return url;
+    } catch (error) {
+      console.error('Redis error in getWebhookUrl, falling back to in-memory:', error.message);
+    }
+  }
+  // Fallback to in-memory map
+  return webhookUrls.get(sessionId) || process.env.WEBHOOK_URL || '';
+}
+
+async function setWebhookUrl(sessionId, url) {
+  if (redisClient) {
+    try {
+      if (url) {
+        await redisClient.setEx(`webhook:url:${sessionId}`, 86400 * 30, url); // 30 days TTL
+      } else {
+        await redisClient.del(`webhook:url:${sessionId}`);
+      }
+      return true;
+    } catch (error) {
+      console.error('Redis error in setWebhookUrl, falling back to in-memory:', error.message);
+    }
+  }
+  // Fallback to in-memory map
+  if (url) {
+    webhookUrls.set(sessionId, url);
+  } else {
+    webhookUrls.delete(sessionId);
+  }
+  return false;
+}
+
+async function deleteWebhookUrl(sessionId) {
+  if (redisClient) {
+    try {
+      await redisClient.del(`webhook:url:${sessionId}`);
+      return true;
+    } catch (error) {
+      console.error('Redis error in deleteWebhookUrl, falling back to in-memory:', error.message);
+    }
+  }
+  // Fallback to in-memory map
+  webhookUrls.delete(sessionId);
+  return false;
+}
 
 // Multer setup for file uploads
 const mediaDir = path.join(__dirname, 'media');
@@ -30,7 +84,10 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing) {
+function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, saveSessionSettings, regenerateSessionToken, redisClient) {
+    if (redisClient) {
+        setRedisClient(redisClient);
+    }
 
     // Security middlewares
     router.use(helmet());
@@ -829,6 +886,24 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     // All routes below this are protected by token
     router.use(validateToken);
 
+    router.post('/sessions/:sessionId/settings', async (req, res) => {
+        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
+        const { sessionId } = req.params;
+        const settings = req.body;
+
+        if (typeof settings !== 'object' || settings === null) {
+            return res.status(400).json({ status: 'error', message: 'Invalid settings format. Expected an object.' });
+        }
+
+        try {
+            await saveSessionSettings(sessionId, settings);
+            res.status(200).json({ status: 'success', message: 'Settings saved successfully.' });
+        } catch (error) {
+            log(`API Error saving settings for ${sessionId}: ${error.message}`, 'SYSTEM', { error });
+            res.status(500).json({ status: 'error', message: 'Failed to save settings.' });
+        }
+    });
+
     router.delete('/sessions/:sessionId', async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, params: req.params });
         const { sessionId } = req.params;
@@ -883,34 +958,34 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     }
 
     // Webhook setup endpoint
-    router.post('/webhook', (req, res) => {
+    router.post('/webhook', async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
         const { url, sessionId } = req.body;
         if (!url || !sessionId) {
             log('API error', 'SYSTEM', { event: 'api-error', error: 'URL and sessionId are required.', endpoint: req.originalUrl });
             return res.status(400).json({ status: 'error', message: 'URL and sessionId are required.' });
         }
-        webhookUrls.set(sessionId, url);
+        await setWebhookUrl(sessionId, url);
         log('Webhook URL updated', url, { event: 'webhook-updated', sessionId, url });
         res.status(200).json({ status: 'success', message: `Webhook URL for session ${sessionId} updated to ${url}` });
     });
     
     // Add GET and DELETE endpoints for webhook management
-    router.get('/webhook', (req, res) => {
+    router.get('/webhook', async (req, res) => {
         const { sessionId } = req.query;
         if (!sessionId) {
             return res.status(400).json({ status: 'error', message: 'sessionId is required.' });
         }
-        const url = webhookUrls.get(sessionId) || null;
-        res.status(200).json({ status: 'success', sessionId, url });
+        const url = await getWebhookUrl(sessionId);
+        res.status(200).json({ status: 'success', sessionId, url: url || null });
     });
 
-    router.delete('/webhook', (req, res) => {
+    router.delete('/webhook', async (req, res) => {
         const { sessionId } = req.body;
         if (!sessionId) {
             return res.status(400).json({ status: 'error', message: 'sessionId is required.' });
         }
-        webhookUrls.delete(sessionId);
+        await deleteWebhookUrl(sessionId);
         log('Webhook URL deleted', '', { event: 'webhook-deleted', sessionId });
         res.status(200).json({ status: 'success', message: `Webhook for session ${sessionId} deleted.` });
     });
@@ -1148,4 +1223,4 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     return router;
 }
 
-module.exports = { initializeApi, getWebhookUrl };
+module.exports = { initializeApi, getWebhookUrl: getWebhookUrl };
