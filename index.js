@@ -44,6 +44,7 @@ const FileStore = require('session-file-store')(session);
 const UserManager = require('./users');
 const ActivityLogger = require('./activity-logger');
 const PhonePairing = require('./phone-pairing');
+const { Curve } = require('@whiskeysockets/baileys/lib/Utils/crypto'); // Import Curve for key generation
 
 const redis = require('redis');
 const sessions = new Map();
@@ -821,11 +822,19 @@ async function connectToWhatsApp(sessionId) {
     }
 
     try {
-        // Use Redis auth state instead of file-based
-        const { creds, keys } = await RedisAuthState.createAuthState(redisClient, sessionId);
-        const { version, isLatest } = await fetchLatestBaileysVersion();
-        log(`Using WA version: ${version.join('.')}, isLatest: ${isLatest}`, sessionId);
-
+            // Use Redis auth state instead of file-based
+            const { creds, keys } = await RedisAuthState.createAuthState(redisClient, sessionId);
+        
+            // Ensure noiseKey is initialized for new sessions or if missing
+            if (!creds.noiseKey) {
+                creds.noiseKey = Curve.generateKeyPair();
+                log(`Generated new noiseKey for session ${sessionId}`, sessionId);
+                // Also save this new creds to Redis immediately
+                await RedisAuthState.prototype.saveCreds.call({ redis: redisClient, sessionId }, creds);
+            }
+        
+            const { version, isLatest } = await fetchLatestBaileysVersion();
+            log(`Using WA version: ${version.join('.')}, isLatest: ${isLatest}`, sessionId);
         const sock = makeWASocket({
             version,
             auth: {
