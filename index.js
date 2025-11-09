@@ -52,6 +52,7 @@ const retries = new Map();
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
+let schedulerInterval;
 
 // Initialize Redis client
 const redisClient = redis.createClient({
@@ -189,21 +190,17 @@ function loadTokens() {
     }
 }
 
-// Ensure media directory exists
+// Persistent directory paths
+const SESSION_PATH = process.env.SESSION_PATH || path.join(__dirname, 'sessions');
+const AUTH_PATH = process.env.AUTH_PATH || path.join(__dirname, 'auth_info_baileys');
 const mediaDir = path.join(__dirname, 'media');
-if (!fs.existsSync(mediaDir)) {
-    fs.mkdirSync(mediaDir);
-}
 
-// Ensure sessions directory exists for express-session
-const expressSessionsDir = process.env.EXPRESS_SESSIONS_DIR || path.join(__dirname, 'sessions');
-try {
-    fs.mkdirSync(expressSessionsDir, { recursive: true });
-    console.log(`✅ Express sessions directory created/ensured at: ${expressSessionsDir}`);
-} catch (error) {
-    console.error(`❌ Failed to create Express sessions directory at ${expressSessionsDir}: ${error.message}`);
-    // Depending on severity, you might want to exit the process here
-}
+// Ensure all necessary directories exist
+[SESSION_PATH, AUTH_PATH, mediaDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
 
 // Trust proxy for cPanel and other reverse proxy environments
 // Only trust first proxy, not all (prevents security issues)
@@ -238,6 +235,10 @@ const ADMIN_PASSWORD = process.env.ADMIN_DASHBOARD_PASSWORD;
 // Session limits configuration
 const MAX_SESSIONS = parseInt(process.env.MAX_SESSIONS) || 10;
 const SESSION_TIMEOUT_HOURS = parseInt(process.env.SESSION_TIMEOUT_HOURS) || 24;
+
+// Reconnection logic
+const MAX_RETRIES = 5;
+const RETRY_DELAYS = [5000, 10000, 30000, 60000, 120000]; // ms
 
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
@@ -276,24 +277,28 @@ wss.on('connection', (ws, req) => {
     });
 });
 
-// Use file-based session store for production
-const sessionStore = new FileStore({
-    path: expressSessionsDir, // Use the configurable path
-    ttl: 86400, // 1 day
-    retries: 3,
-    secret: process.env.SESSION_SECRET || 'change_this_secret'
-});
-
 app.use(session({
-    store: sessionStore,
-    secret: process.env.SESSION_SECRET || 'change_this_secret',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { 
-        httpOnly: true, 
-        secure: false, // Set secure: true if using HTTPS
-        maxAge: 86400000 // 1 day
+  store: new FileStore({
+    path: SESSION_PATH,
+    retries: 5, // Tambah retry attempts
+    minTimeout: 100,
+    maxTimeout: 500,
+    reapInterval: 3600, // Cleanup expired sessions setiap 1 jam
+    ttl: 86400, // Session TTL 24 jam
+    logFn: (msg) => {
+      // Suppress retry errors yang tidak fatal
+      if (!msg.includes('will retry')) {
+        console.log('[session-file-store]', msg);
+      }
     }
+  }),
+  secret: process.env.SESSION_SECRET || 'your-secret-key-here',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 86400000 // 24 jam
+  }
 }));
 
 // Serve homepage
@@ -811,7 +816,11 @@ function updateSessionState(sessionId, status, detail, qr, reason) {
     });
 }
 
-async function connectToWhatsApp(sessionId) {
+async function createSessionWithRetry(sessionId, retryCount = 0) {
+    const session = sessions.get(sessionId);
+    if (session) {
+        session.retryCount = retryCount;
+    }
     const pairingInfo = phonePairing.getPairingStatus(sessionId);
     const phoneNumber = pairingInfo ? pairingInfo.phoneNumber : null;
 
@@ -1045,6 +1054,10 @@ async function connectToWhatsApp(sessionId) {
 
         if (connection === 'open') {
             log(`Connection is now open for ${sessionId}.`);
+            const session = sessions.get(sessionId);
+            if (session) {
+                session.retryCount = 0; // Reset retry count on successful connection
+            }
             
             let detailMessage = `Connected as ${sock.user?.name || 'Unknown'}`;
             if (pairingInfo && pairingInfo.status.includes('AWAITING')) {
@@ -1069,25 +1082,39 @@ async function connectToWhatsApp(sessionId) {
         if (connection === 'close') {
             const statusCode = (lastDisconnect?.error instanceof Boom) ? lastDisconnect.error.output.statusCode : 0;
             const reason = new Boom(lastDisconnect?.error)?.output?.payload?.error || 'Unknown';
-            const shouldReconnect = statusCode !== 401 && statusCode !== 403 && statusCode !== 428;
 
-            log(`Connection closed. Reason: ${reason}, statusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`, sessionId);
-            updateStatus('DISCONNECTED', 'Connection closed.', '', reason);
-
-            if (shouldReconnect) {
-                setTimeout(() => connectToWhatsApp(sessionId), 5000);
-            } else {
-                log(`Not reconnecting for session ${sessionId} due to fatal error.`, sessionId);
-                if (pairingInfo) {
-                    phonePairing.updatePairingStatus(sessionId, {
-                        status: 'PAIRING_FAILED',
-                        detail: `Connection failed: ${reason}`
-                    });
+            if (statusCode === 428) {
+                if (retryCount < MAX_RETRIES) {
+                    const delay = RETRY_DELAYS[retryCount];
+                    log(`Connection timeout (428). Retrying in ${delay/1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`, sessionId);
+                    updateStatus('RECONNECTING', `Connection timeout. Retrying in ${delay/1000}s...`);
+                    setTimeout(() => {
+                        createSessionWithRetry(sessionId, retryCount + 1);
+                    }, delay);
+                } else {
+                    log(`Max retries reached for 428 error. Manual intervention required.`, sessionId);
+                    updateStatus('CONNECTION_FAILED', 'Connection timeout - QR not scanned', '', reason);
                 }
-                const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
-                if (fs.existsSync(sessionDir)) {
-                    fs.rmSync(sessionDir, { recursive: true, force: true });
-                    log(`Cleared session data for ${sessionId}`, sessionId);
+            } else {
+                const shouldReconnect = statusCode !== 401 && statusCode !== 403;
+                log(`Connection closed. Reason: ${reason}, statusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`, sessionId);
+                updateStatus('DISCONNECTED', 'Connection closed.', '', reason);
+
+                if (shouldReconnect) {
+                    setTimeout(() => createSessionWithRetry(sessionId, 0), 5000);
+                } else {
+                    log(`Not reconnecting for session ${sessionId} due to fatal error.`, sessionId);
+                    if (pairingInfo) {
+                        phonePairing.updatePairingStatus(sessionId, {
+                            status: 'PAIRING_FAILED',
+                            detail: `Connection failed: ${reason}`
+                        });
+                    }
+                    const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
+                    if (fs.existsSync(sessionDir)) {
+                        fs.rmSync(sessionDir, { recursive: true, force: true });
+                        log(`Cleared session data for ${sessionId}`, sessionId);
+                    }
                 }
             }
         }
@@ -1101,7 +1128,7 @@ async function connectToWhatsApp(sessionId) {
         log(`Warning: Session ${sessionId} not found when trying to set socket`, sessionId);
     }
 } catch (error) {
-    log(`Error in connectToWhatsApp for ${sessionId}: ${error.message}`, sessionId, { error: error.stack });
+    log(`Error in createSessionWithRetry for ${sessionId}: ${error.message}`, sessionId, { error: error.stack });
     updateStatus('CONNECTION_FAILED', `Connection failed: ${error.message}`);
     // Remove the session from sessions map to avoid stuck status
     sessions.delete(sessionId);
@@ -1177,7 +1204,7 @@ async function createSession(sessionId, createdBy = null) {
         }
     }, timeoutMs);
     
-    connectToWhatsApp(sessionId);
+    createSessionWithRetry(sessionId);
     return { status: 'success', message: `Session ${sessionId} created.`, token };
 }
 
@@ -1272,6 +1299,29 @@ async function initializeExistingSessions() {
     }
 }
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  const health = {
+    uptime: process.uptime(),
+    redis: redisClient?.isOpen ? 'connected' : 'disconnected',
+    sessions: Object.keys(sessions).length,
+    activeSessions: Object.values(sessions).filter(s => s.sock?.user).length,
+    timestamp: new Date().toISOString()
+  };
+  
+  res.status(200).json(health);
+});
+
+// Auto-recovery check setiap 5 menit
+setInterval(async () => {
+  for (const [sessionId, session] of Object.entries(sessions)) {
+    if (!session.sock?.user && (session.retryCount || 0) < MAX_RETRIES) {
+      console.log(`[${sessionId}] Session disconnected, attempting recovery...`);
+      await createSessionWithRetry(sessionId, session.retryCount || 0);
+    }
+  }
+}, 300000); // 5 menit
+
 loadSystemLogFromDisk();
 server.listen(PORT, () => {
     log(`Server is running on port ${PORT}`);
@@ -1287,7 +1337,7 @@ server.listen(PORT, () => {
 function startCampaignScheduler() {
     console.log('📅 Campaign scheduler started - checking every minute for scheduled campaigns');
     
-    setInterval(async () => {
+    schedulerInterval = setInterval(async () => {
         await checkAndStartScheduledCampaigns();
     }, 60000); // Check every minute (60,000 ms)
 }
@@ -1302,48 +1352,45 @@ async function checkAndStartScheduledCampaigns() {
     }
 }
 
-// Graceful shutdown to clean up Redis connections
-process.on('SIGTERM', async () => {
-    console.log('SIGTERM received, shutting down gracefully...');
-    
+// Graceful shutdown untuk SIGTERM/SIGINT
+const gracefulShutdown = async (signal) => {
+  console.log(`[SYSTEM] Received ${signal}, shutting down gracefully...`);
+  
+  // Stop scheduler
+  if (schedulerInterval) {
+    clearInterval(schedulerInterval);
+  }
+  
+  // Close all WA sessions
+  for (const [sessionId, session] of Object.entries(sessions)) {
     try {
-        // Close webhook queue if initialized
-        if (webhookQueue) {
-            await webhookQueue.close();
-        }
-        
-        // Close Redis client
-        if (redisClient && redisClient.isOpen) {
-            await redisClient.quit();
-        }
-        
-        console.log('Cleanup completed, exiting process.');
-        process.exit(0);
-    } catch (error) {
-        console.error('Error during shutdown:', error);
-        process.exit(1);
+      console.log(`[${sessionId}] Closing session...`);
+      await session.sock?.logout();
+      await session.sock?.ws?.close();
+    } catch (err) {
+      console.error(`[${sessionId}] Error during shutdown:`, err);
     }
-});
+  }
+  
+  // Close Redis
+  if (redisClient?.isOpen) {
+    await redisClient.quit();
+    console.log('[SYSTEM] Redis connection closed');
+  }
+  
+  // Close Express server
+  server.close(() => {
+    console.log('[SYSTEM] HTTP server closed');
+    process.exit(0);
+  });
+  
+  // Force exit jika tidak selesai dalam 30 detik
+  setTimeout(() => {
+    console.error('[SYSTEM] Forced shutdown after timeout');
+    process.exit(1);
+  }, 30000);
+};
 
-process.on('SIGINT', async () => {
-    console.log('SIGINT received, shutting down gracefully...');
-    
-    try {
-        // Close webhook queue if initialized
-        if (webhookQueue) {
-            await webhookQueue.close();
-        }
-        
-        // Close Redis client
-        if (redisClient && redisClient.isOpen) {
-            await redisClient.quit();
-        }
-        
-        console.log('Cleanup completed, exiting process.');
-        process.exit(0);
-    } catch (error) {
-        console.error('Error during shutdown:', error);
-        process.exit(1);
-    }
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
