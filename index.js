@@ -197,15 +197,13 @@ if (!fs.existsSync(mediaDir)) {
 
 // Ensure sessions directory exists for express-session
 const expressSessionsDir = process.env.EXPRESS_SESSIONS_DIR || path.join(__dirname, 'sessions');
-(async () => {
-    try {
-        await fs.promises.mkdir(expressSessionsDir, { recursive: true });
-        console.log(`✅ Express sessions directory created/ensured at: ${expressSessionsDir}`);
-    } catch (error) {
-        console.error(`❌ Failed to create Express sessions directory at ${expressSessionsDir}: ${error.message}`);
-        // Depending on severity, you might want to exit the process here
-    }
-})();
+try {
+    fs.mkdirSync(expressSessionsDir, { recursive: true });
+    console.log(`✅ Express sessions directory created/ensured at: ${expressSessionsDir}`);
+} catch (error) {
+    console.error(`❌ Failed to create Express sessions directory at ${expressSessionsDir}: ${error.message}`);
+    // Depending on severity, you might want to exit the process here
+}
 
 // Trust proxy for cPanel and other reverse proxy environments
 // Only trust first proxy, not all (prevents security issues)
