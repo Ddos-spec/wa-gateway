@@ -313,8 +313,8 @@ document.addEventListener('auth-success', function() {
                     text: session.qr, 
                     width: 200, 
                     height: 200,
-                    errorCorrectionLevel: 'H', // High error correction, allows more data
-                    version: 10 // A larger QR code version to accommodate more data
+                    typeNumber: 10, // Equivalent to version 10
+                    correctLevel: 3 // Equivalent to 'H' error correction
                 });
                 if(currentStep === 3) modalQrStatus.textContent = 'Please scan the QR code.';
             } else {
