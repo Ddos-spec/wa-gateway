@@ -835,8 +835,8 @@ async function connectToWhatsApp(sessionId) {
             browser: Browsers.windows('Chrome'),
             virtualLinkPreviewEnabled: false,  // More aggressive optimization
             shouldIgnoreJid: (jid) => isJidBroadcast(jid),
-            qrTimeout: 45000, // Increased timeout to 45 seconds
-            connectTimeoutMs: 60000, // Increased timeout to 60 seconds
+            qrTimeout: 60000, // Increased timeout to 60 seconds
+            connectTimeoutMs: 90000, // Increased timeout to 90 seconds
             keepAliveIntervalMs: 45000,  // Increased from 30000 to reduce connection overhead
             fireInitQueries: false,
             emitOwnEvents: false,
@@ -846,7 +846,7 @@ async function connectToWhatsApp(sessionId) {
             maxMsgRetryCount: 3,
             // Add timeout for socket connection
             connectOpts: {
-                timeout: 60000, // 60 seconds
+                timeout: 90000, // 90 seconds
             }
         });
 
@@ -963,6 +963,8 @@ async function connectToWhatsApp(sessionId) {
     });
 
     sock.ev.on('connection.update', async (update) => {
+        log(`Connection update for ${sessionId}: ${JSON.stringify(update)}`, sessionId); // Added detailed log
+
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
