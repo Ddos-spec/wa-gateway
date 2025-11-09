@@ -809,6 +809,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             // The connectToWhatsApp function will see the PENDING_REQUEST and handle pairing
             await createSession(sessionId, currentUser.email);
 
+            // Return immediately with the sessionId, the status will be updated via the pair-status endpoint
             res.status(202).json({
                 status: 'success',
                 message: 'Pairing process initiated. Please check the session status for updates.',
@@ -825,7 +826,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
 
             res.status(500).json({
                 status: 'error',
-                message: 'Failed to initiate pairing. Please try again.'
+                message: `Failed to initiate pairing: ${error.message}`
             });
         }
     });
@@ -847,9 +848,25 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
                         status: 'success',
                         sessionId: sessionId,
                         sessionStatus: regularSession.status,
-                        detail: regularSession.detail || '',
+                        detail: regularSession.detail || regularSession.status,
                         phoneNumber: regularSession.phoneNumber || null,
-                        pairingCode: null // No pairing code for regular sessions
+                        pairingCode: null, // No pairing code for regular sessions
+                        qr: regularSession.qr || null // Include QR code if available
+                    });
+                }
+
+                // Check if it might be a session that is being created but not yet in either map
+                const sessionExists = fs.existsSync(path.join(__dirname, 'auth_info_baileys', sessionId));
+                if (sessionExists) {
+                    // Session directory exists but not loaded in memory, try to get status info
+                    return res.status(200).json({
+                        status: 'success',
+                        sessionId: sessionId,
+                        sessionStatus: 'PENDING',
+                        detail: 'Session exists but not yet loaded',
+                        phoneNumber: null,
+                        pairingCode: null,
+                        qr: null
                     });
                 }
 
@@ -863,9 +880,11 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
                 status: 'success',
                 sessionId: sessionId,
                 sessionStatus: pairingStatus.status,
-                detail: pairingStatus.detail || '',
+                detail: pairingStatus.detail || pairingStatus.status,
                 phoneNumber: pairingStatus.phoneNumber || null,
-                pairingCode: pairingStatus.pairingCode || null
+                pairingCode: pairingStatus.pairingCode || null,
+                createdAt: pairingStatus.createdAt || null,
+                updatedAt: pairingStatus.updatedAt || null
             });
 
         } catch (error) {
@@ -878,7 +897,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
 
             res.status(500).json({
                 status: 'error',
-                message: 'Failed to check pairing status'
+                message: `Failed to check pairing status: ${error.message}`
             });
         }
     });

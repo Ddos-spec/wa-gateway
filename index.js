@@ -778,7 +778,11 @@ function updateSessionState(sessionId, status, detail, qr, reason) {
     };
     sessions.set(sessionId, newSession);
 
-    broadcast({ type: 'session-update', data: getSessionsDetails() });
+    try {
+        broadcast({ type: 'session-update', data: getSessionsDetails() });
+    } catch (error) {
+        log(`Error broadcasting session update for ${sessionId}: ${error.message}`, sessionId, { error });
+    }
 
     postToWebhook({
         event: 'session-status',
@@ -1124,15 +1128,21 @@ async function createSession(sessionId, createdBy = null) {
 }
 
 app.get('/api/v1/sessions/:sessionId/qr', async (req, res) => {
+    log(`QR code endpoint accessed for ${req.params.sessionId}`, 'SYSTEM', { event: 'qr-request', endpoint: req.originalUrl, ip: req.ip });
     const { sessionId } = req.params;
     const session = sessions.get(sessionId);
     if (!session) {
+        log(`QR code requested for non-existent session: ${sessionId}`, 'SYSTEM');
         return res.status(404).json({ error: 'Session not found' });
     }
     log(`QR code requested for ${sessionId}`, sessionId);
     updateSessionState(sessionId, 'GENERATING_QR', 'QR code requested by user.', '', '');
     // The connection logic will handle the actual QR generation and broadcast.
-    res.status(200).json({ message: 'QR generation triggered.' });
+    res.status(200).json({ 
+        message: 'QR generation triggered.',
+        sessionId: sessionId,
+        status: 'success'
+    });
 });
 
 async function deleteSession(sessionId) {
