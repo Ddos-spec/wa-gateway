@@ -3,5 +3,5 @@
     "approvalMode": "yolo"
   },
   "$version": 2,
-  "approvalMode": "auto-edit"
+  "approvalMode": "plan"
 }

@@ -854,8 +854,8 @@ async function connectToWhatsApp(sessionId) {
         
         // Check if we have either session-specific webhooks or a default webhook
         const hasWebhooks = settings.webhooks && settings.webhooks.length > 0;
-        const defaultWebhookUrl = await getWebhookUrl(sessionId); // Get default webhook for this session
-        if (!hasWebhooks && !defaultWebhookUrl) {
+        const initialDefaultWebhookUrl = await getWebhookUrl(sessionId); // Get default webhook for this session
+        if (!hasWebhooks && !initialDefaultWebhookUrl) {
             return; // No webhooks configured for this session
         }
         const msg = message.messages[0];
@@ -911,9 +911,9 @@ async function connectToWhatsApp(sessionId) {
         }
         
         // Add default webhook for this session if it's different from session-specific ones
-        const defaultWebhookUrl = await getWebhookUrl(sessionId);
-        if (defaultWebhookUrl && !allWebhookUrls.includes(defaultWebhookUrl)) {
-            allWebhookUrls.push(defaultWebhookUrl);
+        const sessionDefaultWebhookUrl = await getWebhookUrl(sessionId);
+        if (sessionDefaultWebhookUrl && !allWebhookUrls.includes(sessionDefaultWebhookUrl)) {
+            allWebhookUrls.push(sessionDefaultWebhookUrl);
         }
 
         // Only proceed if we have URLs to send to
