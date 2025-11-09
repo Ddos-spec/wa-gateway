@@ -20,7 +20,6 @@ const {
     isJidBroadcast,
     Browsers
 } = require('@whiskeysockets/baileys');
-const RedisAuthState = require('./redis-auth-state');
 const pino = require('pino');
 const { Boom } = require('@hapi/boom');
 const express = require('express');
@@ -43,37 +42,11 @@ const UserManager = require('./users');
 const ActivityLogger = require('./activity-logger');
 const PhonePairing = require('./phone-pairing');
 
-const redis = require('redis');
 const sessions = new Map();
 const retries = new Map();
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
-
-// Initialize Redis client
-const redisClient = redis.createClient({
-  host: process.env.REDIS_HOST || '127.0.0.1',
-  port: process.env.REDIS_PORT || 6379,
-  password: process.env.REDIS_PASSWORD
-});
-
-// Initialize webhook queue
-const WebhookQueue = require('./webhook-queue');
-let webhookQueue;
-
-// Initialize Redis connection
-(async () => {
-  try {
-    await redisClient.connect();
-    console.log('✅ Redis client connected successfully');
-    
-    // Initialize webhook queue after Redis connection
-    webhookQueue = new WebhookQueue();
-  } catch (error) {
-    console.error('❌ Failed to connect to Redis:', error.message);
-    process.exit(1);
-  }
-})();
 
 // Track WebSocket connections with their associated users
 const wsClients = new Map(); // Maps WebSocket client to user info
@@ -94,7 +67,7 @@ if (!process.env.TOKEN_ENCRYPTION_KEY) {
 // Initialize user management and activity logging
 const userManager = new UserManager(ENCRYPTION_KEY);
 const activityLogger = new ActivityLogger(ENCRYPTION_KEY);
-const phonePairing = new PhonePairing(log);
+
 
 // Encryption functions
 function encrypt(text) {
@@ -577,7 +550,68 @@ app.post('/admin/update-logs', requireAdminAuth, express.json(), (req, res) => {
     }
 });
 
-const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, saveSessionSettings, undefined, redisClient);
+// System log history (in-memory)
+const systemLog = [];
+const MAX_LOG_ENTRIES = 1000;
+const SYSTEM_LOG_FILE = path.join(__dirname, 'system.log');
+
+// Load last N log entries from disk on startup
+function loadSystemLogFromDisk() {
+    if (!fs.existsSync(SYSTEM_LOG_FILE)) return;
+    const lines = fs.readFileSync(SYSTEM_LOG_FILE, 'utf-8').split('\n').filter(Boolean);
+    const lastLines = lines.slice(-MAX_LOG_ENTRIES);
+    for (const line of lastLines) {
+        try {
+            const entry = JSON.parse(line);
+            systemLog.push(entry);
+        } catch {}
+    }
+}
+
+function rotateSystemLogIfNeeded() {
+    try {
+        if (fs.existsSync(SYSTEM_LOG_FILE)) {
+            const stats = fs.statSync(SYSTEM_LOG_FILE);
+            if (stats.size > 5 * 1024 * 1024) { // 5MB
+                if (fs.existsSync(SYSTEM_LOG_FILE + '.bak')) {
+                    fs.unlinkSync(SYSTEM_LOG_FILE + '.bak');
+                }
+                fs.renameSync(SYSTEM_LOG_FILE, SYSTEM_LOG_FILE + '.bak');
+            }
+        }
+    } catch (e) {
+        console.error('Failed to rotate system.log:', e.message);
+    }
+}
+
+function log(message, sessionId = 'SYSTEM', details = {}) {
+    const logEntry = {
+        type: 'log',
+        sessionId,
+        message,
+        details,
+        timestamp: new Date().toISOString()
+    };
+    // Only persist and show in dashboard if this is a sent message log (event: 'messages-sent')
+    if (details && details.event === 'messages-sent') {
+        systemLog.push(logEntry);
+        if (systemLog.length > MAX_LOG_ENTRIES) {
+            systemLog.shift(); // Remove oldest
+        }
+        try {
+            rotateSystemLogIfNeeded();
+            fs.appendFileSync(SYSTEM_LOG_FILE, JSON.stringify(logEntry) + '\n');
+        } catch (e) {
+            console.error('Failed to write to system.log:', e.message);
+        }
+    }
+    console.log(`[${sessionId}] ${message}`);
+    broadcast(logEntry);
+}
+
+const phonePairing = new PhonePairing(log);
+
+const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, saveSessionSettings);
 const legacyApiRouter = initializeLegacyApi(sessions, sessionTokens);
 app.use('/api/v1', v1ApiRouter);
 app.use('/api', legacyApiRouter); // Mount legacy routes at /api
@@ -648,65 +682,6 @@ function broadcast(data) {
     });
 }
 
-// System log history (in-memory)
-const systemLog = [];
-const MAX_LOG_ENTRIES = 1000;
-const SYSTEM_LOG_FILE = path.join(__dirname, 'system.log');
-
-// Load last N log entries from disk on startup
-function loadSystemLogFromDisk() {
-    if (!fs.existsSync(SYSTEM_LOG_FILE)) return;
-    const lines = fs.readFileSync(SYSTEM_LOG_FILE, 'utf-8').split('\n').filter(Boolean);
-    const lastLines = lines.slice(-MAX_LOG_ENTRIES);
-    for (const line of lastLines) {
-        try {
-            const entry = JSON.parse(line);
-            systemLog.push(entry);
-        } catch {}
-    }
-}
-
-function rotateSystemLogIfNeeded() {
-    try {
-        if (fs.existsSync(SYSTEM_LOG_FILE)) {
-            const stats = fs.statSync(SYSTEM_LOG_FILE);
-            if (stats.size > 5 * 1024 * 1024) { // 5MB
-                if (fs.existsSync(SYSTEM_LOG_FILE + '.bak')) {
-                    fs.unlinkSync(SYSTEM_LOG_FILE + '.bak');
-                }
-                fs.renameSync(SYSTEM_LOG_FILE, SYSTEM_LOG_FILE + '.bak');
-            }
-        }
-    } catch (e) {
-        console.error('Failed to rotate system.log:', e.message);
-    }
-}
-
-function log(message, sessionId = 'SYSTEM', details = {}) {
-    const logEntry = {
-        type: 'log',
-        sessionId,
-        message,
-        details,
-        timestamp: new Date().toISOString()
-    };
-    // Only persist and show in dashboard if this is a sent message log (event: 'messages-sent')
-    if (details && details.event === 'messages-sent') {
-        systemLog.push(logEntry);
-        if (systemLog.length > MAX_LOG_ENTRIES) {
-            systemLog.shift(); // Remove oldest
-        }
-        try {
-            rotateSystemLogIfNeeded();
-            fs.appendFileSync(SYSTEM_LOG_FILE, JSON.stringify(logEntry) + '\n');
-        } catch (e) {
-            console.error('Failed to write to system.log:', e.message);
-        }
-    }
-    console.log(`[${sessionId}] ${message}`);
-    broadcast(logEntry);
-}
-
 // --- Start Webhook Settings Management ---
 function getSettingsFilePath(sessionId) {
     return path.join(__dirname, 'auth_info_baileys', sessionId, 'settings.json');
@@ -748,19 +723,12 @@ async function postToWebhook(data) {
     if (!webhookUrl) return;
 
     try {
-        if (webhookQueue) {
-            // Add to queue for asynchronous processing
-            await webhookQueue.addToQueue(sessionId, webhookUrl, data);
-            log(`Webhook job queued for: ${webhookUrl}`, sessionId);
-        } else {
-            // Fallback to direct call if queue is not available
-            await axios.post(webhookUrl, data, {
-                headers: { 'Content-Type': 'application/json' }
-            });
-            log(`Successfully posted to webhook: ${webhookUrl}`);
-        }
+        await axios.post(webhookUrl, data, {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        log(`Successfully posted to webhook: ${webhookUrl}`);
     } catch (error) {
-        log(`Failed to queue/post to webhook: ${error.message}`);
+        log(`Failed to post to webhook: ${error.message}`);
     }
 }
 
@@ -807,16 +775,15 @@ async function connectToWhatsApp(sessionId) {
         sessions.get(sessionId).settings = settings;
     }
 
-    // Use Redis auth state instead of file-based
-    const { creds, keys } = await RedisAuthState.createAuthState(redisClient, sessionId);
+    const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, 'auth_info_baileys', sessionId));
     const { version, isLatest } = await fetchLatestBaileysVersion();
     log(`Using WA version: ${version.join('.')}, isLatest: ${isLatest}`, sessionId);
 
     const sock = makeWASocket({
         version,
         auth: {
-            creds: creds,
-            keys: makeCacheableSignalKeyStore(keys, logger),
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, logger),
         },
         printQRInTerminal: false,
         logger,
@@ -834,12 +801,7 @@ async function connectToWhatsApp(sessionId) {
         maxMsgRetryCount: 3,
     });
 
-    sock.ev.on('creds.update', async (creds) => {
-        await RedisAuthState.prototype.saveCreds.call(
-            { redis: redisClient, sessionId }, 
-            creds
-        );
-    });
+    sock.ev.on('creds.update', saveCreds);
 
     // --- Start Advanced Webhook Handler ---
     async function handleWebhookForMessage(message, sessionId) {
@@ -911,7 +873,6 @@ async function connectToWhatsApp(sessionId) {
         }
         
         // Add default webhook for this session if it's different from session-specific ones
-        const defaultWebhookUrl = await getWebhookUrl(sessionId);
         if (defaultWebhookUrl && !allWebhookUrls.includes(defaultWebhookUrl)) {
             allWebhookUrls.push(defaultWebhookUrl);
         }
@@ -923,19 +884,12 @@ async function connectToWhatsApp(sessionId) {
 
         for (const url of allWebhookUrls) {
             try {
-                // Add webhook to queue for asynchronous processing
-                if (webhookQueue) {
-                    await webhookQueue.addToQueue(sessionId, url, payload);
-                    log(`Webhook job queued for ${url}`, sessionId);
-                } else {
-                    // Fallback to direct call if queue is not available
-                    await axios.post(url, payload, {
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                    log(`Sent message webhook to ${url}`, sessionId);
-                }
+                await axios.post(url, payload, {
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                log(`Sent message webhook to ${url}`, sessionId);
             } catch (error) {
-                log(`Failed to queue/send message webhook to ${url}: ${error.message}`, sessionId, { error });
+                log(`Failed to send message webhook to ${url}: ${error.message}`, sessionId, { error });
             }
         }
     }
@@ -1225,174 +1179,18 @@ async function checkAndStartScheduledCampaigns() {
     }
 }
 
-// Graceful shutdown to clean up Redis connections
-process.on('SIGTERM', async () => {
-    console.log('SIGTERM received, shutting down gracefully...');
-    
-    try {
-        // Close webhook queue if initialized
-        if (webhookQueue) {
-            await webhookQueue.close();
-        }
-        
-        // Close Redis client
-        if (redisClient && redisClient.isOpen) {
-            await redisClient.quit();
-        }
-        
-        console.log('Cleanup completed, exiting process.');
-        process.exit(0);
-    } catch (error) {
-        console.error('Error during shutdown:', error);
-        process.exit(1);
-    }
-});
-
-process.on('SIGINT', async () => {
-    console.log('SIGINT received, shutting down gracefully...');
-    
-    try {
-        // Close webhook queue if initialized
-        if (webhookQueue) {
-            await webhookQueue.close();
-        }
-        
-        // Close Redis client
-        if (redisClient && redisClient.isOpen) {
-            await redisClient.quit();
-        }
-        
-        console.log('Cleanup completed, exiting process.');
-        process.exit(0);
-    } catch (error) {
-        console.error('Error during shutdown:', error);
-        process.exit(1);
-    }
-});
-
-    broadcast({ type: 'session-update', data: getSessionsDetails() });
-}
-
-// Function to regenerate API token for a session
-async function regenerateSessionToken(sessionId) {
-    if (!sessions.has(sessionId)) {
-        throw new Error('Session not found');
-    }
-    const newToken = randomUUID();
-    sessionTokens.set(sessionId, newToken);
-    saveTokens();
-    log(`API Token regenerated for session ${sessionId}`, 'SYSTEM');
-    return newToken;
-}
-
-const PORT = process.env.PORT || 3000;
-
-// Handle memory errors gracefully
-process.on('uncaughtException', (error) => {
-    if (error.message && error.message.includes('Out of memory')) {
-        console.error('FATAL: Out of memory error. The application will exit.');
-        console.error('Consider reducing MAX_SESSIONS or upgrading your hosting plan.');
-        process.exit(1);
-    }
-    console.error('Uncaught Exception:', error);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-async function initializeExistingSessions() {
-    const sessionsDir = AUTH_PATH;
-    if (fs.existsSync(sessionsDir)) {
-        const sessionFolders = fs.readdirSync(sessionsDir);
-        log(`Found ${sessionFolders.length} existing session(s). Initializing...`);
-        for (const sessionId of sessionFolders) {
-            const sessionPath = path.join(sessionsDir, sessionId);
-            if (fs.statSync(sessionPath).isDirectory()) {
-                log(`Re-initializing session: ${sessionId}`);
-                await createSession(sessionId); // Await creation to prevent race conditions
-            }
-        }
-    }
-}
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  const health = {
-    uptime: process.uptime(),
-    redis: redisClient?.isOpen ? 'connected' : 'disconnected',
-    sessions: Object.keys(sessions).length,
-    activeSessions: Object.values(sessions).filter(s => s.sock?.user).length,
-    timestamp: new Date().toISOString()
-  };
-  
-  res.status(200).json(health);
-});
-
-// Auto-recovery check setiap 5 menit
-setInterval(async () => {
-  for (const [sessionId, session] of Object.entries(sessions)) {
-    if (!session.sock?.user && (session.retryCount || 0) < MAX_RETRIES) {
-      console.log(`[${sessionId}] Session disconnected, attempting recovery...`);
-      await createSessionWithRetry(sessionId, session.retryCount || 0);
-    }
-  }
-}, 300000); // 5 menit
-
-loadSystemLogFromDisk();
-server.listen(PORT, () => {
-    log(`Server is running on port ${PORT}`);
-    log(`Admin dashboard available at http://${process.env.APP_HOST || 'localhost'}:${PORT}/admin/dashboard.html`);
-    loadTokens(); // Load tokens at startup
-    initializeExistingSessions();
-    
-    // Start campaign scheduler
-    startCampaignScheduler();
-});
-
-// Campaign scheduler to automatically start campaigns at their scheduled time
-function startCampaignScheduler() {
-    console.log('📅 Campaign scheduler started - checking every minute for scheduled campaigns');
-    
-    schedulerInterval = setInterval(async () => {
-        await checkAndStartScheduledCampaigns();
-    }, 60000); // Check every minute (60,000 ms)
-}
-
-// Use the scheduler function from the API router
-async function checkAndStartScheduledCampaigns() {
-    if (v1ApiRouter && v1ApiRouter.checkAndStartScheduledCampaigns) {
-        return await v1ApiRouter.checkAndStartScheduledCampaigns();
-    } else {
-        console.log('⏳ API router not initialized yet, skipping scheduler check');
-        return { error: 'API router not initialized' };
-    }
-}
-
-// Graceful shutdown untuk SIGTERM/SIGINT
-const gracefulShutdown = async (signal) => {
+// Graceful shutdown to clean up
+const gracefulShutdown = (signal) => {
   console.log(`[SYSTEM] Received ${signal}, shutting down gracefully...`);
   
-  // Stop scheduler
-  if (schedulerInterval) {
-    clearInterval(schedulerInterval);
-  }
-  
   // Close all WA sessions
-  for (const [sessionId, session] of Object.entries(sessions)) {
+  for (const [sessionId, session] of sessions.entries()) {
     try {
       console.log(`[${sessionId}] Closing session...`);
-      await session.sock?.logout();
-      await session.sock?.ws?.close();
+      session.sock?.logout();
     } catch (err) {
       console.error(`[${sessionId}] Error during shutdown:`, err);
     }
-  }
-  
-  // Close Redis
-  if (redisClient?.isOpen) {
-    await redisClient.quit();
-    console.log('[SYSTEM] Redis connection closed');
   }
   
   // Close Express server
@@ -1401,11 +1199,11 @@ const gracefulShutdown = async (signal) => {
     process.exit(0);
   });
   
-  // Force exit jika tidak selesai dalam 30 detik
+  // Force exit jika tidak selesai dalam 10 detik
   setTimeout(() => {
     console.error('[SYSTEM] Forced shutdown after timeout');
     process.exit(1);
-  }, 30000);
+  }, 10000);
 };
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
