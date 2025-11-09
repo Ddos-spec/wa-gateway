@@ -195,6 +195,12 @@ if (!fs.existsSync(mediaDir)) {
     fs.mkdirSync(mediaDir);
 }
 
+// Ensure sessions directory exists for express-session
+const expressSessionsDir = path.join(__dirname, 'sessions');
+if (!fs.existsSync(expressSessionsDir)) {
+    fs.mkdirSync(expressSessionsDir);
+}
+
 // Trust proxy for cPanel and other reverse proxy environments
 // Only trust first proxy, not all (prevents security issues)
 app.set('trust proxy', 1);
