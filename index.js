@@ -1,3 +1,7 @@
+// Gemini Final Fix - Version 2.0
+const SCRIPT_VERSION = "GEMINI_FIX_V2";
+console.log(`Starting Super-Light-Web-Whatsapp-API-Server - Version: ${SCRIPT_VERSION}`);
+
 // Memory optimization for production environments
 globalThis.crypto = require('node:crypto').webcrypto; // Ensure Web Crypto API is globally available for Baileys
 
@@ -190,15 +194,26 @@ function loadTokens() {
     }
 }
 
+// --- PATH DEBUGGING ---
+console.log(`[PATH_DEBUG] __dirname: ${__dirname}`);
 // Persistent directory paths
 const SESSION_PATH = process.env.SESSION_PATH || path.join(__dirname, 'sessions');
 const AUTH_PATH = process.env.AUTH_PATH || path.join(__dirname, 'auth_info_baileys');
 const mediaDir = path.join(__dirname, 'media');
+console.log(`[PATH_DEBUG] SESSION_PATH: ${SESSION_PATH}`);
+console.log(`[PATH_DEBUG] AUTH_PATH: ${AUTH_PATH}`);
+console.log(`[PATH_DEBUG] mediaDir: ${mediaDir}`);
 
 // Ensure all necessary directories exist
 [SESSION_PATH, AUTH_PATH, mediaDir].forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      console.log(`[SYSTEM] Created directory: ${dir}`);
+    }
+  } catch (error) {
+      console.error(`[SYSTEM] FATAL: Could not create directory ${dir}. Please check permissions. Error: ${error.message}`);
+      process.exit(1);
   }
 });
 
@@ -340,7 +355,7 @@ app.post('/admin/login', express.json(), async (req, res) => {
             req.session.userRole = user.role;
             req.session.userId = user.id;
             await activityLogger.logLogin(user.email, ip, userAgent, true);
-            return res.json({ 
+            return res.json({
                 success: true, 
                 role: user.role,
                 email: user.email 
@@ -559,7 +574,7 @@ app.get('/admin/test-logs', requireAdminAuth, (req, res) => {
     } catch (error) {
         console.error('Test endpoint error:', error);
     }
-    res.json({ 
+    res.json({
         logFileExists: fs.existsSync(SYSTEM_LOG_FILE),
         logCount: logData.length,
         logs: logData
@@ -888,7 +903,7 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
             },
             printQRInTerminal: false,
             logger,
-            browser: Browsers.windows('Chrome'),
+            browser: Browsers.macOS('Chrome'), // Changed to macOS browser
             virtualLinkPreviewEnabled: false,  // More aggressive optimization
             shouldIgnoreJid: (jid) => isJidBroadcast(jid),
             qrTimeout: 60000, // Increased timeout to 60 seconds
@@ -1084,6 +1099,7 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
             const reason = new Boom(lastDisconnect?.error)?.output?.payload?.error || 'Unknown';
 
             if (statusCode === 428) {
+                log(`[RECONNECT_LOGIC] Detected statusCode 428 for session ${sessionId}.`, sessionId);
                 if (retryCount < MAX_RETRIES) {
                     const delay = RETRY_DELAYS[retryCount];
                     log(`Connection timeout (428). Retrying in ${delay/1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`, sessionId);
@@ -1103,17 +1119,18 @@ async function createSessionWithRetry(sessionId, retryCount = 0) {
                 if (shouldReconnect) {
                     setTimeout(() => createSessionWithRetry(sessionId, 0), 5000);
                 } else {
-                    log(`Not reconnecting for session ${sessionId} due to fatal error.`, sessionId);
+                    log(`Not reconnecting for session ${sessionId} due to fatal error: ${reason}`, sessionId);
                     if (pairingInfo) {
                         phonePairing.updatePairingStatus(sessionId, {
                             status: 'PAIRING_FAILED',
                             detail: `Connection failed: ${reason}`
                         });
                     }
-                    const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
+                    // On fatal, non-reconnectable errors, clear the session data to force a fresh start next time.
+                    const sessionDir = path.join(AUTH_PATH, sessionId);
                     if (fs.existsSync(sessionDir)) {
                         fs.rmSync(sessionDir, { recursive: true, force: true });
-                        log(`Cleared session data for ${sessionId}`, sessionId);
+                        log(`Cleared session data for ${sessionId} due to fatal error.`, sessionId);
                     }
                 }
             }
@@ -1181,7 +1198,7 @@ async function createSession(sessionId, createdBy = null) {
     saveTokens();
     
     // Set a placeholder before async connection with owner info
-    sessions.set(sessionId, { 
+    sessions.set(sessionId, {
         sessionId: sessionId, 
         status: 'CREATING', 
         detail: 'Session is being created.',
@@ -1248,7 +1265,7 @@ async function deleteSession(sessionId) {
     // Delete from phone pairing statuses
     phonePairing.deletePairing(sessionId);
 
-    const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
+    const sessionDir = path.join(AUTH_PATH, sessionId);
     if (fs.existsSync(sessionDir)) {
         fs.rmSync(sessionDir, { recursive: true, force: true });
     }
@@ -1285,7 +1302,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 async function initializeExistingSessions() {
-    const sessionsDir = path.join(__dirname, 'auth_info_baileys');
+    const sessionsDir = AUTH_PATH;
     if (fs.existsSync(sessionsDir)) {
         const sessionFolders = fs.readdirSync(sessionsDir);
         log(`Found ${sessionFolders.length} existing session(s). Initializing...`);
@@ -1393,4 +1410,3 @@ const gracefulShutdown = async (signal) => {
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
