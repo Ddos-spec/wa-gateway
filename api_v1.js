@@ -888,10 +888,28 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
 
         try {
             await saveSessionSettings(sessionId, settings);
+            // Update in-memory session object in index.js
+            const session = sessions.get(sessionId);
+            if (session) {
+                session.settings = settings;
+            }
             res.status(200).json({ status: 'success', message: 'Settings saved successfully.' });
         } catch (error) {
             log(`API Error saving settings for ${sessionId}: ${error.message}`, 'SYSTEM', { error });
             res.status(500).json({ status: 'error', message: 'Failed to save settings.' });
+        }
+    });
+
+    router.post('/sessions/:sessionId/generate-token', async (req, res) => {
+        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, params: req.params });
+        const { sessionId } = req.params;
+
+        try {
+            const newToken = await regenerateSessionToken(sessionId);
+            res.status(200).json({ status: 'success', message: 'API Token regenerated successfully.', token: newToken });
+        } catch (error) {
+            log(`API Error regenerating token for ${sessionId}: ${error.message}`, 'SYSTEM', { error });
+            res.status(500).json({ status: 'error', message: `Failed to regenerate API Token: ${error.message}` });
         }
     });
 
