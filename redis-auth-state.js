@@ -15,6 +15,14 @@ class RedisAuthState {
     const credsData = await this.redis.get(credsKey);
     const creds = credsData ? JSON.parse(credsData) : {};
     
+    // Convert Buffer objects back from plain objects after JSON.parse
+    if (creds.noiseKey && typeof creds.noiseKey.public === 'object' && creds.noiseKey.public.type === 'Buffer') {
+        creds.noiseKey.public = Buffer.from(creds.noiseKey.public.data);
+    }
+    if (creds.noiseKey && typeof creds.noiseKey.private === 'object' && creds.noiseKey.private.type === 'Buffer') {
+        creds.noiseKey.private = Buffer.from(creds.noiseKey.private.data);
+    }
+    
     // Get keys
     const keysData = await this.redis.hGetAll(keysKey);
     const keys = keysData || {};
