@@ -309,7 +309,13 @@ document.addEventListener('auth-success', function() {
             if (session.qr) {
                 const targetContainer = (currentStep === 3 && newSessionId === session.sessionId) ? modalQrContainer : qrContainer;
                 targetContainer.innerHTML = '';
-                new QRCode(targetContainer, { text: session.qr, width: 200, height: 200 });
+                new QRCode(targetContainer, { 
+                    text: session.qr, 
+                    width: 200, 
+                    height: 200,
+                    errorCorrectionLevel: 'H', // High error correction, allows more data
+                    version: 10 // A larger QR code version to accommodate more data
+                });
                 if(currentStep === 3) modalQrStatus.textContent = 'Please scan the QR code.';
             } else {
                 // Check if the session is in a state where QR should be available
