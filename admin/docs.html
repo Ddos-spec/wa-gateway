@@ -94,7 +94,7 @@
                                 <div class="mb-3">
                                     <strong>Create Session</strong>
                                     <p class="text-muted small">Creates a new session instance. Requires the Master API Key found in your <code>.env</code> file.</p>
-                                    <pre><code id="curl-create-session">curl -X POST "http://localhost:3000/api/v1/sessions" \
+                                    <pre><code id="curl-create-session">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/sessions" \
 -H "X-Master-Key: YOUR_MASTER_API_KEY" \
 -H "Content-Type: application/json" \
 -d 
@@ -106,20 +106,20 @@
                                 <div class="mb-3">
                                     <strong>List All Sessions</strong>
                                     <p class="text-muted small">Retrieves a list of all created sessions and their status. No authentication required.</p>
-                                    <pre><code id="curl-list-sessions">curl -X GET "http://localhost:3000/api/v1/sessions"</code></pre>
+                                    <pre><code id="curl-list-sessions">curl -X GET "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/sessions"</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-list-sessions', this)">Copy</button>
                                 </div>
                                 <div class="mb-3">
                                     <strong>Delete Session</strong>
                                     <p class="text-muted small">Deletes a session and logs it out. Requires the session's API Token.</p>
-                                    <pre><code id="curl-delete-session">curl -X DELETE "http://localhost:3000/api/v1/sessions/myNewSession" \
+                                    <pre><code id="curl-delete-session">curl -X DELETE "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/sessions/myNewSession" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN"</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-delete-session', this)">Copy</button>
                                 </div>
                                 <div class="mb-3">
                                     <strong>Regenerate API Token</strong>
                                     <p class="text-muted small">Generates a new API Token for an existing session. The old token will be invalidated.</p>
-                                    <pre><code id="curl-regen-token">curl -X POST "http://localhost:3000/api/v1/sessions/myNewSession/generate-token" \
+                                    <pre><code id="curl-regen-token">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/sessions/myNewSession/generate-token" \
 -H "Authorization: Bearer YOUR_CURRENT_SESSION_TOKEN"</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-regen-token', this)">Copy</button>
                                 </div>
@@ -131,7 +131,7 @@
                                 <div class="mb-3">
                                     <strong>1. Initiate Pairing</strong>
                                     <p class="text-muted small">Request a pairing code for a specific phone number. This will create a new session instance and return its <code>sessionId</code>.</p>
-                                    <pre><code id="curl-pair-phone">curl -X POST "http://localhost:3000/api/v1/session/pair-phone" \
+                                    <pre><code id="curl-pair-phone">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/session/pair-phone" \
 -H "Authorization: Bearer YOUR_ADMIN_OR_USER_TOKEN" \
 -H "Content-Type: application/json" \
 -d 
@@ -143,7 +143,7 @@
                                 <div class="mb-3">
                                     <strong>2. Check Pairing Status</strong>
                                     <p class="text-muted small">Poll this endpoint using the <code>sessionId</code> from the previous step. It will eventually return a <code>pairingCode</code>.</p>
-                                    <pre><code id="curl-pair-status">curl -X GET "http://localhost:3000/api/v1/session/SESSION_ID_FROM_STEP_1/pair-status" \
+                                    <pre><code id="curl-pair-status">curl -X GET "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/session/SESSION_ID_FROM_STEP_1/pair-status" \
 -H "Authorization: Bearer YOUR_ADMIN_OR_USER_TOKEN"</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-pair-status', this)">Copy</button>
                                     <p class="text-muted small mt-2">Once you get the code, go to WhatsApp on your phone &gt; Linked Devices &gt; Link with phone number, and enter the code.</p>
@@ -155,7 +155,7 @@
                                 <div class="mb-3">
                                     <strong>Upload a File</strong>
                                     <p class="text-muted small">Upload a file (image, document, etc.) to the server to get a <code>mediaId</code>. You can then use this ID to send the file as a message.</p>
-                                    <pre><code id="curl-upload-media">curl -X POST "http://localhost:3000/api/v1/media?sessionId=YOUR_SESSION_ID" \
+                                    <pre><code id="curl-upload-media">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/media?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -F "file=@/path/to/your/image.jpg"</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-upload-media', this)">Copy</button>
@@ -167,7 +167,7 @@
                             <div class="tab-pane fade" id="content-messaging" role="tabpanel">
                                 <div class="mb-3">
                                     <strong>Send Text Message</strong>
-                                    <pre><code id="curl-send-text">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+                                    <pre><code id="curl-send-text">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
 -d 
@@ -180,7 +180,7 @@
                                 </div>
                                 <div class="mb-3">
                                     <strong>Send Image (from URL)</strong>
-                                    <pre><code id="curl-send-image-url">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+                                    <pre><code id="curl-send-image-url">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
 -d 
@@ -196,7 +196,7 @@
                                 </div>
                                 <div class="mb-3">
                                     <strong>Send Image (from Uploaded Media)</strong>
-                                    <pre><code id="curl-send-image-id">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+                                    <pre><code id="curl-send-image-id">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
 -d 
@@ -213,7 +213,7 @@
                                 <div class="mb-3">
                                     <strong>Send Document to a Group</strong>
                                     <p class="text-muted small">To send to a group, use the group's JID (e.g., <code>1234567890@g.us</code>) and set <code>recipient_type</code> to <code>group</code>.</p>
-                                    <pre><code id="curl-send-doc-group">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+                                    <pre><code id="curl-send-doc-group">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
 -d 
@@ -231,7 +231,7 @@
                                 <div class="mb-3">
                                     <strong>Send Multiple Messages (Batch)</strong>
                                     <p class="text-muted small">Send an array of message objects in a single request.</p>
-                                    <pre><code id="curl-send-batch">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+                                    <pre><code id="curl-send-batch">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
 -d 
@@ -252,7 +252,7 @@
                                 <div class="mb-3">
                                     <strong>Delete a Message</strong>
                                     <p class="text-muted small">Deletes a message you have sent. You need the <code>messageId</code> and the recipient's JID (<code>remoteJid</code>) from the webhook event or the initial send response.</p>
-                                    <pre><code id="curl-delete-message">curl -X DELETE "http://localhost:3000/api/v1/message" \
+                                    <pre><code id="curl-delete-message">curl -X DELETE "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/message" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
 -d 
@@ -270,7 +270,7 @@
                                 <div class="mb-3">
                                     <strong>Set Webhook</strong>
                                     <p class="text-muted small">Assigns a URL to receive events (e.g., incoming messages, status changes) for a session.</p>
-                                    <pre><code id="curl-set-webhook">curl -X POST "http://localhost:3000/api/v1/webhook" \
+                                    <pre><code id="curl-set-webhook">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/webhook" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
 -d 
@@ -283,14 +283,14 @@
                                 <div class="mb-3">
                                     <strong>Get Webhook</strong>
                                     <p class="text-muted small">Retrieves the current webhook URL for a session.</p>
-                                    <pre><code id="curl-get-webhook">curl -X GET "http://localhost:3000/api/v1/webhook?sessionId=YOUR_SESSION_ID" \
+                                    <pre><code id="curl-get-webhook">curl -X GET "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/webhook?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN"</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-get-webhook', this)">Copy</button>
                                 </div>
                                 <div class="mb-3">
                                     <strong>Delete Webhook</strong>
                                     <p class="text-muted small">Removes the webhook for a session.</p>
-                                    <pre><code id="curl-delete-webhook">curl -X DELETE "http://localhost:3000/api/v1/webhook" \
+                                    <pre><code id="curl-delete-webhook">curl -X DELETE "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/webhook" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
 -d 
@@ -319,7 +319,7 @@
 
                                 <div class="mb-3">
                                     <strong>Send Text Message (POST)</strong>
-                                    <pre><code id="curl-apiv2-send-text-post">curl -X POST "http://localhost:3000/api/v2/send-message" \
+                                    <pre><code id="curl-apiv2-send-text-post">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v2/send-message" \
 -H "Content-Type: application/json" \
 -d 
 '{ 
@@ -334,13 +334,13 @@
                                 <div class="mb-3">
                                     <strong>Send Image Message (GET)</strong>
                                     <p class="text-muted small">Note: For GET requests, ensure URL parameters are properly URL-encoded.</p>
-                                    <pre><code id="curl-apiv2-send-image-get">curl -X GET "http://localhost:3000/api/v2/send-message?apikey=YOUR_API_KEY&mtype=image&receiver=6281234567890&url=https://picsum.photos/200&caption=Image%20from%20API%20v2"</code></pre>
+                                    <pre><code id="curl-apiv2-send-image-get">curl -X GET "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v2/send-message?apikey=YOUR_API_KEY&mtype=image&receiver=6281234567890&url=https://picsum.photos/200&caption=Image%20from%20API%20v2"</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-apiv2-send-image-get', this)">Copy</button>
                                 </div>
 
                                 <div class="mb-3">
                                     <strong>Send Document Message (POST)</strong>
-                                    <pre><code id="curl-apiv2-send-doc-post">curl -X POST "http://localhost:3000/api/v2/send-message" \
+                                    <pre><code id="curl-apiv2-send-doc-post">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v2/send-message" \
 -H "Content-Type: application/json" \
 -d 
 '{ 
