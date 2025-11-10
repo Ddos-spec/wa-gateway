@@ -932,24 +932,46 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
 
     router.delete('/sessions/:sessionId', async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, params: req.params });
-    const sessionId = req.params?.sessionId;
+        
+        const sessionId = req.params?.sessionId;
+        if (!sessionId) {
+            return res.status(400).json({ status: 'error', message: 'Session ID is missing from the request URL.' });
+        }
 
-    if (!sessionId) {
-        return res.status(400).json({ status: 'error', message: 'Session ID is missing from the request URL.' });
-    }
+        // Get current user from session
         const currentUser = req.session && req.session.adminAuthed ? {
             email: req.session.userEmail,
             role: req.session.userRole
         } : null;
+
+        // If not authenticated via session, validate the token as a fallback
+        if (!currentUser) {
+            const authHeader = req.headers['authorization'];
+            const token = authHeader && authHeader.split(' ')[1];
+
+            if (token == null) {
+                return res.status(401).json({ status: 'error', message: 'Authentication required. No token provided.' });
+            }
+
+            const expectedToken = sessionTokens.get(sessionId);
+            if (!expectedToken || token !== expectedToken) {
+                // Also check if it's a valid token for ANY session, but just not this one.
+                const isAnyTokenValid = Array.from(sessionTokens.values()).includes(token);
+                if (isAnyTokenValid) {
+                    return res.status(403).json({ status: 'error', message: `Invalid token for session ${sessionId}` });
+                }
+                return res.status(403).json({ status: 'error', message: 'Invalid token.' });
+            }
+        }
         
         try {
-            // Check ownership if user is authenticated
+            // Re-check ownership if user is authenticated via session but is not an admin
             if (currentUser && currentUser.role !== 'admin' && userManager) {
-                const sessionOwner = userManager.getSessionOwner(sessionId);
-                if (sessionOwner && sessionOwner.email !== currentUser.email) {
-                    return res.status(403).json({ 
+                const sessionDetails = getSessionsDetails(currentUser.email, false).find(s => s.sessionId === sessionId);
+                if (!sessionDetails) {
+                     return res.status(403).json({ 
                         status: 'error', 
-                        message: 'You can only delete your own sessions' 
+                        message: 'Access denied or session not found.' 
                     });
                 }
             }

@@ -1011,17 +1011,7 @@ async function createSession(sessionId, createdBy = null) {
         await userManager.addSessionToUser(createdBy, sessionId);
     }
     
-    // Auto-cleanup inactive sessions after timeout
-    // Fix for timeout overflow on 32-bit systems - cap at 24 hours max
-    const timeoutMs = Math.min(SESSION_TIMEOUT_HOURS * 60 * 60 * 1000, 24 * 60 * 60 * 1000);
-    setTimeout(async () => {
-        const session = sessions.get(sessionId);
-        if (session && session.status !== 'CONNECTED') {
-            await deleteSession(sessionId);
-            log(`Auto-deleted inactive session after ${SESSION_TIMEOUT_HOURS} hours: ${sessionId}`, 'SYSTEM');
-        }
-    }, timeoutMs);
-    
+    // The session connection logic will be initiated by connectToWhatsApp
     connectToWhatsApp(sessionId);
     return { status: 'success', message: `Session ${sessionId} created.`, token };
 }
