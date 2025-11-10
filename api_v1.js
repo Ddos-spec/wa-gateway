@@ -932,9 +932,11 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
 
     router.delete('/sessions/:sessionId', async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, params: req.params });
-        const { sessionId } = req.params;
-        
-        // Get current user from session
+    const sessionId = req.params?.sessionId;
+
+    if (!sessionId) {
+        return res.status(400).json({ status: 'error', message: 'Session ID is missing from the request URL.' });
+    }
         const currentUser = req.session && req.session.adminAuthed ? {
             email: req.session.userEmail,
             role: req.session.userRole
