@@ -584,6 +584,13 @@ const phonePairing = new PhonePairing(log);
 
 const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, regenerateSessionToken, updateSessionState);
 const legacyApiRouter = initializeLegacyApi(sessions, sessionTokens);
+
+// --- NEW CODE FOR API V2 ---
+const { initializeApiV2 } = require('./api_v2'); // Require the new API v2 module
+const v2ApiRouter = initializeApiV2(sessions, sessionTokens); // Initialize API v2
+app.use('/api/v2', v2ApiRouter); // Mount API v2 router at /api/v2
+// --- END NEW CODE ---
+
 app.use('/api/v1', v1ApiRouter);
 app.use('/api', legacyApiRouter); // Mount legacy routes at /api
 
@@ -654,10 +661,6 @@ function broadcast(data) {
 }
 
 // --- Start Webhook Settings Management ---
-function getSettingsFilePath(sessionId) {
-    return path.join(__dirname, 'auth_info_baileys', sessionId, 'settings.json');
-}
-
 function getSettingsFilePath(sessionId) {
     return path.join(__dirname, 'auth_info_baileys', sessionId, 'settings.json');
 }
@@ -982,6 +985,46 @@ app.get('/sessions', (req, res) => {
 });
 
 async function createSession(sessionId, createdBy = null) {
+    if (sessions.has(sessionId)) {
+        throw new Error('Session already exists');
+    }
+    
+    // Check session limit
+    if (sessions.size >= MAX_SESSIONS) {
+        throw new Error(`Maximum session limit (${MAX_SESSIONS}) reached. Please delete unused sessions.`);
+    }
+    
+    const token = randomUUID();
+    sessionTokens.set(sessionId, token);
+    saveTokens();
+    
+    // Set a placeholder before async connection with owner info
+    sessions.set(sessionId, { 
+        sessionId: sessionId, 
+        status: 'CREATING', 
+        detail: 'Session is being created.',
+        owner: createdBy // Track who created this session
+    });
+    
+    // Track session ownership in user manager
+    if (createdBy) {
+        await userManager.addSessionToUser(createdBy, sessionId);
+    }
+    
+    // Auto-cleanup inactive sessions after timeout
+    // Fix for timeout overflow on 32-bit systems - cap at 24 hours max
+    const timeoutMs = Math.min(SESSION_TIMEOUT_HOURS * 60 * 60 * 1000, 24 * 60 * 60 * 1000);
+    setTimeout(async () => {
+        const session = sessions.get(sessionId);
+        if (session && session.status !== 'CONNECTED') {
+            await deleteSession(sessionId);
+            log(`Auto-deleted inactive session after ${SESSION_TIMEOUT_HOURS} hours: ${sessionId}`, 'SYSTEM');
+        }
+    }, timeoutMs);
+    
+    connectToWhatsApp(sessionId);
+    return { status: 'success', message: `Session ${sessionId} created.`, token };
+}
 
 async function deleteSession(sessionId) {
     const session = sessions.get(sessionId);

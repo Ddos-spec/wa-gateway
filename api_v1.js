@@ -108,7 +108,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             return res.status(401).json({ status: 'error', message: 'No token provided' });
         }
         
-        const sessionId = req.query.sessionId || req.body.sessionId || req.params.sessionId;
+        const sessionId = req.query.sessionId || req.body.sessionId || req.params?.sessionId;
         if (sessionId) {
             const expectedToken = sessionTokens.get(sessionId);
             if (expectedToken && token === expectedToken) {

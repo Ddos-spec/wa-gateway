@@ -23,16 +23,28 @@
     "reason": "",
     "updatedAt": "2025-11-09T05:55:41.436Z"
   },
-  "pair_6289660152525_1762596447505": {
-    "sessionId": "pair_6289660152525_1762596447505",
+  "pair_6289660152525_1762709929208": {
+    "sessionId": "pair_6289660152525_1762709929208",
     "phoneNumber": "6289660152525",
     "owner": "admin@localhost",
-    "status": "CONNECTING",
-    "detail": "Initializing session...",
-    "pairingCode": "TRV4-TAE4",
+    "status": "PAIRING_FAILED",
+    "detail": "Connection failed: Unauthorized",
+    "pairingCode": "61XE-2A7Z",
     "qr": "",
-    "createdAt": "2025-11-08T10:07:27.505Z",
-    "reason": "",
-    "updatedAt": "2025-11-09T05:55:41.502Z"
+    "createdAt": "2025-11-09T17:38:49.208Z",
+    "reason": "Unauthorized",
+    "updatedAt": "2025-11-10T02:34:36.014Z"
+  },
+  "pair_6281296361446_1762739059746": {
+    "sessionId": "pair_6281296361446_1762739059746",
+    "phoneNumber": "6281296361446",
+    "owner": "admin@localhost",
+    "status": "PAIRING_FAILED",
+    "detail": "Connection failed: Unauthorized",
+    "pairingCode": "9HK9-Q741",
+    "qr": "",
+    "createdAt": "2025-11-10T01:44:19.746Z",
+    "reason": "Unauthorized",
+    "updatedAt": "2025-11-10T02:34:37.002Z"
   }
 }
