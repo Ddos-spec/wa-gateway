@@ -1070,6 +1070,7 @@ async function regenerateSessionToken(sessionId) {
 }
 
 const PORT = process.env.PORT || 3000;
+const PUBLIC_URL = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
 
 // Handle memory errors gracefully
 process.on('uncaughtException', (error) => {
@@ -1103,7 +1104,7 @@ async function initializeExistingSessions() {
 loadSystemLogFromDisk();
 server.listen(PORT, () => {
     log(`Server is running on port ${PORT}`);
-            log(`Admin dashboard available at http://localhost:${PORT}/admin/dashboard.html`);    loadTokens(); // Load tokens at startup
+    log(`Admin dashboard available at ${PUBLIC_URL}/admin/dashboard.html`);    loadTokens(); // Load tokens at startup
     initializeExistingSessions();
     
     // Start campaign scheduler
