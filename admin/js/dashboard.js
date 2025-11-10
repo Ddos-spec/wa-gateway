@@ -149,7 +149,7 @@ document.addEventListener('auth-success', function() {
     async function handleQrPairing() {
         modalQrStatus.textContent = 'Creating session...';
         try {
-            // 1. Create the session
+            // 1. Create the session. This is enough to trigger the QR code via WebSocket.
             const createResponse = await fetch('/api/v1/sessions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Auth.token}` },
@@ -161,22 +161,8 @@ document.addEventListener('auth-success', function() {
                 throw new Error(result.message || 'Failed to create session');
             }
             
-            modalQrStatus.textContent = 'Fetching QR code...';
-            
-            // 2. Get the QR code
-            const qrResponse = await fetch(`/api/v1/sessions/${newSessionId}/qr`, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${Auth.token}` }
-            });
-            const qrResult = await qrResponse.json();
-
-            if (!qrResponse.ok) {
-                 throw new Error(qrResult.message || 'Failed to get QR code');
-            }
-
-            // The QR is received via WebSocket, but we can show a placeholder
-            modalQrStatus.textContent = 'Waiting for you to scan...';
             // The main session-update websocket will handle the QR code display
+            modalQrStatus.textContent = 'Waiting for you to scan...';
             
         } catch (error) {
             modalQrStatus.textContent = `Error: ${error.message}`;
