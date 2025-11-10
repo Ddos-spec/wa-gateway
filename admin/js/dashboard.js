@@ -367,7 +367,7 @@ document.addEventListener('auth-success', function() {
                         logBox.scrollTop = logBox.scrollHeight;
 
                         // FIX: If we are waiting for a phone pairing code, check the logs for it.
-                        if (currentStep === 5 && logData.message.includes('Your pairing code is:')) {
+                        if (currentStep === 5 && logData.message.includes('Pairing code generated:')) {
                             const code = logData.message.split(':').pop().trim();
                             if (code) {
                                 modalPairingCodeDisplay.innerHTML = `<strong>${code}</strong>`;
