@@ -38,7 +38,6 @@ require('dotenv').config();
 const session = require('express-session');
 const FileStore = require('session-file-store')(session);
 const UserManager = require('./users');
-const ActivityLogger = require('./activity-logger');
 const PhonePairing = require('./phone-pairing');
 
 const sessions = new Map();
@@ -63,9 +62,8 @@ if (!process.env.TOKEN_ENCRYPTION_KEY) {
     console.warn(`Add this to your .env file: TOKEN_ENCRYPTION_KEY=${ENCRYPTION_KEY}`);
 }
 
-// Initialize user management and activity logging
+// Initialize user management
 const userManager = new UserManager(ENCRYPTION_KEY);
-const activityLogger = new ActivityLogger(ENCRYPTION_KEY);
 
 
 const { encrypt, decrypt } = require('./crypto-utils');
@@ -251,7 +249,6 @@ app.post('/admin/login', express.json(), async (req, res) => {
         req.session.adminAuthed = true;
         req.session.userEmail = 'admin@localhost';
         req.session.userRole = 'admin';
-        await activityLogger.logLogin('admin@localhost', ip, userAgent, true);
         return res.json({ success: true, role: 'admin' });
     }
     
@@ -263,7 +260,6 @@ app.post('/admin/login', express.json(), async (req, res) => {
             req.session.userEmail = user.email;
             req.session.userRole = user.role;
             req.session.userId = user.id;
-            await activityLogger.logLogin(user.email, ip, userAgent, true);
             return res.json({ 
                 success: true, 
                 role: user.role,
@@ -272,7 +268,6 @@ app.post('/admin/login', express.json(), async (req, res) => {
         }
     }
     
-    await activityLogger.logLogin(email || 'unknown', ip, userAgent, false);
     res.status(401).json({ success: false, message: 'Invalid credentials' });
 });
 
@@ -323,16 +318,6 @@ app.get('/admin/users.html', requireAdminAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'admin', 'users.html'));
 });
 
-// Protect activities page
-app.get('/admin/activities.html', requireAdminAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, 'admin', 'activities.html'));
-});
-
-// Protect campaigns page
-app.get('/admin/campaigns.html', requireAdminAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, 'admin', 'campaigns.html'));
-});
-
 // Admin logout endpoint
 app.post('/admin/logout', requireAdminAuth, (req, res) => {
     req.session.destroy(() => {
@@ -367,7 +352,6 @@ app.post('/api/v1/users', requireAdminRole, async (req, res) => {
             createdBy: currentUser.email
         });
         
-        await activityLogger.logUserCreate(currentUser.email, email, role, ip, userAgent);
         res.status(201).json(newUser);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -383,7 +367,6 @@ app.put('/api/v1/users/:email', requireAdminRole, async (req, res) => {
     
     try {
         const updatedUser = await userManager.updateUser(email, updates);
-        await activityLogger.logUserUpdate(currentUser.email, email, updates, ip, userAgent);
         res.json(updatedUser);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -398,7 +381,6 @@ app.delete('/api/v1/users/:email', requireAdminRole, async (req, res) => {
     
     try {
         await userManager.deleteUser(email);
-        await activityLogger.logUserDelete(currentUser.email, email, ip, userAgent);
         res.json({ success: true });
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -417,57 +399,6 @@ app.get('/api/v1/me', (req, res) => {
 });
 
 // Generate WebSocket authentication token
-app.get('/api/v1/ws-auth', requireAdminAuth, (req, res) => {
-    const currentUser = getCurrentUser(req);
-    // Create a temporary token for WebSocket authentication
-    const wsToken = crypto.randomBytes(32).toString('hex');
-    
-    // Store the token temporarily (expires in 30 seconds)
-    const tokenData = {
-        email: currentUser.email,
-        role: currentUser.role,
-        expires: Date.now() + 30000 // 30 seconds
-    };
-    
-    // Store in a temporary map (you might want to use Redis in production)
-    if (!global.wsAuthTokens) {
-        global.wsAuthTokens = new Map();
-    }
-    global.wsAuthTokens.set(wsToken, tokenData);
-    
-    // Clean up expired tokens
-    setTimeout(() => {
-        global.wsAuthTokens.delete(wsToken);
-    }, 30000);
-    
-    res.json({ wsToken });
-});
-
-// Activity endpoints
-app.get('/api/v1/activities', requireAdminAuth, async (req, res) => {
-    const currentUser = getCurrentUser(req);
-    const { limit = 100, startDate, endDate } = req.query;
-    
-    if (currentUser.role === 'admin') {
-        // Admin can see all activities
-        const activities = await activityLogger.getActivities({
-            limit: parseInt(limit),
-            startDate,
-            endDate
-        });
-        res.json(activities);
-    } else {
-        // Regular users see only their activities
-        const activities = await activityLogger.getUserActivities(currentUser.email, parseInt(limit));
-        res.json(activities);
-    }
-});
-
-app.get('/api/v1/activities/summary', requireAdminRole, async (req, res) => {
-    const { days = 7 } = req.query;
-    const summary = await activityLogger.getActivitySummary(null, parseInt(days));
-    res.json(summary);
-});
 
 // Test endpoint to verify log injection
 app.get('/admin/test-logs', requireAdminAuth, (req, res) => {
@@ -582,7 +513,7 @@ function log(message, sessionId = 'SYSTEM', details = {}) {
 
 const phonePairing = new PhonePairing(log);
 
-const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, regenerateSessionToken, updateSessionState);
+const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, phonePairing, regenerateSessionToken, updateSessionState);
 const legacyApiRouter = initializeLegacyApi(sessions, sessionTokens);
 
 // --- NEW CODE FOR API V2 ---
@@ -594,38 +525,6 @@ app.use('/api/v2', v2ApiRouter); // Mount API v2 router at /api/v2
 app.use('/api/v1', v1ApiRouter);
 app.use('/api', legacyApiRouter); // Mount legacy routes at /api
 
-// Set up campaign sender event listeners for WebSocket updates
-if (v1ApiRouter.campaignSender) {
-    v1ApiRouter.campaignSender.on('progress', (data) => {
-        // Broadcast campaign progress to authenticated WebSocket clients
-        wss.clients.forEach(client => {
-            if (client.readyState === client.OPEN) {
-                const userInfo = wsClients.get(client);
-                if (userInfo) {
-                    client.send(JSON.stringify({
-                        type: 'campaign-progress',
-                        ...data
-                    }));
-                }
-            }
-        });
-    });
-    
-    v1ApiRouter.campaignSender.on('status', (data) => {
-        // Broadcast campaign status updates
-        wss.clients.forEach(client => {
-            if (client.readyState === client.OPEN) {
-                const userInfo = wsClients.get(client);
-                if (userInfo) {
-                    client.send(JSON.stringify({
-                        type: 'campaign-status',
-                        ...data
-                    }));
-                }
-            }
-        });
-    });
-}
 // Prevent serving sensitive files
 app.use((req, res, next) => {
     if (req.path.includes('session_tokens.json') || req.path.endsWith('.bak')) {
@@ -1081,11 +980,28 @@ async function initializeExistingSessions() {
     if (fs.existsSync(sessionsDir)) {
         const sessionFolders = fs.readdirSync(sessionsDir);
         log(`Found ${sessionFolders.length} existing session(s). Initializing...`);
+
+        // Ensure user manager has loaded users before we check ownership
+        await userManager.loadUsers(); 
+
         for (const sessionId of sessionFolders) {
             const sessionPath = path.join(sessionsDir, sessionId);
             if (fs.statSync(sessionPath).isDirectory()) {
-                log(`Re-initializing session: ${sessionId}`);
-                await createSession(sessionId); // Await creation to prevent race conditions
+                const owner = userManager.getSessionOwner(sessionId);
+                const ownerEmail = owner ? owner.email : null;
+                
+                if (ownerEmail) {
+                    log(`Re-initializing session: ${sessionId} for user ${ownerEmail}`);
+                } else {
+                    log(`Re-initializing session: ${sessionId} (no owner found)`);
+                }
+                
+                try {
+                    // Pass owner's email to createSession so ownership is restored
+                    await createSession(sessionId, ownerEmail);
+                } catch (error) {
+                    log(`Failed to re-initialize session ${sessionId}: ${error.message}`, 'ERROR');
+                }
             }
         }
     }
@@ -1096,29 +1012,7 @@ server.listen(PORT, () => {
     log(`Server is running on port ${PORT}`);
     log(`Admin dashboard available at ${PUBLIC_URL}/admin/dashboard.html`);    loadTokens(); // Load tokens at startup
     initializeExistingSessions();
-    
-    // Start campaign scheduler
-    startCampaignScheduler();
 });
-
-// Campaign scheduler to automatically start campaigns at their scheduled time
-function startCampaignScheduler() {
-    console.log('📅 Campaign scheduler started - checking every minute for scheduled campaigns');
-    
-    setInterval(async () => {
-        await checkAndStartScheduledCampaigns();
-    }, 60000); // Check every minute (60,000 ms)
-}
-
-// Use the scheduler function from the API router
-async function checkAndStartScheduledCampaigns() {
-    if (v1ApiRouter && v1ApiRouter.checkAndStartScheduledCampaigns) {
-        return await v1ApiRouter.checkAndStartScheduledCampaigns();
-    } else {
-        console.log('⏳ API router not initialized yet, skipping scheduler check');
-        return { error: 'API router not initialized' };
-    }
-}
 
 // Graceful shutdown to clean up
 const gracefulShutdown = (signal) => {
@@ -1128,7 +1022,7 @@ const gracefulShutdown = (signal) => {
   for (const [sessionId, session] of sessions.entries()) {
     try {
       console.log(`[${sessionId}] Closing session...`);
-      session.sock?.logout();
+      session.sock?.end();
     } catch (err) {
       console.error(`[${sessionId}] Error during shutdown:`, err);
     }

@@ -127,13 +127,13 @@
 
                             <!-- API v1: Phone Pairing -->
                             <div class="tab-pane fade" id="content-pairing" role="tabpanel">
-                                <div class="alert alert-info"><i class="bi bi-info-circle-fill"></i> This is the recommended way to create new sessions without manual QR code scanning.</div>
+                                <div class="alert alert-info"><i class="bi bi-info-circle-fill"></i> This is the recommended way to create new sessions without manual QR code scanning. This endpoint requires an authenticated browser session (it uses cookies, not bearer tokens) and is intended to be called from the dashboard.</div>
                                 <div class="mb-3">
                                     <strong>1. Initiate Pairing</strong>
                                     <p class="text-muted small">Request a pairing code for a specific phone number. This will create a new session instance and return its <code>sessionId</code>.</p>
                                     <pre><code id="curl-pair-phone">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/session/pair-phone" \
--H "Authorization: Bearer YOUR_ADMIN_OR_USER_TOKEN" \
 -H "Content-Type: application/json" \
+--cookie "connect.sid=YOUR_SESSION_COOKIE" \
 -d 
 '{ 
   "phoneNumber": "6281234567890"
@@ -142,9 +142,8 @@
                                 </div>
                                 <div class="mb-3">
                                     <strong>2. Check Pairing Status</strong>
-                                    <p class="text-muted small">Poll this endpoint using the <code>sessionId</code> from the previous step. It will eventually return a <code>pairingCode</code>.</p>
-                                    <pre><code id="curl-pair-status">curl -X GET "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/session/SESSION_ID_FROM_STEP_1/pair-status" \
--H "Authorization: Bearer YOUR_ADMIN_OR_USER_TOKEN"</code></pre>
+                                    <p class="text-muted small">Poll this endpoint using the <code>sessionId</code> from the previous step. It is unprotected and will eventually return a <code>pairingCode</code>.</p>
+                                    <pre><code id="curl-pair-status">curl -X GET "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/session/SESSION_ID_FROM_STEP_1/pair-status"</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-pair-status', this)">Copy</button>
                                     <p class="text-muted small mt-2">Once you get the code, go to WhatsApp on your phone &gt; Linked Devices &gt; Link with phone number, and enter the code.</p>
                                 </div>
@@ -252,7 +251,7 @@
                                 <div class="mb-3">
                                     <strong>Delete a Message</strong>
                                     <p class="text-muted small">Deletes a message you have sent. You need the <code>messageId</code> and the recipient's JID (<code>remoteJid</code>) from the webhook event or the initial send response.</p>
-                                    <pre><code id="curl-delete-message">curl -X DELETE "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/message" \
+                                    <pre><code id="curl-delete-message">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/message/delete" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
 -d 
