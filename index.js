@@ -399,6 +399,34 @@ app.get('/api/v1/me', (req, res) => {
 });
 
 // Generate WebSocket authentication token
+app.get('/api/v1/ws-auth', (req, res) => {
+    if (!req.session || !req.session.adminAuthed) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+    const currentUser = getCurrentUser(req);
+    // Create a temporary token for WebSocket authentication
+    const wsToken = crypto.randomBytes(32).toString('hex');
+    
+    // Store the token temporarily (expires in 30 seconds)
+    const tokenData = {
+        email: currentUser.email,
+        role: currentUser.role,
+        expires: Date.now() + 30000 // 30 seconds
+    };
+    
+    // Store in a temporary map (you might want to use Redis in production)
+    if (!global.wsAuthTokens) {
+        global.wsAuthTokens = new Map();
+    }
+    global.wsAuthTokens.set(wsToken, tokenData);
+    
+    // Clean up expired tokens
+    setTimeout(() => {
+        global.wsAuthTokens.delete(wsToken);
+    }, 30000);
+    
+    res.json({ wsToken });
+});
 
 // Test endpoint to verify log injection
 app.get('/admin/test-logs', requireAdminAuth, (req, res) => {
