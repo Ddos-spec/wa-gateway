@@ -164,7 +164,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_DASHBOARD_PASSWORD;
 
 // Session limits configuration
 const MAX_SESSIONS = parseInt(process.env.MAX_SESSIONS) || 10;
-const SESSION_TIMEOUT_HOURS = parseInt(process.env.SESSION_TIMEOUT_HOURS) || 24;
+const SESSION_TIMEOUT_DAYS = parseInt(process.env.SESSION_TIMEOUT_DAYS) || 30;
 
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
