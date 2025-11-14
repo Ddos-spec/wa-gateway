@@ -14,14 +14,14 @@ class SessionManager {
         sessionStorage,
         webhookHandler,
         logger,
-        userManager,
+        dbModels, // { User, Admin, WaNumber }
         phonePairing,
         options = {}
     ) {
         this.sessionStorage = sessionStorage;
         this.webhookHandler = webhookHandler;
         this.logger = logger;
-        this.userManager = userManager;
+        this.db = dbModels; // Store db models
         this.phonePairing = phonePairing;
 
         // Configuration
@@ -31,6 +31,7 @@ class SessionManager {
         // Active sessions storage
         this.sessions = new Map(); // sessionId -> session object
         this.sessionTokens = new Map(); // sessionId -> API token
+        this.wsAuthTokens = new Map(); // wsToken -> { userInfo, expires }
 
         // Initialize shared components
         this.baileysConfig = new BaileysConfig({
@@ -93,10 +94,10 @@ class SessionManager {
 
             this.sessions.set(sessionId, session);
 
-            // Track ownership
-            if (creatorEmail) {
-                this.userManager.addSessionToUser(creatorEmail, sessionId);
-            }
+            // Kepemilikan akan dicatat di tabel wa_numbers saat nomor dibuat/dipasangkan
+            // if (creatorEmail) {
+            //     // this.db.User.addSession... (logika baru jika diperlukan)
+            // }
 
             // Broadcast state change
             this._broadcastStateChange(sessionId, 'CREATING', 'Initializing session...');
@@ -222,10 +223,12 @@ class SessionManager {
                 await session.socketManager.close();
             }
 
-            // Remove from user's sessions
-            if (session.owner) {
-                this.userManager.removeSessionFromUser(session.owner, sessionId);
-            }
+            // Menghapus file sesi akan memaksa pemasangan ulang.
+            // Kita tidak menghapus entri WaNumber dari DB agar tidak kehilangan data.
+            // const waNumber = await this.db.WaNumber.findBySessionName(sessionId);
+            // if (waNumber) {
+            //     await this.db.WaNumber.delete(waNumber.id);
+            // }
 
             // Delete from storage
             this.sessionStorage.deleteSession(sessionId);
@@ -384,26 +387,26 @@ class SessionManager {
      */
     async initializeExistingSessions() {
         const sessionIds = this.sessionStorage.getAllSessionIds();
-
         this.logger.info(`Found ${sessionIds.length} existing session(s). Initializing...`);
 
         let initialized = 0;
-
         for (const sessionId of sessionIds) {
             try {
-                // Get owner from user manager
-                const owner = this.userManager.getSessionOwner(sessionId);
-                const ownerEmail = owner ? owner.email : null;
+                const waNumber = await this.db.WaNumber.findBySessionName(sessionId);
+                let ownerEmail = null;
+                if (waNumber) {
+                    const owner = await this.db.User.findById(waNumber.user_id);
+                    if (owner) {
+                        ownerEmail = owner.email;
+                    }
+                }
 
-                // Load existing token or generate new
                 if (!this.sessionTokens.has(sessionId)) {
                     this.sessionTokens.set(sessionId, randomUUID());
                 }
 
-                // Create session
                 await this.createSession(sessionId, ownerEmail);
                 initialized++;
-
             } catch (error) {
                 this.logger.error(
                     `Failed to re-initialize session ${sessionId}: ${error.message}`,
@@ -411,9 +414,7 @@ class SessionManager {
                 );
             }
         }
-
         this.logger.info(`Initialized ${initialized}/${sessionIds.length} session(s)`);
-
         return initialized;
     }
 
@@ -482,6 +483,34 @@ class SessionManager {
     loadTokens(tokens) {
         this.sessionTokens = new Map(tokens);
         this.logger.info(`Loaded ${tokens.size} session token(s)`);
+    }
+
+    // --- WebSocket Token Management ---
+
+    generateWsToken(userInfo) {
+        const token = randomUUID();
+        this.wsAuthTokens.set(token, {
+            userInfo,
+            expires: Date.now() + 30000 // 30 detik
+        });
+        // Hapus token setelah kedaluwarsa
+        setTimeout(() => this.wsAuthTokens.delete(token), 31000);
+        return token;
+    }
+
+    validateWsToken(token) {
+        const tokenData = this.wsAuthTokens.get(token);
+        if (!tokenData) return false;
+        return Date.now() < tokenData.expires;
+    }
+
+    getUserInfoFromWsToken(token) {
+        const tokenData = this.wsAuthTokens.get(token);
+        if (tokenData && this.validateWsToken(token)) {
+            this.wsAuthTokens.delete(token); // Token sekali pakai
+            return tokenData.userInfo;
+        }
+        return null;
     }
 }
 
