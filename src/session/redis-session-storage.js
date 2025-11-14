@@ -13,7 +13,9 @@ class RedisSessionStorage {
     constructor() {
         this.sessionPrefix = 'wa:session:';
         this.metadataPrefix = 'wa:metadata:';
-        this.defaultTTL = 24 * 60 * 60; // 24 hours in seconds
+        // Use SESSION_TIMEOUT_DAYS from env, default 30 days
+        const timeoutDays = parseInt(process.env.SESSION_TIMEOUT_DAYS) || 30;
+        this.defaultTTL = timeoutDays * 24 * 60 * 60; // Convert days to seconds
     }
 
     /**

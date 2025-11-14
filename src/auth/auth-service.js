@@ -13,7 +13,9 @@ const logger = getLogger();
 class AuthService {
     constructor() {
         this.sessionTokens = new Map(); // In-memory session tokens
-        this.tokenTTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+        // Use SESSION_TIMEOUT_DAYS from env, default 30 days
+        const timeoutDays = parseInt(process.env.SESSION_TIMEOUT_DAYS) || 30;
+        this.tokenTTL = timeoutDays * 24 * 60 * 60 * 1000; // Convert days to milliseconds
     }
 
     /**

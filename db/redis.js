@@ -13,7 +13,9 @@ class RedisConnection {
         this.logger = getLogger();
         this.isConnected = false;
         this.sessionPrefix = process.env.REDIS_SESSION_PREFIX || 'wa-gateway:session:';
-        this.sessionTTL = parseInt(process.env.REDIS_SESSION_TTL) || 86400; // 24 hours default
+        // Use SESSION_TIMEOUT_DAYS from env, default 30 days
+        const timeoutDays = parseInt(process.env.SESSION_TIMEOUT_DAYS) || 30;
+        this.sessionTTL = timeoutDays * 24 * 60 * 60; // Convert days to seconds
     }
 
     /**
