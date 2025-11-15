@@ -268,7 +268,8 @@ async function startServer() {
 
         // 5. Connect Redis subscriber for real-time updates
         subscriber = redis.client.duplicate();
-        await subscriber.connect();
+        // await subscriber.connect(); // REMOVED: This was causing the double-connect issue. The duplicated client shares the connection.
+        
         subscriber.psubscribe('wa-gateway:pairing-updates:*', (err) => {
             if (err) logger.error('Failed to subscribe to pairing updates', 'REDIS_SUB', { error: err });
             else logger.info('Subscribed to pairing update channels', 'REDIS_SUB');
