@@ -74,8 +74,6 @@
                         </div>
 
                         <div class="d-flex flex-wrap gap-2 justify-content-center">
-                            <button id="btn-scan-qr" class="btn btn-primary"><i class="bi bi-qr-code-scan me-1"></i> Generate QR</button>
-                            <button id="btn-pairing-code" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#pairing-modal"><i class="bi bi-phone me-1"></i> Pairing Code</button>
                             <button id="btn-delete" class="btn btn-danger"><i class="bi bi-trash me-1"></i> Delete Session</button>
                         </div>
                     </div>
@@ -211,28 +209,6 @@
             </div>
             <div class="card-body">
                 <div id="logs" class="logs-container"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Pairing Code Modal -->
-    <div class="modal fade" id="pairing-modal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Link with Phone Number</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="pairing-form">
-                        <div class="form-floating mb-3">
-                            <input type="number" class="form-control" id="phone-number" placeholder="Enter phone number" required>
-                            <label for="phone-number">Phone number with country code</label>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 mb-3">Next</button>
-                        <div id="pairing-code-display" class="text-center fs-4 fw-bold"></div>
-                    </form>
-                </div>
             </div>
         </div>
     </div>

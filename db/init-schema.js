@@ -51,7 +51,8 @@ async function createAdminsTable() {
             id SERIAL PRIMARY KEY,
             email VARCHAR(255) NOT NULL UNIQUE,
             password_hash VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            last_login TIMESTAMP WITH TIME ZONE
         );
     `;
 
@@ -69,8 +70,10 @@ async function createUsersTable() {
             admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
             email VARCHAR(255) NOT NULL UNIQUE,
             password_hash VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            last_login TIMESTAMP WITH TIME ZONE
         );
     `;
 
@@ -87,7 +90,7 @@ async function createWaFoldersTable() {
             id SERIAL PRIMARY KEY,
             admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
             folder_name VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     `;
 
@@ -106,8 +109,8 @@ async function createWaNumbersTable() {
             folder_id INTEGER REFERENCES wa_folders(id) ON DELETE SET NULL,
             phone_number VARCHAR(20) NOT NULL UNIQUE,
             session_name VARCHAR(255) NOT NULL UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     `;
 
@@ -128,7 +131,7 @@ async function createChatLogsTable() {
             message_content TEXT,
             message_type VARCHAR(50) DEFAULT 'text',
             direction VARCHAR(20) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     `;
 

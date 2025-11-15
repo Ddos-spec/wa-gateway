@@ -10,11 +10,11 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const session = require('express-session');
-const FileStore = require('session-file-store')(session);
+const { RedisStore } = require('connect-redis');
 const crypto = require('crypto');
 
 // Database and new modules
-const { initializeDatabase, User, Admin, WaNumber } = require('./db');
+const { redis, initializeDatabase, User, Admin, WaNumber } = require('./db');
 
 // Refactored Modules
 const { getLogger } = require('./src/utils/logger');
@@ -23,8 +23,6 @@ const SessionStorage = require('./src/session/session-storage');
 const WebhookQueue = require('./src/webhooks/webhook-queue');
 const WebhookHandler = require('./src/webhooks/webhook-handler');
 const MessageService = require('./src/services/message-service');
-
-// Existing modules
 const PhonePairing = require('./phone-pairing');
 const { encrypt, decrypt } = require('./crypto-utils');
 const { initializeApiV2 } = require('./api_v2');
@@ -43,7 +41,8 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-const phonePairing = new PhonePairing(logger);
+// Menggunakan Redis untuk PhonePairing
+const phonePairing = new PhonePairing(logger, redis);
 
 const sessionStorage = new SessionStorage(logger, {
     authDir: path.join(__dirname, 'auth_info_baileys')
@@ -72,7 +71,7 @@ const sessionManager = new SessionManager(
     sessionStorage,
     webhookHandler,
     logger,
-    { User, Admin, WaNumber }, // Pass DB models instead of userManager
+    { User, Admin, WaNumber },
     phonePairing,
     {
         maxSessions: MAX_SESSIONS,
@@ -85,9 +84,34 @@ const messageService = new MessageService(sessionManager, logger, {
 });
 
 // ============================================
-// PART 3: WEBSOCKET MANAGEMENT
+// PART 3: WEBSOCKET & REAL-TIME MANAGEMENT
 // ============================================
-const wsClients = new Map();
+const dashboardClients = new Set();
+const pairingSubscriptions = new Map(); // sessionId -> Set<WebSocket>
+
+// Setup Redis Pub/Sub listener
+const subscriber = redis.client.duplicate();
+subscriber.psubscribe('wa-gateway:pairing-updates:*', (err) => {
+    if (err) {
+        logger.error('Failed to subscribe to pairing updates', 'REDIS_SUB', { error: err });
+    } else {
+        logger.info('Subscribed to pairing update channels', 'REDIS_SUB');
+    }
+});
+
+subscriber.on('pmessage', (pattern, channel, message) => {
+    logger.debug(`Received message from ${channel}`, 'REDIS_SUB');
+    const sessionId = channel.split(':').pop();
+    if (pairingSubscriptions.has(sessionId)) {
+        const subscribers = pairingSubscriptions.get(sessionId);
+        subscribers.forEach(ws => {
+            if (ws.readyState === ws.OPEN) {
+                ws.send(message);
+            } 
+        });
+    }
+});
+
 
 wss.on('connection', (ws, req) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -99,36 +123,60 @@ wss.on('connection', (ws, req) => {
     }
 
     const userInfo = sessionManager.getUserInfoFromWsToken(token);
-    wsClients.set(ws, userInfo);
-    logger.info('WebSocket client connected', 'SYSTEM', { user: userInfo.email });
+    logger.info('WebSocket client connected', 'WEBSOCKET', { user: userInfo.email });
+
+    ws.on('message', (rawMessage) => {
+        try {
+            const message = JSON.parse(rawMessage);
+            if (message.type === 'subscribe_pairing' && message.sessionId) {
+                const { sessionId } = message;
+                if (!pairingSubscriptions.has(sessionId)) {
+                    pairingSubscriptions.set(sessionId, new Set());
+                }
+                pairingSubscriptions.get(sessionId).add(ws);
+                ws.pairingSessionId = sessionId; // Track subscription on the ws object
+                logger.info(`Client subscribed to pairing updates for ${sessionId}`, 'WEBSOCKET');
+            } else if (message.type === 'subscribe_dashboard') {
+                dashboardClients.add(ws);
+                ws.isDashboardClient = true;
+                 // Send initial full session list
+                ws.send(JSON.stringify({
+                    event: 'session-list',
+                    data: sessionManager.getSessionsForUser(userInfo.email, userInfo.role === 'admin')
+                }));
+                logger.info('Client subscribed to dashboard updates', 'WEBSOCKET');
+            }
+        } catch (error) {
+            logger.error('Failed to handle WebSocket message', 'WEBSOCKET', { error: error.message });
+        }
+    });
 
     ws.on('close', () => {
-        wsClients.delete(ws);
-        logger.info('WebSocket client disconnected', 'SYSTEM');
+        // Unsubscribe from pairing
+        if (ws.pairingSessionId && pairingSubscriptions.has(ws.pairingSessionId)) {
+            pairingSubscriptions.get(ws.pairingSessionId).delete(ws);
+            if (pairingSubscriptions.get(ws.pairingSessionId).size === 0) {
+                pairingSubscriptions.delete(ws.pairingSessionId);
+            }
+        }
+        // Unsubscribe from dashboard
+        if (ws.isDashboardClient) {
+            dashboardClients.delete(ws);
+        }
+        logger.info('WebSocket client disconnected', 'WEBSOCKET');
     });
 
     ws.on('error', (error) => {
-        logger.error('WebSocket error', 'SYSTEM', { error: error.message });
+        logger.error('WebSocket error', 'WEBSOCKET', { error: error.message });
     });
-    
-    // Send initial full session list
-    ws.send(JSON.stringify({
-        event: 'session-list',
-        data: sessionManager.getSessionsForUser(userInfo.email, userInfo.role === 'admin')
-    }));
 });
 
 function broadcast(data) {
     const message = JSON.stringify(data);
-    wsClients.forEach((userInfo, ws) => {
+    dashboardClients.forEach((ws) => {
         if (ws.readyState === ws.OPEN) {
-            const isAdmin = userInfo.role === 'admin';
-            const session = data.sessionId ? sessionManager.getSession(data.sessionId) : null;
-            const isOwner = session && session.owner === userInfo.email;
-
-            if (isAdmin || isOwner || !session) {
-                ws.send(message);
-            }
+            // Simple broadcast for now, could be refined with user roles later
+            ws.send(message);
         }
     });
 }
@@ -150,9 +198,9 @@ const apiLimiter = rateLimit({
 });
 app.use(apiLimiter);
 
-const sessionStore = new FileStore({
-    path: path.join(__dirname, 'sessions'),
-    logFn: logger.debug.bind(logger),
+const sessionStore = new RedisStore({
+    client: redis.client,
+    prefix: process.env.REDIS_SESSION_PREFIX || 'wa-gateway:session:',
     ttl: (parseInt(process.env.SESSION_TIMEOUT_DAYS) || 1) * 24 * 60 * 60,
 });
 
@@ -255,6 +303,7 @@ const apiV2Router = initializeApiV2({
     sessionManager,
     messageService,
     phonePairing,
+    authService, // Inject authService
     logger
 });
 app.use('/api/v2', apiV2Router);
@@ -281,7 +330,8 @@ app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime
 async function startServer() {
     try {
         await initializeDatabase();
-        logger.info('Database connections established.', 'SYSTEM');
+        await subscriber.connect(); // Connect the subscriber client
+        logger.info('Database and Redis connections established.', 'SYSTEM');
 
         loadTokens();
         await sessionManager.initializeExistingSessions();
@@ -289,7 +339,7 @@ async function startServer() {
         server.listen(PORT, () => {
             logger.info(`🚀 Server is running on port ${PORT}`, 'SYSTEM');
             logger.info(`📱 Admin dashboard: ${PUBLIC_URL}/admin/dashboard.html`, 'SYSTEM');
-            logger.info(`✨ Refactored to modular architecture`, 'SYSTEM');
+            logger.info('✨ Real-time pairing enabled via WebSockets', 'SYSTEM');
         });
     } catch (error) {
         logger.error('Failed to start server', 'SYSTEM', { error: error.message, stack: error.stack });
@@ -300,6 +350,7 @@ async function startServer() {
 const gracefulShutdown = async (signal) => {
     logger.info(`Received ${signal}, shutting down gracefully...`, 'SYSTEM');
     saveTokens();
+    subscriber.disconnect();
     await sessionManager.shutdown();
     await webhookQueue.shutdown();
     server.close(() => {

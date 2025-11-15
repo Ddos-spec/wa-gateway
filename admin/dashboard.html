@@ -58,9 +58,9 @@
             <div class="card shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Session Management</h5>
-                    <button id="openCreateSessionModalBtn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createSessionModal">
+                    <a href="/admin/pair-phone.html" class="btn btn-primary">
                         <i class="bi bi-plus-circle"></i> Create Session
-                    </button>
+                    </a>
                 </div>
                 <div class="card-body">
                     <div class="row" id="sessions-container">
@@ -76,72 +76,7 @@
     </footer>
 </div> <!-- End of main-content-wrapper -->
 
-    <!-- Create Session Modal -->
-    <div class="modal fade" id="createSessionModal" tabindex="-1" aria-labelledby="createSessionModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="createSessionModalLabel">Create New Session</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- Step 1: Session Name -->
-                    <div id="modal-step-1">
-                        <div class="mb-3">
-                            <label for="newSessionIdInput" class="form-label">Session Name</label>
-                            <input type="text" class="form-control" id="newSessionIdInput" placeholder="Enter a unique session name">
-                            <div class="form-text">Use only letters, numbers, and hyphens.</div>
-                        </div>
-                    </div>
-                    <!-- Step 2: Pairing Method -->
-                    <div id="modal-step-2" style="display: none;">
-                        <h5>Choose Pairing Method</h5>
-                        <p>Session: <strong id="modalSessionName"></strong></p>
-                        <div class="d-grid gap-2">
-                            <button class="btn btn-success" id="modalPairQrBtn"><i class="bi bi-qr-code"></i> Pair with QR Code</button>
-                            <button class="btn btn-info" id="modalPairPhoneBtn"><i class="bi bi-telephone"></i> Pair with Phone Number</button>
-                        </div>
-                    </div>
-                    <!-- Step 3 QR: QR Code Display -->
-                    <div id="modal-step-qr" style="display: none;" class="text-center">
-                        <p>Scan this QR code with your WhatsApp.</p>
-                        <div id="modal-qr-code" class="qr-code mx-auto d-flex justify-content-center align-items-center"></div>
-                        <p class="mt-2 text-muted" id="modal-qr-status">Waiting for QR code...</p>
-                    </div>
-                    <!-- Step 3 Phone: Enter Phone Number -->
-                    <div id="modal-step-phone-number" style="display: none;">
-                         <div class="mb-3">
-                            <label for="modalPhoneNumber" class="form-label">WhatsApp Number</label>
-                            <input type="tel" class="form-control" id="modalPhoneNumber" placeholder="e.g., +6281234567890" required>
-                            <div class="form-text">Enter in international format.</div>
-                        </div>
-                    </div>
-                    <!-- Step 4 Phone: Show Pairing Code -->
-                    <div id="modal-step-phone-code" style="display: none;">
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle"></i> On your phone, go to WhatsApp Settings > Linked Devices > Link with phone number.
-                        </div>
-                        <p>Your pairing code is:</p>
-                        <div class="code-display text-center bg-light p-3 rounded" id="modalPairingCodeDisplay">
-                            <div class="spinner-border text-primary" role="status"></div>
-                            <span class="ms-2">Waiting for code...</span>
-                        </div>
-                    </div>
-                     <!-- Step 5: Success -->
-                    <div id="modal-step-success" style="display: none;" class="text-center">
-                        <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
-                        <h4 class="mt-3">Session Paired Successfully!</h4>
-                        <p>Session <strong id="successSessionId"></strong> is now connected.</p>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" id="modalBackBtn" style="display: none;">Back</button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="modalCancelBtn">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="modalNextBtn">Next</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Create Session Modal has been removed -->
 
     <!-- Scripts -->
     <script src="/admin/js/bootstrap.bundle.min.js"></script>

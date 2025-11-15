@@ -13,7 +13,7 @@ document.addEventListener('auth-success', function() {
 
     async function loadUsers() {
         try {
-            const response = await fetch('/api/v1/users');
+            const response = await fetch('/api/v2/users'); // UPDATED
             if (!response.ok) throw new Error('Failed to load users');
             
             users = await response.json();
@@ -37,12 +37,12 @@ document.addEventListener('auth-success', function() {
         usersTableBody.innerHTML = users.map(user => `
             <tr>
                 <td>${user.email}</td>
-                <td><span class="badge bg-${user.role === 'admin' ? 'danger' : 'primary'}">${user.role}</span></td>
+                <td><span class="badge bg-primary">${user.role || 'user'}</span></td>
                 <td>${user.sessions ? user.sessions.length : 0}</td>
-                <td>${user.createdBy || 'System'}</td>
-                <td>${new Date(user.createdAt).toLocaleString()}</td>
-                <td>${user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}</td>
-                <td><span class="badge bg-${user.isActive ? 'success' : 'secondary'}">${user.isActive ? 'Active' : 'Inactive'}</span></td>
+                <td>${user.admin_id || 'System'}</td>
+                <td>${new Date(user.created_at).toLocaleString()}</td>
+                <td>${user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}</td>
+                <td><span class="badge bg-${user.is_active ? 'success' : 'secondary'}">${user.is_active ? 'Active' : 'Inactive'}</span></td>
                 <td>
                     <button class="btn btn-sm btn-outline-primary" onclick="window.editUser('${user.email}')"><i class="bi bi-pencil"></i></button>
                     ${user.email !== Auth.currentUser.email ? `<button class="btn btn-sm btn-outline-danger" onclick="window.deleteUser('${user.email}')"><i class="bi bi-trash"></i></button>` : ''}
@@ -57,8 +57,9 @@ document.addEventListener('auth-success', function() {
 
         document.getElementById('editEmail').value = user.email;
         document.getElementById('editEmailDisplay').value = user.email;
-        document.getElementById('editRole').value = user.role;
-        document.getElementById('editIsActive').checked = user.isActive;
+        // The role dropdown is now disabled in the HTML, but we set it for completeness
+        document.getElementById('editRole').value = user.role || 'user';
+        document.getElementById('editIsActive').checked = user.is_active;
         document.getElementById('editPassword').value = '';
 
         editUserModal.show();
@@ -68,7 +69,7 @@ document.addEventListener('auth-success', function() {
         if (!confirm(`Are you sure you want to delete user ${email}?`)) return;
 
         try {
-            const response = await fetch(`/api/v1/users/${encodeURIComponent(email)}`, { method: 'DELETE' });
+            const response = await fetch(`/api/v2/users/${encodeURIComponent(email)}`, { method: 'DELETE' }); // UPDATED
             if (!response.ok) {
                 const error = await response.json();
                 throw new Error(error.error || 'Failed to delete user');
@@ -88,7 +89,7 @@ document.addEventListener('auth-success', function() {
         const role = document.getElementById('newRole').value;
 
         try {
-            const response = await fetch('/api/v1/users', {
+            const response = await fetch('/api/v2/users', { // UPDATED
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password, role })
@@ -112,7 +113,7 @@ document.addEventListener('auth-success', function() {
         
         const email = document.getElementById('editEmail').value;
         const updates = {
-            role: document.getElementById('editRole').value,
+            // role is no longer editable from this form
             isActive: document.getElementById('editIsActive').checked
         };
         
@@ -122,7 +123,7 @@ document.addEventListener('auth-success', function() {
         }
 
         try {
-            const response = await fetch(`/api/v1/users/${encodeURIComponent(email)}`, {
+            const response = await fetch(`/api/v2/users/${encodeURIComponent(email)}`, { // UPDATED
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updates)

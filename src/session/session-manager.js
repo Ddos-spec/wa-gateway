@@ -94,10 +94,17 @@ class SessionManager {
 
             this.sessions.set(sessionId, session);
 
-            // Kepemilikan akan dicatat di tabel wa_numbers saat nomor dibuat/dipasangkan
-            // if (creatorEmail) {
-            //     // this.db.User.addSession... (logika baru jika diperlukan)
-            // }
+            // Lacak kepemilikan di database
+            if (creatorEmail) {
+                const user = await this.db.User.findByEmail(creatorEmail);
+                if (user) {
+                    await this.db.WaNumber.create({
+                        userId: user.id,
+                        sessionName: sessionId,
+                        phoneNumber: phoneNumber || sessionId, // Gunakan sessionId jika nomor tidak disediakan
+                    });
+                }
+            }
 
             // Broadcast state change
             this._broadcastStateChange(sessionId, 'CREATING', 'Initializing session...');
@@ -317,6 +324,33 @@ class SessionManager {
         this.logger.info(`Token regenerated for session: ${sessionId}`, sessionId);
 
         return newToken;
+    }
+
+    /**
+     * Update settings for a session
+     * @param {string} sessionId - Session identifier
+     * @param {Object} settings - New settings
+     * @returns {Promise<boolean>}
+     */
+    async updateSettings(sessionId, settings) {
+        const session = this.sessions.get(sessionId);
+        if (!session) {
+            throw new Error(`Session ${sessionId} not found`);
+        }
+
+        // Save to persistent storage
+        await this.sessionStorage.saveSettings(sessionId, settings);
+
+        // Update in-memory session object
+        session.settings = settings;
+        this.sessions.set(sessionId, session);
+
+        this.logger.info(`Settings updated for session: ${sessionId}`, sessionId);
+        
+        // Optionally, broadcast or trigger a webhook for settings change
+        this._broadcastStateChange(sessionId, session.status, 'Settings updated');
+
+        return true;
     }
 
     /**

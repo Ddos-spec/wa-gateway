@@ -129,6 +129,7 @@ class WebhookHandler {
             event: 'message',
             sessionId,
             from: msg.key.remoteJid,
+            senderName: msg.pushName || null, // ADDED: Include the sender's name
             fromMe: msg.key.fromMe,
             isGroup: msg.key.remoteJid.endsWith('@g.us'),
             messageId: msg.key.id,

@@ -1,12 +1,12 @@
 const { jidNormalizedUser, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const fs = require('fs');
 const path = require('path');
+const { formatPhoneNumber, toWhatsAppJid, isValidJid } = require('../../phone-utils');
 
 /**
  * Message Service
  * Centralized service for sending WhatsApp messages
  */
-
 class MessageService {
     constructor(sessionManager, logger, options = {}) {
         this.sessionManager = sessionManager;
@@ -24,37 +24,19 @@ class MessageService {
      * @param {string} sessionId - Session identifier
      * @param {string} to - Recipient JID or phone number
      * @param {string} text - Message text
-     * @param {Object} options - Additional options
      * @returns {Object} Message result
      */
-    async sendText(sessionId, to, text, options = {}) {
-        const session = this.sessionManager.getSession(sessionId);
-        if (!session || !session.isConnected) {
-            throw new Error('Session not connected');
-        }
-
+    async sendText(sessionId, to, text) {
+        this.validateSession(sessionId);
         const jid = this._normalizeJid(to);
+        const sock = this.sessionManager.sessions.get(sessionId).sock;
 
         try {
-            const sock = this.sessionManager.sessions.get(sessionId).sock;
-            const result = await sock.sendMessage(jid, {
-                text: text
-            });
-
-            this.logger.info(`Text message sent to ${to}`, sessionId);
-
-            return {
-                success: true,
-                messageId: result.key.id,
-                to: jid,
-                timestamp: result.messageTimestamp
-            };
-
+            const result = await sock.sendMessage(jid, { text });
+            this.logger.info(`Text message sent to ${jid}`, 'MESSAGING', { sessionId });
+            return { status: 'success', messageId: result.key.id, to: jid };
         } catch (error) {
-            this.logger.error(
-                `Failed to send text message: ${error.message}`,
-                sessionId
-            );
+            this.logger.error(`Failed to send message to ${jid}`, 'MESSAGING', { sessionId, error: error.message });
             throw error;
         }
     }
@@ -63,45 +45,25 @@ class MessageService {
      * Send an image message
      * @param {string} sessionId - Session identifier
      * @param {string} to - Recipient JID or phone number
-     * @param {Buffer|string} image - Image buffer or URL
+     * @param {string} imageUrl - Image URL
      * @param {string} caption - Optional caption
      * @returns {Object} Message result
      */
-    async sendImage(sessionId, to, image, caption = '') {
-        const session = this.sessionManager.getSession(sessionId);
-        if (!session || !session.isConnected) {
-            throw new Error('Session not connected');
-        }
-
+    async sendImage(sessionId, to, imageUrl, caption = '') {
+        this.validateSession(sessionId);
         const jid = this._normalizeJid(to);
+        const sock = this.sessionManager.sessions.get(sessionId).sock;
 
         try {
-            const sock = this.sessionManager.sessions.get(sessionId).sock;
-
             const messageContent = {
-                image: typeof image === 'string' ? { url: image } : image,
+                image: { url: imageUrl },
+                caption: caption,
             };
-
-            if (caption) {
-                messageContent.caption = caption;
-            }
-
             const result = await sock.sendMessage(jid, messageContent);
-
-            this.logger.info(`Image message sent to ${to}`, sessionId);
-
-            return {
-                success: true,
-                messageId: result.key.id,
-                to: jid,
-                timestamp: result.messageTimestamp
-            };
-
+            this.logger.info(`Image message sent to ${jid}`, 'MESSAGING', { sessionId });
+            return { status: 'success', messageId: result.key.id, to: jid };
         } catch (error) {
-            this.logger.error(
-                `Failed to send image: ${error.message}`,
-                sessionId
-            );
+            this.logger.error(`Failed to send image to ${jid}`, 'MESSAGING', { sessionId, error: error.message });
             throw error;
         }
     }
@@ -110,45 +72,25 @@ class MessageService {
      * Send a video message
      * @param {string} sessionId - Session identifier
      * @param {string} to - Recipient JID or phone number
-     * @param {Buffer|string} video - Video buffer or URL
+     * @param {string} videoUrl - Video URL
      * @param {string} caption - Optional caption
      * @returns {Object} Message result
      */
-    async sendVideo(sessionId, to, video, caption = '') {
-        const session = this.sessionManager.getSession(sessionId);
-        if (!session || !session.isConnected) {
-            throw new Error('Session not connected');
-        }
-
+    async sendVideo(sessionId, to, videoUrl, caption = '') {
+        this.validateSession(sessionId);
         const jid = this._normalizeJid(to);
+        const sock = this.sessionManager.sessions.get(sessionId).sock;
 
         try {
-            const sock = this.sessionManager.sessions.get(sessionId).sock;
-
             const messageContent = {
-                video: typeof video === 'string' ? { url: video } : video,
+                video: { url: videoUrl },
+                caption: caption,
             };
-
-            if (caption) {
-                messageContent.caption = caption;
-            }
-
             const result = await sock.sendMessage(jid, messageContent);
-
-            this.logger.info(`Video message sent to ${to}`, sessionId);
-
-            return {
-                success: true,
-                messageId: result.key.id,
-                to: jid,
-                timestamp: result.messageTimestamp
-            };
-
+            this.logger.info(`Video message sent to ${jid}`, 'MESSAGING', { sessionId });
+            return { status: 'success', messageId: result.key.id, to: jid };
         } catch (error) {
-            this.logger.error(
-                `Failed to send video: ${error.message}`,
-                sessionId
-            );
+            this.logger.error(`Failed to send video to ${jid}`, 'MESSAGING', { sessionId, error: error.message });
             throw error;
         }
     }
@@ -157,39 +99,23 @@ class MessageService {
      * Send an audio message
      * @param {string} sessionId - Session identifier
      * @param {string} to - Recipient JID or phone number
-     * @param {Buffer|string} audio - Audio buffer or URL
+     * @param {string} audioUrl - Audio URL
      * @returns {Object} Message result
      */
-    async sendAudio(sessionId, to, audio) {
-        const session = this.sessionManager.getSession(sessionId);
-        if (!session || !session.isConnected) {
-            throw new Error('Session not connected');
-        }
-
+    async sendAudio(sessionId, to, audioUrl) {
+        this.validateSession(sessionId);
         const jid = this._normalizeJid(to);
+        const sock = this.sessionManager.sessions.get(sessionId).sock;
 
         try {
-            const sock = this.sessionManager.sessions.get(sessionId).sock;
-
             const result = await sock.sendMessage(jid, {
-                audio: typeof audio === 'string' ? { url: audio } : audio,
-                mimetype: 'audio/mp4'
+                audio: { url: audioUrl },
+                mimetype: 'audio/mp4',
             });
-
-            this.logger.info(`Audio message sent to ${to}`, sessionId);
-
-            return {
-                success: true,
-                messageId: result.key.id,
-                to: jid,
-                timestamp: result.messageTimestamp
-            };
-
+            this.logger.info(`Audio message sent to ${jid}`, 'MESSAGING', { sessionId });
+            return { status: 'success', messageId: result.key.id, to: jid };
         } catch (error) {
-            this.logger.error(
-                `Failed to send audio: ${error.message}`,
-                sessionId
-            );
+            this.logger.error(`Failed to send audio to ${jid}`, 'MESSAGING', { sessionId, error: error.message });
             throw error;
         }
     }
@@ -198,49 +124,27 @@ class MessageService {
      * Send a document message
      * @param {string} sessionId - Session identifier
      * @param {string} to - Recipient JID or phone number
-     * @param {Buffer|string} document - Document buffer or URL
+     * @param {string} documentUrl - Document URL
      * @param {string} filename - Document filename
      * @param {string} mimetype - Document MIME type
-     * @param {string} caption - Optional caption
      * @returns {Object} Message result
      */
-    async sendDocument(sessionId, to, document, filename, mimetype, caption = '') {
-        const session = this.sessionManager.getSession(sessionId);
-        if (!session || !session.isConnected) {
-            throw new Error('Session not connected');
-        }
-
+    async sendDocument(sessionId, to, documentUrl, filename, mimetype) {
+        this.validateSession(sessionId);
         const jid = this._normalizeJid(to);
+        const sock = this.sessionManager.sessions.get(sessionId).sock;
 
         try {
-            const sock = this.sessionManager.sessions.get(sessionId).sock;
-
             const messageContent = {
-                document: typeof document === 'string' ? { url: document } : document,
+                document: { url: documentUrl },
                 fileName: filename,
-                mimetype: mimetype
+                mimetype: mimetype,
             };
-
-            if (caption) {
-                messageContent.caption = caption;
-            }
-
             const result = await sock.sendMessage(jid, messageContent);
-
-            this.logger.info(`Document sent to ${to}`, sessionId);
-
-            return {
-                success: true,
-                messageId: result.key.id,
-                to: jid,
-                timestamp: result.messageTimestamp
-            };
-
+            this.logger.info(`Document sent to ${jid}`, 'MESSAGING', { sessionId });
+            return { status: 'success', messageId: result.key.id, to: jid };
         } catch (error) {
-            this.logger.error(
-                `Failed to send document: ${error.message}`,
-                sessionId
-            );
+            this.logger.error(`Failed to send document to ${jid}`, 'MESSAGING', { sessionId, error: error.message });
             throw error;
         }
     }
@@ -249,38 +153,22 @@ class MessageService {
      * Send a sticker message
      * @param {string} sessionId - Session identifier
      * @param {string} to - Recipient JID or phone number
-     * @param {Buffer|string} sticker - Sticker buffer or URL
+     * @param {string} stickerUrl - Sticker URL
      * @returns {Object} Message result
      */
-    async sendSticker(sessionId, to, sticker) {
-        const session = this.sessionManager.getSession(sessionId);
-        if (!session || !session.isConnected) {
-            throw new Error('Session not connected');
-        }
-
+    async sendSticker(sessionId, to, stickerUrl) {
+        this.validateSession(sessionId);
         const jid = this._normalizeJid(to);
+        const sock = this.sessionManager.sessions.get(sessionId).sock;
 
         try {
-            const sock = this.sessionManager.sessions.get(sessionId).sock;
-
             const result = await sock.sendMessage(jid, {
-                sticker: typeof sticker === 'string' ? { url: sticker } : sticker
+                sticker: { url: stickerUrl },
             });
-
-            this.logger.info(`Sticker sent to ${to}`, sessionId);
-
-            return {
-                success: true,
-                messageId: result.key.id,
-                to: jid,
-                timestamp: result.messageTimestamp
-            };
-
+            this.logger.info(`Sticker sent to ${jid}`, 'MESSAGING', { sessionId });
+            return { status: 'success', messageId: result.key.id, to: jid };
         } catch (error) {
-            this.logger.error(
-                `Failed to send sticker: ${error.message}`,
-                sessionId
-            );
+            this.logger.error(`Failed to send sticker to ${jid}`, 'MESSAGING', { sessionId, error: error.message });
             throw error;
         }
     }
@@ -292,30 +180,15 @@ class MessageService {
      * @returns {Object} Delete result
      */
     async deleteMessage(sessionId, messageKey) {
-        const session = this.sessionManager.getSession(sessionId);
-        if (!session || !session.isConnected) {
-            throw new Error('Session not connected');
-        }
+        this.validateSession(sessionId);
+        const sock = this.sessionManager.sessions.get(sessionId).sock;
 
         try {
-            const sock = this.sessionManager.sessions.get(sessionId).sock;
-
-            await sock.sendMessage(messageKey.remoteJid, {
-                delete: messageKey
-            });
-
-            this.logger.info(`Message deleted: ${messageKey.id}`, sessionId);
-
-            return {
-                success: true,
-                messageId: messageKey.id
-            };
-
+            await sock.sendMessage(messageKey.remoteJid, { delete: messageKey });
+            this.logger.info(`Message deleted: ${messageKey.id}`, 'MESSAGING', { sessionId });
+            return { status: 'success', messageId: messageKey.id };
         } catch (error) {
-            this.logger.error(
-                `Failed to delete message: ${error.message}`,
-                sessionId
-            );
+            this.logger.error(`Failed to delete message: ${error.message}`, 'MESSAGING', { sessionId });
             throw error;
         }
     }
@@ -332,17 +205,27 @@ class MessageService {
                 'buffer',
                 {},
                 {
-                    logger: this.logger.pino,
-                    reuploadRequest: null
+                    logger: this.logger.pino, // Assuming pino logger instance
+                    reuploadRequest: (m) => new Promise((resolve) => resolve(m)),
                 }
             );
-
             return buffer;
-
         } catch (error) {
-            this.logger.error(`Failed to download media: ${error.message}`);
+            this.logger.error(`Failed to download media: ${error.message}`, 'MESSAGING');
             throw error;
         }
+    }
+
+    /**
+     * Get message statistics
+     * @returns {Object} Message statistics
+     */
+    getStats() {
+        return {
+            service: 'MessageService',
+            status: 'operational',
+            mediaDir: this.mediaDir,
+        };
     }
 
     /**
@@ -350,13 +233,14 @@ class MessageService {
      * @private
      */
     _normalizeJid(identifier) {
-        // If already a JID, return as is
-        if (identifier.includes('@')) {
+        if (isValidJid(identifier)) {
             return identifier;
         }
-
-        // Convert phone number to JID
-        return jidNormalizedUser(identifier);
+        const formatted = formatPhoneNumber(identifier);
+        if (formatted) {
+            return toWhatsAppJid(formatted);
+        }
+        throw new Error('Invalid recipient JID');
     }
 
     /**
@@ -366,30 +250,9 @@ class MessageService {
      */
     validateSession(sessionId) {
         const session = this.sessionManager.getSession(sessionId);
-
-        if (!session) {
-            throw new Error(`Session ${sessionId} not found`);
+        if (!session || !session.isConnected) {
+            throw new Error('Session not found or not connected');
         }
-
-        if (!session.isConnected) {
-            throw new Error(`Session ${sessionId} is not connected`);
-        }
-
-        return true;
-    }
-
-    /**
-     * Get message statistics
-     * @returns {Object} Message statistics
-     */
-    getStats() {
-        // This would ideally be tracked over time
-        // For now, return basic info
-        return {
-            service: 'MessageService',
-            status: 'operational',
-            mediaDir: this.mediaDir
-        };
     }
 }
 

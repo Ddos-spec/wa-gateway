@@ -10,40 +10,80 @@ document.addEventListener('auth-success', function() {
     const pairedPhoneNumber = document.getElementById('pairedPhoneNumber');
     const pairedSessionId = document.getElementById('pairedSessionId');
 
-    let pollingInterval = null;
+    let ws = null;
 
-    // Function to start polling for pairing status
-    function startPolling(sessionId) {
-        if (pollingInterval) clearInterval(pollingInterval);
+    // Function to connect to WebSocket and handle real-time updates
+    async function connectWebSocket(sessionId) {
+        if (ws) {
+            ws.close();
+        }
 
-        pollingInterval = setInterval(async () => {
-            try {
-                const response = await fetch(`/api/v1/session/${sessionId}/pair-status`);
-                if (!response.ok) {
-                    clearInterval(pollingInterval);
-                    console.error(`Polling failed with status: ${response.status}`);
-                    return;
+        try {
+            // 1. Get a one-time WebSocket authentication token
+            const authResponse = await fetch('/api/v1/ws-auth');
+            if (!authResponse.ok) throw new Error('Failed to get WebSocket token');
+            const { wsToken } = await authResponse.json();
+
+            // 2. Establish WebSocket connection
+            const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}?token=${wsToken}`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('WebSocket connection established.');
+                // 3. Subscribe to pairing updates for the specific session
+                ws.send(JSON.stringify({
+                    type: 'subscribe_pairing',
+                    sessionId: sessionId
+                }));
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('Received pairing update:', data);
+
+                    // Update pairing code display
+                    if (data.pairingCode) {
+                        pairingCodeDisplay.innerHTML = `<strong>${data.pairingCode}</strong>`;
+                    }
+
+                    // Handle connection success
+                    if (data.status === 'CONNECTED') {
+                        if (ws) ws.close();
+                        pairedPhoneNumber.textContent = data.phoneNumber || 'N/A';
+                        pairedSessionId.textContent = sessionId;
+                        step2.style.display = 'none';
+                        step3.style.display = 'block';
+                    }
+                    
+                    // Handle error or timeout
+                    if (data.status === 'ERROR' || data.status === 'TIMEOUT') {
+                         if (ws) ws.close();
+                         alert(`Pairing failed: ${data.detail || 'An unknown error occurred.'}`);
+                         // Optionally, reset the view
+                         step2.style.display = 'none';
+                         step1.style.display = 'block';
+                    }
+
+                } catch (error) {
+                    console.error('Error processing WebSocket message:', error);
                 }
+            };
 
-                const data = await response.json();
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                alert('A connection error occurred. Please try again.');
+            };
 
-                if (data.pairingCode) {
-                    pairingCodeDisplay.innerHTML = `<strong>${data.pairingCode}</strong>`;
-                }
+            ws.onclose = () => {
+                console.log('WebSocket connection closed.');
+                ws = null;
+            };
 
-                if (data.sessionStatus === 'CONNECTED') {
-                    clearInterval(pollingInterval);
-                    pairedPhoneNumber.textContent = data.phoneNumber || 'N/A';
-                    pairedSessionId.textContent = sessionId;
-                    step2.style.display = 'none';
-                    step3.style.display = 'block';
-                }
-
-            } catch (error) {
-                console.error('Error during polling:', error);
-                clearInterval(pollingInterval);
-            }
-        }, 2000); // Poll every 2 seconds
+        } catch (error) {
+            console.error('Failed to connect WebSocket:', error);
+            alert('Could not establish a real-time connection. Please refresh and try again.');
+        }
     }
 
     // Handle form submission - Step 1
@@ -64,7 +104,8 @@ document.addEventListener('auth-success', function() {
             try {
                 const formattedPhone = phoneNumber.replace(/\D/g, '');
                 
-                const response = await fetch('/api/v1/session/pair-phone', {
+                // Use the new, correct API v2 endpoint
+                const response = await fetch('/api/v2/pairing/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
@@ -73,11 +114,6 @@ document.addEventListener('auth-success', function() {
 
                 if (response.status === 401) {
                     window.location.href = '/admin/login.html';
-                    return;
-                }
-
-                if (response.status === 409) {
-                    alert('This phone number is already paired or in the process of pairing. Please use a different number or delete the existing session first.');
                     return;
                 }
 
@@ -90,7 +126,9 @@ document.addEventListener('auth-success', function() {
                 
                 step1.style.display = 'none';
                 step2.style.display = 'block';
-                startPolling(data.sessionId);
+                
+                // Start listening for real-time updates instead of polling
+                connectWebSocket(data.sessionId);
 
             } catch (error) {
                 console.error('Error initiating pairing:', error);
@@ -105,7 +143,9 @@ document.addEventListener('auth-success', function() {
     // Back to step 1
     if (backToStep1) {
         backToStep1.addEventListener('click', function() {
-            if (pollingInterval) clearInterval(pollingInterval);
+            if (ws) {
+                ws.close();
+            }
             step2.style.display = 'none';
             step1.style.display = 'block';
             pairingCodeDisplay.innerHTML = `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><span class="ms-2">Waiting for code...</span>`;

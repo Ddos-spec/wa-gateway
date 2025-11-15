@@ -21,14 +21,10 @@ document.addEventListener('auth-success', function() {
     const displayLoading = document.getElementById('display-loading');
     const displayError = document.getElementById('display-error');
 
-    const btnScanQr = document.getElementById('btn-scan-qr');
-    const btnPairingCode = document.getElementById('btn-pairing-code');
     const btnDelete = document.getElementById('btn-delete');
-
     const apikeyInput = document.getElementById('apikey-input');
     const generateApikeyBtn = document.getElementById('generate-apikey');
 
-    // New elements for loading state and confirmation
     const configLoader = document.getElementById('config-loader');
     const settingsForm = document.getElementById('settings-form');
     const saveConfigBtn = document.getElementById('save-config-btn');
@@ -41,18 +37,11 @@ document.addEventListener('auth-success', function() {
     const webhookList = document.getElementById('webhook-list');
     const logsContainer = document.getElementById('logs');
     
-    const pairingForm = document.getElementById('pairing-form');
-    const phoneNumberInput = document.getElementById('phone-number');
-    const pairingCodeDisplay = document.getElementById('pairing-code-display');
-
-    let sessionToken = null;
-
     // --- Main Functions ---
 
     function updatePage(session) {
         if (!session) return;
 
-        sessionToken = session.token;
         sessionIdDisplay.textContent = session.sessionId;
         userDisplay.innerHTML = `User: <strong>${session.owner || 'N/A'}</strong>`;
 
@@ -61,7 +50,7 @@ document.addEventListener('auth-success', function() {
         if (session.status === 'CONNECTED') {
             statusBadge.classList.add('bg-success');
             showQrState('connected');
-        } else if (session.status === 'DISCONNECTED' || session.status === 'UNPAIRED') {
+        } else if (session.status === 'DISCONNECTED' || session.status === 'ERROR' || session.status === 'UNPAIRED') {
             statusBadge.classList.add('bg-danger');
             showQrState('error');
         } else {
@@ -69,7 +58,7 @@ document.addEventListener('auth-success', function() {
             showQrState('loading');
         }
 
-        if (session.status === 'GENERATING_QR' && session.qr) {
+        if (session.qr) {
             showQrState('qr');
             qrPreview.innerHTML = '';
             new QRCode(qrPreview, { text: session.qr, width: 250, height: 250 });
@@ -82,10 +71,8 @@ document.addEventListener('auth-success', function() {
         if (session.settings) {
             for (const key in session.settings) {
                 const input = settingsForm.elements[key];
-                if (input) {
-                    if (input.type === 'select-one') {
-                        input.value = session.settings[key] ? '1' : '0';
-                    }
+                if (input && input.type === 'select-one') {
+                    input.value = session.settings[key] ? '1' : '0';
                 }
             }
             webhookList.innerHTML = '';
@@ -94,7 +81,6 @@ document.addEventListener('auth-success', function() {
             }
         }
 
-        // Show form and hide loader
         configLoader.style.display = 'none';
         settingsForm.style.display = 'block';
     }
@@ -109,40 +95,54 @@ document.addEventListener('auth-success', function() {
 
     async function fetchSessionData() {
         try {
-            const response = await fetch('/api/v1/sessions');
-            if (!response.ok) throw new Error('Failed to fetch sessions');
-            const sessions = await response.json();
-            const currentSession = sessions.find(s => s.sessionId === sessionId);
-            if (currentSession) {
-                updatePage(currentSession);
+            // UPDATED: Fetch specific session status directly
+            const response = await fetch(`/api/v2/sessions/${sessionId}/status`);
+            if (!response.ok) {
+                 const error = await response.json();
+                 throw new Error(error.message || 'Session not found');
+            }
+            const { data } = await response.json();
+            if (data) {
+                updatePage(data);
             } else {
-                alert('Session not found!');
-                window.location.href = '/admin/dashboard.html';
+                throw new Error('Session data is missing in the response.');
             }
         } catch (error) {
             console.error('Error fetching session data:', error);
-            configLoader.innerHTML = `<div class="alert alert-danger">Could not load session data.</div>`;
+            qrContainer.innerHTML = `<div class="alert alert-danger">Could not load session data: ${error.message}</div>`;
+            configLoader.style.display = 'none';
         }
     }
 
     function initializeWebSocket() {
-        fetch('/api/v1/ws-auth')
+        fetch('/api/v1/ws-auth') // This endpoint is fine
             .then(res => res.json())
             .then(data => {
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const ws = new WebSocket(`${protocol}//${window.location.host}?token=${data.wsToken}`);
-                ws.onopen = () => addLog('SYSTEM', 'Log stream connected.');
+                
+                ws.onopen = () => {
+                    addLog('SYSTEM', 'Real-time connection established.');
+                    // UPDATED: Subscribe to dashboard events to get all state changes
+                    ws.send(JSON.stringify({ type: 'subscribe_dashboard' }));
+                };
+
                 ws.onmessage = (event) => {
-                    const logData = JSON.parse(event.data);
-                    if (logData.type === 'session-update') {
-                        const updatedSession = logData.data.find(s => s.sessionId === sessionId);
-                        if (updatedSession) updatePage(updatedSession);
-                    } else if (logData.type === 'log' && (logData.sessionId === sessionId || !logData.sessionId)) {
-                         addLog(logData.sessionId || 'SYSTEM', logData.message);
+                    try {
+                        const data = JSON.parse(event.data);
+                        // UPDATED: Listen for the specific event for this session
+                        if (data.event === 'session-state-changed' && data.sessionId === sessionId) {
+                            addLog('SYSTEM', `Status changed to ${data.status}: ${data.detail || ''}`);
+                            // The getSession call is cheap and ensures we have the latest of everything
+                            fetchSessionData(); 
+                        }
+                    } catch (error) {
+                        console.error("Error processing WebSocket message:", error);
                     }
                 };
+
                 ws.onclose = () => {
-                    addLog('SYSTEM', 'Log stream disconnected. Reconnecting in 5 seconds...');
+                    addLog('SYSTEM', 'Connection lost. Reconnecting in 5 seconds...');
                     setTimeout(initializeWebSocket, 5000);
                 };
                 ws.onerror = (error) => {
@@ -153,51 +153,25 @@ document.addEventListener('auth-success', function() {
             .catch(error => console.error('Failed to get WebSocket auth token:', error));
     }
 
-    // --- Confirmation Modal Logic ---
     function setupConfirmationModal(title, body, onConfirm) {
         confirmationModalTitle.textContent = title;
         confirmationModalBody.textContent = body;
-
-        // Clone and replace the button to remove old event listeners
         const newConfirmBtn = confirmationModalConfirmBtn.cloneNode(true);
         confirmationModalConfirmBtn.parentNode.replaceChild(newConfirmBtn, confirmationModalConfirmBtn);
-        
         newConfirmBtn.addEventListener('click', () => {
             onConfirm();
             confirmationModal.hide();
-        }, { once: true }); // Ensure the event listener only runs once
-
+        }, { once: true });
         confirmationModal.show();
     }
 
     // --- Event Listeners ---
 
-    btnScanQr.addEventListener('click', async () => {
-        showQrState('loading');
-        try {
-            const response = await fetch(`/api/v1/sessions/${sessionId}/qr`, { credentials: 'same-origin' });
-            if (!response.ok) {
-                const result = await response.json();
-                throw new Error(result.message || 'Failed to get QR code');
-            }
-        } catch (error) {
-            console.error('Error getting QR code:', error);
-            alert('Error getting QR code: ' + error.message);
-            showQrState('error');
-        }
-    });
-
     btnDelete.addEventListener('click', () => {
         setupConfirmationModal('Delete Session', `Are you sure you want to delete session ${sessionId}? This action cannot be undone.`, async () => {
-            if (!sessionToken) {
-                alert('Session token not available. Cannot delete.');
-                return;
-            }
             try {
-                const response = await fetch(`/api/v1/sessions/${sessionId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${sessionToken}` }
-                });
+                // UPDATED: Use v2 endpoint
+                const response = await fetch(`/api/v2/sessions/${sessionId}`, { method: 'DELETE' });
                 const result = await response.json();
                 if (response.ok) {
                     alert(result.message);
@@ -213,33 +187,21 @@ document.addEventListener('auth-success', function() {
     
     saveConfigBtn.addEventListener('click', () => {
         setupConfirmationModal('Save Configuration', 'Are you sure you want to save these settings?', async () => {
-            if (!sessionToken) {
-                alert('Session token not available. Cannot save settings.');
-                return;
-            }
-            
             const formData = new FormData(settingsForm);
-            const settings = { webhooks: [] }; // Initialize webhooks as an array
+            const settings = { webhooks: [] };
             for (const [key, value] of formData.entries()) {
                 if (key === 'webhook[]') {
-                    if (value) settings.webhooks.push(value); // Only add non-empty URLs
+                    if (value) settings.webhooks.push(value);
                 } else {
-                     settings[key] = value;
+                     settings[key] = value === '1'; // Convert '1'/'0' to boolean
                 }
             }
             
-            Object.keys(settings).forEach(key => {
-                if (settings[key] === '1') settings[key] = true;
-                if (settings[key] === '0') settings[key] = false;
-            });
-
             try {
-                const response = await fetch(`/api/v1/sessions/${sessionId}/settings`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${sessionToken}`
-                    },
+                // UPDATED: Use v2 endpoint
+                const response = await fetch(`/api/v2/sessions/${sessionId}/settings`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(settings)
                 });
                 const result = await response.json();
@@ -256,26 +218,14 @@ document.addEventListener('auth-success', function() {
     });
     
     generateApikeyBtn.addEventListener('click', () => {
-        setupConfirmationModal('Generate New API Key', 'Are you sure you want to generate a new API Key for this session? The old key will become invalid.', async () => {
+        setupConfirmationModal('Generate New API Key', 'This will invalidate the old key. Are you sure?', async () => {
             try {
-                const response = await fetch(`/api/v1/sessions/${sessionId}/generate-token`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${sessionToken}` }
-                });
-
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    const textError = await response.text();
-                    throw new Error(`Server responded with non-JSON content (Status: ${response.status}): ${textError.substring(0, 100)}...`);
-                }
-
+                // UPDATED: Use v2 endpoint
+                const response = await fetch(`/api/v2/sessions/${sessionId}/regenerate-token`, { method: 'POST' });
                 const result = await response.json();
                 if (response.ok) {
-                    apikeyInput.value = result.token; // Update the input field with the new token
-                    sessionToken = result.token; // Update the in-memory sessionToken
+                    apikeyInput.value = result.token;
                     alert('New API Key generated successfully!');
-                    // Optionally, refresh session data to ensure consistency
-                    fetchSessionData();
                 } else {
                     throw new Error(result.message || 'Failed to generate new API Key');
                 }
@@ -283,24 +233,6 @@ document.addEventListener('auth-success', function() {
                 alert(`Error generating API Key: ${error.message}`);
             }
         });
-    });
-
-    pairingForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const phone = phoneNumberInput.value;
-        if (!phone) return;
-        pairingCodeDisplay.textContent = 'Requesting code...';
-        try {
-            const response = await fetch(`/api/v1/sessions/${sessionId}/pairing-code?phone=${phone}`, { credentials: 'same-origin' });
-            const result = await response.json();
-            if (response.ok) {
-                pairingCodeDisplay.textContent = `Your Code: ${result.code}`;
-            } else {
-                throw new Error(result.message || 'Failed to get pairing code');
-            }
-        } catch (error) {
-            pairingCodeDisplay.textContent = `Error: ${error.message}`;
-        }
     });
 
     // --- Initial Load ---
