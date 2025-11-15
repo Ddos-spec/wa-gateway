@@ -128,106 +128,23 @@ app.use(rateLimit({
     legacyHeaders: false,
 }));
 
-app.use(session({
-    store: new RedisStore({ client: redis.client, prefix: process.env.REDIS_SESSION_PREFIX || 'wa-gateway:session:' }),
-    secret: process.env.SESSION_SECRET || 'a_very_secret_key',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: (parseInt(process.env.SESSION_TIMEOUT_DAYS) || 1) * 24 * 60 * 60 * 1000,
-    }
-}));
+        // 2. Initialize Middleware that depends on DB/Redis
+        app.use(session({
+            store: new RedisStore({ client: redis.client, prefix: process.env.REDIS_SESSION_PREFIX || 'wa-gateway:session:' }),
+            secret: process.env.SESSION_SECRET || 'a_very_secret_key',
+            resave: false,
+            saveUninitialized: false,
+            cookie: {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                maxAge: (parseInt(process.env.SESSION_TIMEOUT_DAYS) || 1) * 24 * 60 * 60 * 1000,
+            }
+        }));
 
-app.use('/admin', express.static(path.join(__dirname, 'admin')));
-app.use('/media', express.static(path.join(__dirname, 'media')));
+        app.use('/admin', express.static(path.join(__dirname, 'admin')));
+        app.use('/media', express.static(path.join(__dirname, 'media')));
 
-// ============================================
-// PART 5: TOKEN PERSISTENCE
-// ============================================
-const ENCRYPTED_TOKENS_FILE = path.join(__dirname, 'session_tokens.enc');
-
-function saveTokens() {
-    if (!sessionManager) return;
-    try {
-        const tokensMap = sessionManager.getTokens();
-        if (tokensMap.size === 0) return;
-        const encrypted = encrypt(JSON.stringify(Object.fromEntries(tokensMap)), ENCRYPTION_KEY);
-        fs.writeFileSync(ENCRYPTED_TOKENS_FILE, encrypted, 'utf-8');
-        if (process.platform !== 'win32') fs.chmodSync(ENCRYPTED_TOKENS_FILE, 0o600);
-        logger.debug('Session tokens saved to disk', 'SYSTEM');
-    } catch (error) {
-        logger.error('Error saving tokens', 'SYSTEM', { error: error.message });
-    }
-}
-
-function loadTokens(sm) {
-    try {
-        if (fs.existsSync(ENCRYPTED_TOKENS_FILE)) {
-            const encrypted = fs.readFileSync(ENCRYPTED_TOKENS_FILE, 'utf-8');
-            const decrypted = decrypt(encrypted, ENCRYPTION_KEY);
-            const tokensMap = new Map(Object.entries(JSON.parse(decrypted)));
-            sm.loadTokens(tokensMap);
-            logger.info(`Loaded ${tokensMap.size} session token(s) from disk`, 'SYSTEM');
-        }
-    } catch (error) {
-        logger.error('Error loading tokens', 'SYSTEM', { error: error.message });
-    }
-}
-
-// ============================================
-// PART 6: ADMIN & AUTH ROUTES
-// ============================================
-app.post('/admin/login', async (req, res) => {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ success: false, message: 'Email and password are required' });
-
-    try {
-        const authResult = await authService.authenticate(email, password);
-        if (authResult.success) {
-            req.session.authed = true;
-            req.session.user = { id: authResult.user.id, email: authResult.user.email, role: authResult.userType };
-            logger.info(`User logged in: ${authResult.user.email}`, 'AUTH');
-            return res.json({ success: true, role: authResult.userType, email: authResult.user.email });
-        }
-        res.status(401).json({ success: false, message: 'Invalid credentials' });
-    } catch (error) {
-        logger.error('Login error', 'AUTH', { error: error.message });
-        res.status(500).json({ success: false, message: 'An internal server error occurred.' });
-    }
-});
-
-app.post('/admin/logout', (req, res) => {
-    req.session.destroy((err) => {
-        if (err) {
-            logger.error('Logout error', 'AUTH', { error: err.message });
-            return res.status(500).json({ success: false });
-        }
-        res.clearCookie('connect.sid');
-        res.json({ success: true, redirect: '/admin/login.html' });
-    });
-});
-
-app.get('/api/v1/ws-auth', (req, res) => {
-    if (!req.session.authed) return res.status(401).json({ error: 'Unauthorized' });
-    const wsToken = sessionManager.generateWsToken(req.session.user);
-    res.json({ wsToken });
-});
-
-// ============================================
-// PART 7: SERVER STARTUP
-// ============================================
-app.get('/', (req, res) => res.redirect('/admin/dashboard.html'));
-app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
-
-async function startServer() {
-    try {
-        // 1. Initialize DB and Redis connections
-        await initializeDatabase();
-        logger.info('Database and Redis connections established.', 'SYSTEM');
-
-        // 2. Initialize services that depend on DB/Redis
+        // 3. Initialize services 
         const phonePairing = new PhonePairing(logger, redis);
         const sessionStorage = new SessionStorage(logger, { authDir: path.join(__dirname, 'auth_info_baileys') });
         webhookQueue = new WebhookQueue(logger, {
