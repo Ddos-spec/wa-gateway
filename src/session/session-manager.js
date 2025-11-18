@@ -94,18 +94,6 @@ class SessionManager {
 
             this.sessions.set(sessionId, session);
 
-            // Lacak kepemilikan di database
-            if (creatorEmail) {
-                const user = await this.db.User.findByEmail(creatorEmail);
-                if (user) {
-                    await this.db.WaNumber.create({
-                        userId: user.id,
-                        sessionName: sessionId,
-                        phoneNumber: phoneNumber || sessionId, // Gunakan sessionId jika nomor tidak disediakan
-                    });
-                }
-            }
-
             // Broadcast state change
             this._broadcastStateChange(sessionId, 'CREATING', 'Initializing session...');
 
@@ -229,13 +217,6 @@ class SessionManager {
             if (session.socketManager) {
                 await session.socketManager.close();
             }
-
-            // Menghapus file sesi akan memaksa pemasangan ulang.
-            // Kita tidak menghapus entri WaNumber dari DB agar tidak kehilangan data.
-            // const waNumber = await this.db.WaNumber.findBySessionName(sessionId);
-            // if (waNumber) {
-            //     await this.db.WaNumber.delete(waNumber.id);
-            // }
 
             // Delete from storage
             this.sessionStorage.deleteSession(sessionId);
@@ -426,14 +407,8 @@ class SessionManager {
         let initialized = 0;
         for (const sessionId of sessionIds) {
             try {
-                const waNumber = await this.db.WaNumber.findBySessionName(sessionId);
-                let ownerEmail = null;
-                if (waNumber) {
-                    const owner = await this.db.User.findById(waNumber.user_id);
-                    if (owner) {
-                        ownerEmail = owner.email;
-                    }
-                }
+                // Admin-only mode: no need to track ownership in database
+                const ownerEmail = 'admin';
 
                 if (!this.sessionTokens.has(sessionId)) {
                     this.sessionTokens.set(sessionId, randomUUID());

@@ -193,4 +193,173 @@ document.addEventListener('auth-success', function() {
     // Initial load
     fetchSessions();
     initializeWebSocket();
+
+    // --- Phone Pairing Modal Logic ---
+    const modalPairingForm = document.getElementById('modalPairingForm');
+    const modalPhoneNumberInput = document.getElementById('modalPhoneNumber');
+    const modalStep1 = document.getElementById('modal-step1');
+    const modalStep2 = document.getElementById('modal-step2');
+    const modalStep3 = document.getElementById('modal-step3');
+    const modalPairingCodeDisplay = document.getElementById('modalPairingCodeDisplay');
+    const modalBackToStep1 = document.getElementById('modalBackToStep1');
+    const modalPairedPhoneNumber = document.getElementById('modalPairedPhoneNumber');
+    const modalPairedSessionId = document.getElementById('modalPairedSessionId');
+    const pairingModal = document.getElementById('pairingModal');
+
+    let modalWs = null;
+
+    // Reset modal when closed
+    pairingModal.addEventListener('hidden.bs.modal', function () {
+        if (modalWs) {
+            modalWs.close();
+            modalWs = null;
+        }
+        modalStep1.style.display = 'block';
+        modalStep2.style.display = 'none';
+        modalStep3.style.display = 'none';
+        modalPhoneNumberInput.value = '';
+        modalPairingCodeDisplay.innerHTML = '<div class="spinner-border text-primary" role="status"></div><span class="ms-2">Waiting for code...</span>';
+    });
+
+    // Function to connect to WebSocket for pairing updates
+    async function connectModalWebSocket(sessionId) {
+        if (modalWs) {
+            modalWs.close();
+        }
+
+        try {
+            // 1. Get a one-time WebSocket authentication token
+            const authResponse = await fetch('/api/v1/ws-auth');
+            if (!authResponse.ok) throw new Error('Failed to get WebSocket token');
+            const { wsToken } = await authResponse.json();
+
+            // 2. Establish WebSocket connection
+            const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}?token=${wsToken}`;
+            modalWs = new WebSocket(wsUrl);
+
+            modalWs.onopen = () => {
+                console.log('Modal WebSocket connection established.');
+                // 3. Subscribe to pairing updates for the specific session
+                modalWs.send(JSON.stringify({
+                    type: 'subscribe_pairing',
+                    sessionId: sessionId
+                }));
+            };
+
+            modalWs.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('Received modal pairing update:', data);
+
+                    // Update pairing code display
+                    if (data.pairingCode) {
+                        modalPairingCodeDisplay.innerHTML = `<strong>${data.pairingCode}</strong>`;
+                    }
+
+                    // Handle connection success
+                    if (data.status === 'CONNECTED') {
+                        if (modalWs) modalWs.close();
+                        modalPairedPhoneNumber.textContent = data.phoneNumber || 'N/A';
+                        modalPairedSessionId.textContent = sessionId;
+                        modalStep2.style.display = 'none';
+                        modalStep3.style.display = 'block';
+
+                        // Refresh sessions list
+                        fetchSessions();
+                    }
+
+                    // Handle error or timeout
+                    if (data.status === 'ERROR' || data.status === 'TIMEOUT') {
+                        if (modalWs) modalWs.close();
+                        alert(`Pairing failed: ${data.detail || 'An unknown error occurred.'}`);
+                        modalStep2.style.display = 'none';
+                        modalStep1.style.display = 'block';
+                    }
+
+                } catch (error) {
+                    console.error('Error processing modal WebSocket message:', error);
+                }
+            };
+
+            modalWs.onerror = (error) => {
+                console.error('Modal WebSocket error:', error);
+                alert('A connection error occurred. Please try again.');
+            };
+
+            modalWs.onclose = () => {
+                console.log('Modal WebSocket connection closed.');
+                modalWs = null;
+            };
+
+        } catch (error) {
+            console.error('Failed to connect modal WebSocket:', error);
+            alert('Could not establish a real-time connection. Please refresh and try again.');
+        }
+    }
+
+    // Handle modal form submission - Step 1
+    if (modalPairingForm) {
+        modalPairingForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const phoneNumber = modalPhoneNumberInput.value.trim();
+            if (!phoneNumber) {
+                alert('Please enter a phone number');
+                return;
+            }
+
+            const submitButton = this.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Initiating...';
+
+            try {
+                const formattedPhone = phoneNumber.replace(/\D/g, '');
+
+                // Use the API v2 endpoint
+                const response = await fetch('/api/v2/pairing/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ phoneNumber: formattedPhone })
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/admin/login.html';
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                modalStep1.style.display = 'none';
+                modalStep2.style.display = 'block';
+
+                // Start listening for real-time updates
+                connectModalWebSocket(data.sessionId);
+
+            } catch (error) {
+                console.error('Error initiating pairing:', error);
+                alert('Error initiating pairing: ' + error.message);
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = 'Generate Pairing Code';
+            }
+        });
+    }
+
+    // Back to step 1 from modal
+    if (modalBackToStep1) {
+        modalBackToStep1.addEventListener('click', function() {
+            if (modalWs) {
+                modalWs.close();
+            }
+            modalStep2.style.display = 'none';
+            modalStep1.style.display = 'block';
+            modalPairingCodeDisplay.innerHTML = '<div class="spinner-border text-primary" role="status"></div><span class="ms-2">Waiting for code...</span>';
+        });
+    }
 });
