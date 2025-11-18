@@ -12,8 +12,8 @@ require('dotenv').config();
 const session = require('express-session');
 const RedisStore = require('connect-redis')(session);
 
-// Database and new modules
-const { redis, initializeDatabase, User, Admin, WaNumber } = require('./db');
+// Database and new modules (Admin only mode - no User/WaNumber)
+const { redis, initializeDatabase, Admin } = require('./db');
 const authService = require('./src/auth/auth-service');
 
 // Refactored Modules
@@ -242,7 +242,8 @@ async function startServer() {
         });
 
         // 3. Initialize SessionManager which depends on other services
-        sessionManager = new SessionManager(sessionStorage, webhookHandler, logger, { User, Admin, WaNumber }, phonePairing, {
+        // Admin-only mode: dbModels parameter is kept for compatibility but not used
+        sessionManager = new SessionManager(sessionStorage, webhookHandler, logger, { Admin }, phonePairing, {
             maxSessions: MAX_SESSIONS,
             onBroadcast: (data) => broadcast(data),
         });
