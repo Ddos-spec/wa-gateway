@@ -218,13 +218,6 @@ class SessionManager {
                 await session.socketManager.close();
             }
 
-            // Menghapus file sesi akan memaksa pemasangan ulang.
-            // Kita tidak menghapus entri WaNumber dari DB agar tidak kehilangan data.
-            // const waNumber = await this.db.WaNumber.findBySessionName(sessionId);
-            // if (waNumber) {
-            //     await this.db.WaNumber.delete(waNumber.id);
-            // }
-
             // Delete from storage
             this.sessionStorage.deleteSession(sessionId);
 

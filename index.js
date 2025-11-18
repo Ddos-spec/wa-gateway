@@ -12,8 +12,8 @@ require('dotenv').config();
 const session = require('express-session');
 const RedisStore = require('connect-redis')(session);
 
-// Database and new modules
-const { redis, initializeDatabase, User, Admin, WaNumber } = require('./db');
+// Redis only - no PostgreSQL database
+const redis = require('./db/redis');
 const authService = require('./src/auth/auth-service');
 
 // Refactored Modules
@@ -148,8 +148,10 @@ function saveTokens() {
 // ============================================
 async function startServer() {
     try {
-        // 1. Initialize database
-        await initializeDatabase();
+        // 1. Initialize Redis only (no PostgreSQL)
+        logger.info('Connecting to Redis...', 'SYSTEM');
+        await redis.connect();
+        logger.info('Redis connected successfully', 'SYSTEM');
 
         // 2. Initialize session middleware AFTER Redis is connected
         const isProduction = process.env.NODE_ENV === 'production';
@@ -242,7 +244,8 @@ async function startServer() {
         });
 
         // 3. Initialize SessionManager which depends on other services
-        sessionManager = new SessionManager(sessionStorage, webhookHandler, logger, { User, Admin, WaNumber }, phonePairing, {
+        // Redis-only mode: no database models needed (admin password from env)
+        sessionManager = new SessionManager(sessionStorage, webhookHandler, logger, {}, phonePairing, {
             maxSessions: MAX_SESSIONS,
             onBroadcast: (data) => broadcast(data),
         });

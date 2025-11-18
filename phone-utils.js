@@ -4,33 +4,33 @@
 
 /**
  * Format phone number to international format (with 62 prefix for WhatsApp API)
+ * Anti-fail: Handles all common Indonesian phone number formats
  * @param {string} phoneNumber - The phone number to format
  * @returns {string} - Formatted phone number with 62 prefix (for WhatsApp API)
  */
 function formatPhoneNumber(phoneNumber) {
-    if (!phoneNumber) return phoneNumber;
-    
-    // Convert to string and remove non-numeric characters
+    if (!phoneNumber) return '';
+
+    // Convert to string and remove all non-numeric characters (including +, -, spaces, etc)
     let cleaned = phoneNumber.toString().replace(/\D/g, '');
-    
+
+    // Remove any leading zeros
+    cleaned = cleaned.replace(/^0+/, '');
+
     // Handle different starting formats
-    if (cleaned.startsWith('0')) {
-        // If starts with 0, replace with 62
-        cleaned = '62' + cleaned.substring(1);
-    } else if (cleaned.startsWith('62')) {
-        // If already starts with 62, keep as is
-        cleaned = cleaned;
-    } else if (cleaned.startsWith('62')) {
-        // This is a duplicate condition, keeping original logic
-        cleaned = cleaned;
-    } else if (cleaned.length === 10 || cleaned.length === 11 || cleaned.length === 12) {
-        // If it looks like an Indonesian number without country code, prepend 62
-        // Indonesian numbers typically start with 8 when without country code
-        if (cleaned.startsWith('8')) {
-            cleaned = '62' + cleaned;
-        }
+    if (cleaned.startsWith('62')) {
+        // Already in 62 format (from +62 or 62)
+        return cleaned;
+    } else if (cleaned.startsWith('8')) {
+        // Indonesian number without country code (08xxxxxxxxx -> 628xxxxxxxxx)
+        return '62' + cleaned;
+    } else if (cleaned.length >= 9 && cleaned.length <= 13) {
+        // Generic fallback for Indonesian numbers
+        // Assume it's missing the country code
+        return '62' + cleaned;
     }
-    
+
+    // If none of the above, return as-is (might be international number)
     return cleaned;
 }
 
@@ -49,15 +49,18 @@ function formatPhoneNumberWithPlus(phoneNumber) {
 
 /**
  * Validate phone number format
+ * Anti-fail: More permissive validation for various formats
  * @param {string} phoneNumber - The phone number to validate
  * @returns {boolean} - True if valid, false otherwise
  */
 function isValidPhoneNumber(phoneNumber) {
     if (!phoneNumber) return false;
-    
+
     const formatted = formatPhoneNumber(phoneNumber);
-    // Check if it matches the Indonesian format (628xxxxxxxxx)
-    return /^628\d{8,11}$/.test(formatted);
+
+    // Check if it's a valid Indonesian format (628xxxxxxxxx - 9 to 13 digits after 62)
+    // OR any international format with country code (at least 10 digits total)
+    return /^628\d{8,13}$/.test(formatted) || /^\d{10,15}$/.test(formatted);
 }
 
 /**
