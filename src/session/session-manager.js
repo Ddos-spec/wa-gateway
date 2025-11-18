@@ -94,18 +94,6 @@ class SessionManager {
 
             this.sessions.set(sessionId, session);
 
-            // Lacak kepemilikan di database
-            if (creatorEmail) {
-                const user = await this.db.User.findByEmail(creatorEmail);
-                if (user) {
-                    await this.db.WaNumber.create({
-                        userId: user.id,
-                        sessionName: sessionId,
-                        phoneNumber: phoneNumber || sessionId, // Gunakan sessionId jika nomor tidak disediakan
-                    });
-                }
-            }
-
             // Broadcast state change
             this._broadcastStateChange(sessionId, 'CREATING', 'Initializing session...');
 
@@ -426,14 +414,8 @@ class SessionManager {
         let initialized = 0;
         for (const sessionId of sessionIds) {
             try {
-                const waNumber = await this.db.WaNumber.findBySessionName(sessionId);
-                let ownerEmail = null;
-                if (waNumber) {
-                    const owner = await this.db.User.findById(waNumber.user_id);
-                    if (owner) {
-                        ownerEmail = owner.email;
-                    }
-                }
+                // Admin-only mode: all sessions owned by admin
+                const ownerEmail = 'admin';
 
                 if (!this.sessionTokens.has(sessionId)) {
                     this.sessionTokens.set(sessionId, randomUUID());
