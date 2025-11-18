@@ -5,13 +5,16 @@ const Auth = {
 
     async init() {
         try {
-            const response = await fetch('/api/v1/me');
+            const response = await fetch('/api/v2/me', {
+                credentials: 'same-origin'
+            });
             if (!response.ok) {
                 throw new Error('Not authenticated');
             }
             this.currentUser = await response.json();
             this.onLoginSuccess();
         } catch (error) {
+            console.error('Auth check failed:', error);
             this.redirectToLogin();
         }
     },
@@ -89,3 +92,10 @@ const Auth = {
         });
     }
 };
+
+// Initialize auth check when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => Auth.init());
+} else {
+    Auth.init();
+}

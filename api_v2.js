@@ -48,7 +48,16 @@ function initializeApiV2(services) {
                         email: 'admin@legacy',
                         role: 'admin'
                     };
-                    logger.info('Legacy admin login successful', 'AUTH');
+
+                    // Save session explicitly
+                    await new Promise((resolve, reject) => {
+                        req.session.save((err) => {
+                            if (err) reject(err);
+                            else resolve();
+                        });
+                    });
+
+                    logger.info('Legacy admin login successful', 'AUTH', { sessionId: req.sessionID });
                     return res.status(200).json({
                         status: 'success',
                         message: 'Login successful',
@@ -76,7 +85,15 @@ function initializeApiV2(services) {
                 role: authResult.userType
             };
 
-            logger.info('User login successful', 'AUTH', { email, role: authResult.userType });
+            // Save session explicitly
+            await new Promise((resolve, reject) => {
+                req.session.save((err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+
+            logger.info('User login successful', 'AUTH', { email, role: authResult.userType, sessionId: req.sessionID });
             return res.status(200).json({
                 status: 'success',
                 message: 'Login successful',
@@ -98,6 +115,21 @@ function initializeApiV2(services) {
             }
             res.status(200).json({ status: 'success', message: 'Logged out successfully' });
         });
+    });
+
+    // Check current session
+    router.get('/me', requireAuth, (req, res) => {
+        try {
+            const user = req.session.user;
+            res.status(200).json({
+                email: user.email,
+                role: user.role,
+                id: user.id
+            });
+        } catch (error) {
+            logger.error('Failed to get current user', 'AUTH', { error: error.message });
+            res.status(500).json({ status: 'error', message: 'Failed to get user info' });
+        }
     });
 
     // ============================================
