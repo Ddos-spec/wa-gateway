@@ -6,17 +6,6 @@ CREATE TABLE "public"."admins" (
   CONSTRAINT "admins_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "admins_email_key" UNIQUE ("email")
 );
-CREATE TABLE "public"."chat_logs" ( 
-  "id" SERIAL,
-  "wa_number_id" INTEGER NOT NULL,
-  "sender_phone" VARCHAR(20) NOT NULL,
-  "recipient_phone" VARCHAR(20) NOT NULL,
-  "message_content" TEXT NULL,
-  "message_type" VARCHAR(50) NULL DEFAULT 'text'::character varying ,
-  "direction" VARCHAR(20) NOT NULL,
-  "created_at" TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ,
-  CONSTRAINT "chat_logs_pkey" PRIMARY KEY ("id")
-);
 CREATE TABLE "public"."users" ( 
   "id" SERIAL,
   "admin_id" INTEGER NOT NULL,
@@ -46,6 +35,45 @@ CREATE TABLE "public"."wa_numbers" (
   CONSTRAINT "wa_numbers_phone_number_key" UNIQUE ("phone_number"),
   CONSTRAINT "wa_numbers_session_name_key" UNIQUE ("session_name")
 );
+CREATE TABLE "public"."chat_logs" ( 
+  "id" SERIAL,
+  "wa_number_id" INTEGER NOT NULL,
+  "sender_phone" VARCHAR(20) NOT NULL,
+  "recipient_phone" VARCHAR(20) NOT NULL,
+  "message_content" TEXT NULL,
+  "message_type" VARCHAR(50) NULL DEFAULT 'text'::character varying ,
+  "direction" VARCHAR(20) NOT NULL,
+  "created_at" TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ,
+  CONSTRAINT "chat_logs_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX "idx_users_email" 
+ON "public"."users" (
+  "email" ASC
+);
+CREATE INDEX "idx_users_admin_id" 
+ON "public"."users" (
+  "admin_id" ASC
+);
+CREATE INDEX "idx_wa_folders_admin_id" 
+ON "public"."wa_folders" (
+  "admin_id" ASC
+);
+CREATE INDEX "idx_wa_numbers_session_name" 
+ON "public"."wa_numbers" (
+  "session_name" ASC
+);
+CREATE INDEX "idx_wa_numbers_phone_number" 
+ON "public"."wa_numbers" (
+  "phone_number" ASC
+);
+CREATE INDEX "idx_wa_numbers_folder_id" 
+ON "public"."wa_numbers" (
+  "folder_id" ASC
+);
+CREATE INDEX "idx_wa_numbers_user_id" 
+ON "public"."wa_numbers" (
+  "user_id" ASC
+);
 CREATE INDEX "idx_chat_logs_sender_recipient" 
 ON "public"."chat_logs" (
   "sender_phone" ASC,
@@ -63,39 +91,29 @@ CREATE INDEX "idx_chat_logs_direction"
 ON "public"."chat_logs" (
   "direction" ASC
 );
-CREATE INDEX "idx_users_admin_id" 
-ON "public"."users" (
-  "admin_id" ASC
-);
-CREATE INDEX "idx_users_email" 
-ON "public"."users" (
-  "email" ASC
-);
-CREATE INDEX "idx_wa_folders_admin_id" 
-ON "public"."wa_folders" (
-  "admin_id" ASC
-);
-CREATE INDEX "idx_wa_numbers_session_name" 
-ON "public"."wa_numbers" (
-  "session_name" ASC
-);
-CREATE INDEX "idx_wa_numbers_phone_number" 
-ON "public"."wa_numbers" (
-  "phone_number" ASC
-);
-CREATE INDEX "idx_wa_numbers_user_id" 
-ON "public"."wa_numbers" (
-  "user_id" ASC
-);
-CREATE INDEX "idx_wa_numbers_folder_id" 
-ON "public"."wa_numbers" (
-  "folder_id" ASC
-);
-ALTER TABLE "public"."chat_logs" ADD CONSTRAINT "chat_logs_wa_number_id_fkey" FOREIGN KEY ("wa_number_id") REFERENCES "public"."wa_numbers" ("id") ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE "public"."users" ADD CONSTRAINT "users_admin_id_fkey" FOREIGN KEY ("admin_id") REFERENCES "public"."admins" ("id") ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE "public"."wa_folders" ADD CONSTRAINT "wa_folders_admin_id_fkey" FOREIGN KEY ("admin_id") REFERENCES "public"."admins" ("id") ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE "public"."wa_numbers" ADD CONSTRAINT "wa_numbers_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id") ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE "public"."wa_numbers" ADD CONSTRAINT "wa_numbers_folder_id_fkey" FOREIGN KEY ("folder_id") REFERENCES "public"."wa_folders" ("id") ON DELETE SET NULL ON UPDATE NO ACTION;
+ALTER TABLE "public"."chat_logs" ADD CONSTRAINT "chat_logs_wa_number_id_fkey" FOREIGN KEY ("wa_number_id") REFERENCES "public"."wa_numbers" ("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+CREATE VIEW "public"."view_user_wa_details"
+AS
+ SELECT u.id AS user_id,
+    u.email AS user_email,
+    u.admin_id,
+    w.id AS wa_number_id,
+    w.phone_number,
+    w.session_name,
+    f.id AS folder_id,
+    f.folder_name,
+    w.created_at AS wa_created_at,
+    count(c.id) AS total_messages
+   FROM (((users u
+     LEFT JOIN wa_numbers w ON ((u.id = w.user_id)))
+     LEFT JOIN wa_folders f ON ((w.folder_id = f.id)))
+     LEFT JOIN chat_logs c ON ((w.id = c.wa_number_id)))
+  GROUP BY u.id, u.email, u.admin_id, w.id, w.phone_number, w.session_name, f.id, f.folder_name, w.created_at
+  ORDER BY u.id, f.folder_name, w.created_at DESC;;
 CREATE VIEW "public"."view_chat_summary"
 AS
  SELECT w.id AS wa_number_id,
@@ -121,21 +139,3 @@ AS
      LEFT JOIN chat_logs c ON ((w.id = c.wa_number_id)))
   GROUP BY w.id, w.phone_number, w.session_name, u.email, f.folder_name
   ORDER BY (max(c.created_at)) DESC NULLS LAST;;
-CREATE VIEW "public"."view_user_wa_details"
-AS
- SELECT u.id AS user_id,
-    u.email AS user_email,
-    u.admin_id,
-    w.id AS wa_number_id,
-    w.phone_number,
-    w.session_name,
-    f.id AS folder_id,
-    f.folder_name,
-    w.created_at AS wa_created_at,
-    count(c.id) AS total_messages
-   FROM (((users u
-     LEFT JOIN wa_numbers w ON ((u.id = w.user_id)))
-     LEFT JOIN wa_folders f ON ((w.folder_id = f.id)))
-     LEFT JOIN chat_logs c ON ((w.id = c.wa_number_id)))
-  GROUP BY u.id, u.email, u.admin_id, w.id, w.phone_number, w.session_name, f.id, f.folder_name, w.created_at
-  ORDER BY u.id, f.folder_name, w.created_at DESC;;
