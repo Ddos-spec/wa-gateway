@@ -407,7 +407,7 @@ class SessionManager {
         let initialized = 0;
         for (const sessionId of sessionIds) {
             try {
-                // Admin-only mode: no need to track ownership in database
+                // Admin-only mode: all sessions owned by admin
                 const ownerEmail = 'admin';
 
                 if (!this.sessionTokens.has(sessionId)) {

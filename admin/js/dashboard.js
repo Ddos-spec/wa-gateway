@@ -127,7 +127,7 @@ document.addEventListener('auth-success', function() {
     }
 
     function initializeWebSocket() {
-        fetch('/api/v1/ws-auth') // This endpoint is fine as it's for getting a token
+        fetch('/api/v2/ws-auth')
             .then(res => res.json())
             .then(data => {
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -188,6 +188,155 @@ document.addEventListener('auth-success', function() {
                 console.error('Failed to get WebSocket auth token:', error);
                 setTimeout(initializeWebSocket, 5000);
             });
+    }
+
+    // ============================================
+    // PAIRING MODAL LOGIC
+    // ============================================
+
+    let pairingWs = null;
+    let currentSessionId = null;
+
+    const modal = document.getElementById('createSessionModal');
+    const phoneNumberInput = document.getElementById('phoneNumber');
+    const startPairingBtn = document.getElementById('start-pairing-btn');
+    const pairingStatus = document.getElementById('pairing-status');
+    const statusMessage = document.getElementById('status-message');
+    const pairingForm = document.getElementById('pairing-form');
+    const pairingCodeDisplay = document.getElementById('pairing-code-display');
+    const pairingCodeEl = document.getElementById('pairing-code');
+    const pairingSuccess = document.getElementById('pairing-success');
+    const pairingError = document.getElementById('pairing-error');
+    const errorMessage = document.getElementById('error-message');
+
+    // Reset modal on close
+    modal.addEventListener('hidden.bs.modal', function() {
+        if (pairingWs) {
+            pairingWs.close();
+            pairingWs = null;
+        }
+        currentSessionId = null;
+        phoneNumberInput.value = '';
+        pairingStatus.style.display = 'none';
+        pairingForm.style.display = 'block';
+        pairingCodeDisplay.style.display = 'none';
+        pairingSuccess.style.display = 'none';
+        pairingError.style.display = 'none';
+        startPairingBtn.disabled = false;
+        startPairingBtn.innerHTML = '<i class="bi bi-play-circle"></i> Start Pairing';
+    });
+
+    startPairingBtn.addEventListener('click', async function() {
+        const phoneNumber = phoneNumberInput.value.trim();
+
+        if (!phoneNumber) {
+            pairingError.style.display = 'block';
+            errorMessage.textContent = 'Please enter a phone number';
+            return;
+        }
+
+        try {
+            startPairingBtn.disabled = true;
+            startPairingBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Connecting...';
+            pairingError.style.display = 'none';
+            pairingSuccess.style.display = 'none';
+
+            // Get WebSocket token
+            const authResponse = await fetch('/api/v2/ws-auth');
+            if (!authResponse.ok) throw new Error('Failed to get WebSocket token');
+            const { wsToken } = await authResponse.json();
+
+            // Connect to WebSocket
+            const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}?token=${wsToken}`;
+            pairingWs = new WebSocket(wsUrl);
+
+            pairingWs.onopen = async () => {
+                pairingStatus.style.display = 'block';
+                statusMessage.textContent = 'Starting pairing process...';
+
+                // Start pairing
+                const response = await fetch('/api/v2/pairing/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to start pairing');
+                }
+
+                const result = await response.json();
+                currentSessionId = result.sessionId;
+
+                // Subscribe to pairing updates
+                pairingWs.send(JSON.stringify({
+                    type: 'subscribe_pairing',
+                    sessionId: currentSessionId
+                }));
+
+                statusMessage.textContent = 'Waiting for pairing code...';
+            };
+
+            pairingWs.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    if (data.pairingCode) {
+                        // Show pairing code
+                        pairingForm.style.display = 'none';
+                        pairingCodeDisplay.style.display = 'block';
+                        pairingCodeEl.textContent = data.pairingCode;
+                        statusMessage.textContent = 'Enter this code in WhatsApp';
+                    }
+
+                    if (data.event === 'session-state-changed' && data.sessionId === currentSessionId) {
+                        if (data.status === 'CONNECTED') {
+                            // Success!
+                            pairingStatus.style.display = 'none';
+                            pairingCodeDisplay.style.display = 'none';
+                            pairingSuccess.style.display = 'block';
+
+                            setTimeout(() => {
+                                const modalInstance = bootstrap.Modal.getInstance(modal);
+                                modalInstance.hide();
+                                fetchSessions(); // Refresh session list
+                            }, 2000);
+                        } else if (data.status === 'ERROR' || data.status === 'FAILED') {
+                            throw new Error(data.detail || 'Pairing failed');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Pairing error:', error);
+                    showPairingError(error.message);
+                }
+            };
+
+            pairingWs.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                showPairingError('WebSocket connection error');
+            };
+
+            pairingWs.onclose = () => {
+                if (pairingSuccess.style.display === 'none') {
+                    // Connection closed before success
+                    statusMessage.textContent = 'Connection lost. Please try again.';
+                }
+            };
+
+        } catch (error) {
+            console.error('Error initiating pairing:', error);
+            showPairingError(error.message);
+        }
+    });
+
+    function showPairingError(message) {
+        pairingStatus.style.display = 'none';
+        pairingCodeDisplay.style.display = 'none';
+        pairingError.style.display = 'block';
+        errorMessage.textContent = message;
+        startPairingBtn.disabled = false;
+        startPairingBtn.innerHTML = '<i class="bi bi-play-circle"></i> Start Pairing';
     }
 
     // Initial load

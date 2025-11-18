@@ -225,6 +225,21 @@ function initializeApiV2(services) {
     });
 
     // ============================================
+    // WEBSOCKET AUTHENTICATION
+    // ============================================
+
+    router.get('/ws-auth', requireAuth, (req, res) => {
+        try {
+            const email = req.session.user.email;
+            const wsToken = sessionManager.generateWsToken(email);
+            res.status(200).json({ wsToken });
+        } catch (error) {
+            logger.error('Failed to generate WS token', 'API_V2', { error: error.message });
+            res.status(500).json({ status: 'error', message: 'Failed to generate WebSocket token' });
+        }
+    });
+
+    // ============================================
     // PHONE PAIRING
     // ============================================
     
