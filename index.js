@@ -177,74 +177,38 @@ async function startServer() {
             res.redirect('/admin/login.html');
         });
 
-        // Admin login endpoint
+        // Admin login endpoint (password only)
         app.post('/admin/login', async (req, res) => {
             try {
-                const { email, password } = req.body;
+                const { password } = req.body;
+                const adminPassword = process.env.ADMIN_DASHBOARD_PASSWORD;
 
-                // Legacy admin login (no email provided)
-                if (!email) {
-                    const adminPassword = process.env.ADMIN_DASHBOARD_PASSWORD;
-                    if (password === adminPassword) {
-                        req.session.authed = true;
-                        req.session.user = {
-                            id: 0,
-                            email: 'admin@legacy',
-                            role: 'admin'
-                        };
+                if (password === adminPassword) {
+                    req.session.authed = true;
+                    req.session.user = {
+                        id: 0,
+                        email: 'admin',
+                        role: 'admin'
+                    };
 
-                        // Save session explicitly
-                        await new Promise((resolve, reject) => {
-                            req.session.save((err) => {
-                                if (err) reject(err);
-                                else resolve();
-                            });
+                    await new Promise((resolve, reject) => {
+                        req.session.save((err) => {
+                            if (err) reject(err);
+                            else resolve();
                         });
-
-                        logger.info('Legacy admin login successful', 'AUTH', { sessionId: req.sessionID });
-                        return res.status(200).json({
-                            status: 'success',
-                            message: 'Login successful',
-                            role: 'admin',
-                            email: 'admin@legacy'
-                        });
-                    } else {
-                        logger.warn('Legacy admin login failed', 'AUTH');
-                        return res.status(401).json({ status: 'error', message: 'Invalid password' });
-                    }
-                }
-
-                // Database-based login (email + password)
-                const authResult = await authService.authenticate(email, password);
-                if (!authResult.success) {
-                    logger.warn('Authentication failed', 'AUTH', { email });
-                    return res.status(401).json({ status: 'error', message: authResult.error });
-                }
-
-                // Set session
-                req.session.authed = true;
-                req.session.user = {
-                    id: authResult.user.id,
-                    email: authResult.user.email,
-                    role: authResult.userType
-                };
-
-                // Save session explicitly
-                await new Promise((resolve, reject) => {
-                    req.session.save((err) => {
-                        if (err) reject(err);
-                        else resolve();
                     });
-                });
 
-                logger.info('User login successful', 'AUTH', { email, role: authResult.userType, sessionId: req.sessionID });
-                return res.status(200).json({
-                    status: 'success',
-                    message: 'Login successful',
-                    role: authResult.userType,
-                    email: authResult.user.email
-                });
-
+                    logger.info('Admin login successful', 'AUTH', { sessionId: req.sessionID });
+                    return res.status(200).json({
+                        status: 'success',
+                        message: 'Login successful',
+                        role: 'admin',
+                        email: 'admin'
+                    });
+                } else {
+                    logger.warn('Admin login failed', 'AUTH');
+                    return res.status(401).json({ status: 'error', message: 'Invalid password' });
+                }
             } catch (error) {
                 logger.error('Login error', 'AUTH', { error: error.message, stack: error.stack });
                 return res.status(500).json({ status: 'error', message: 'Internal server error during login' });

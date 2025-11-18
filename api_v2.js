@@ -14,20 +14,12 @@ function initializeApiV2(services) {
         next();
     };
 
-    const requireAdmin = (req, res, next) => {
-        if (req.session.user?.role !== 'admin') {
-            return res.status(403).json({ status: 'error', message: 'Admin access required' });
-        }
-        next();
-    };
-
     // ============================================
     // AUTHENTICATION
     // ============================================
 
     router.post('/admin/login', [
         body('password').isString().notEmpty().withMessage('Password is required'),
-        body('email').optional().isEmail().withMessage('Invalid email format'),
     ], async (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
@@ -35,72 +27,35 @@ function initializeApiV2(services) {
         }
 
         try {
-            const { email, password } = req.body;
+            const { password } = req.body;
+            const adminPassword = process.env.ADMIN_DASHBOARD_PASSWORD;
 
-            // Legacy admin login (no email provided)
-            if (!email) {
-                const adminPassword = process.env.ADMIN_DASHBOARD_PASSWORD;
-                if (password === adminPassword) {
-                    // Create a default admin session (legacy mode)
-                    req.session.authed = true;
-                    req.session.user = {
-                        id: 0,
-                        email: 'admin@legacy',
-                        role: 'admin'
-                    };
+            if (password === adminPassword) {
+                req.session.authed = true;
+                req.session.user = {
+                    id: 0,
+                    email: 'admin',
+                    role: 'admin'
+                };
 
-                    // Save session explicitly
-                    await new Promise((resolve, reject) => {
-                        req.session.save((err) => {
-                            if (err) reject(err);
-                            else resolve();
-                        });
+                await new Promise((resolve, reject) => {
+                    req.session.save((err) => {
+                        if (err) reject(err);
+                        else resolve();
                     });
-
-                    logger.info('Legacy admin login successful', 'AUTH', { sessionId: req.sessionID });
-                    return res.status(200).json({
-                        status: 'success',
-                        message: 'Login successful',
-                        role: 'admin',
-                        email: 'admin@legacy'
-                    });
-                } else {
-                    logger.warn('Legacy admin login failed', 'AUTH');
-                    return res.status(401).json({ status: 'error', message: 'Invalid password' });
-                }
-            }
-
-            // Database-based login (email + password)
-            const authResult = await authService.authenticate(email, password);
-            if (!authResult.success) {
-                logger.warn('Authentication failed', 'AUTH', { email });
-                return res.status(401).json({ status: 'error', message: authResult.error });
-            }
-
-            // Set session
-            req.session.authed = true;
-            req.session.user = {
-                id: authResult.user.id,
-                email: authResult.user.email,
-                role: authResult.userType
-            };
-
-            // Save session explicitly
-            await new Promise((resolve, reject) => {
-                req.session.save((err) => {
-                    if (err) reject(err);
-                    else resolve();
                 });
-            });
 
-            logger.info('User login successful', 'AUTH', { email, role: authResult.userType, sessionId: req.sessionID });
-            return res.status(200).json({
-                status: 'success',
-                message: 'Login successful',
-                role: authResult.userType,
-                email: authResult.user.email
-            });
-
+                logger.info('Admin login successful', 'AUTH', { sessionId: req.sessionID });
+                return res.status(200).json({
+                    status: 'success',
+                    message: 'Login successful',
+                    role: 'admin',
+                    email: 'admin'
+                });
+            } else {
+                logger.warn('Admin login failed', 'AUTH');
+                return res.status(401).json({ status: 'error', message: 'Invalid password' });
+            }
         } catch (error) {
             logger.error('Login error', 'AUTH', { error: error.message });
             return res.status(500).json({ status: 'error', message: 'Internal server error during login' });
@@ -133,100 +88,6 @@ function initializeApiV2(services) {
     });
 
     // ============================================
-    // USER MANAGEMENT (Admin Only)
-    // ============================================
-
-    router.get('/users', requireAuth, requireAdmin, async (req, res) => {
-        try {
-            const adminId = req.session.user.id;
-            const users = await authService.getUsersForAdmin(adminId);
-            // Enrich with session data
-            const sessions = sessionManager.getSessionsForUser(null, true);
-            const usersWithSessions = users.map(u => ({
-                ...u,
-                role: 'user', // Add role explicitly
-                sessions: sessions.filter(s => s.owner === u.email)
-            }));
-            res.status(200).json(usersWithSessions); // Return array directly as per original frontend
-        } catch (error) {
-            logger.error('Failed to get users', 'API_V2', { error: error.message });
-            res.status(500).json({ status: 'error', message: 'Failed to retrieve users' });
-        }
-    });
-
-    router.post('/users', requireAuth, requireAdmin, [
-        body('email').isEmail().withMessage('A valid email is required'),
-        body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
-        body('role').isIn(['user', 'admin']).withMessage('Role must be either user or admin'),
-    ], async (req, res) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ status: 'error', errors: errors.array() });
-        }
-        try {
-            const { email, password, role } = req.body;
-            const adminId = req.session.user.id;
-            const { user } = await authService.createUser({ adminId, email, password, role });
-            res.status(201).json({ status: 'success', data: user });
-        } catch (error) {
-            logger.error('Failed to create user', 'API_V2', { error: error.message });
-            res.status(500).json({ status: 'error', error: error.message }); // Match frontend error expectation
-        }
-    });
-
-    router.put('/users/:email', requireAuth, requireAdmin, [
-        param('email').isEmail(),
-        body('password').optional().isLength({ min: 6 }),
-        body('isActive').isBoolean(),
-    ], async (req, res) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ status: 'error', errors: errors.array() });
-        }
-        try {
-            const userToUpdate = await authService.findUserByEmail(req.params.email);
-            if (!userToUpdate) {
-                return res.status(404).json({ status: 'error', error: 'User not found' });
-            }
-
-            const updates = { is_active: req.body.isActive };
-            if (req.body.password) {
-                updates.password = req.body.password;
-            }
-
-            const updatedUser = await authService.updateUser(userToUpdate.id, updates);
-            res.status(200).json({ status: 'success', data: updatedUser });
-        } catch (error) {
-            logger.error('Failed to update user', 'API_V2', { error: error.message });
-            res.status(500).json({ status: 'error', error: error.message });
-        }
-    });
-
-    router.delete('/users/:email', requireAuth, requireAdmin, [
-        param('email').isEmail()
-    ], async (req, res) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ status: 'error', errors: errors.array() });
-        }
-        try {
-            if (req.params.email === req.session.user.email) {
-                return res.status(400).json({ status: 'error', error: 'Cannot delete your own account.' });
-            }
-            const userToDelete = await authService.findUserByEmail(req.params.email);
-            if (!userToDelete) {
-                return res.status(404).json({ status: 'error', error: 'User not found' });
-            }
-            await authService.deleteUser(userToDelete.id);
-            res.status(200).json({ status: 'success', message: 'User deleted successfully' });
-        } catch (error) {
-            logger.error('Failed to delete user', 'API_V2', { error: error.message });
-            res.status(500).json({ status: 'error', error: error.message });
-        }
-    });
-
-
-    // ============================================
     // SESSION MANAGEMENT
     // ============================================
 
@@ -251,8 +112,7 @@ function initializeApiV2(services) {
 
     router.get('/sessions', requireAuth, (req, res) => {
         try {
-            const { email, role } = req.session.user;
-            const sessions = sessionManager.getSessionsForUser(email, role === 'admin');
+            const sessions = sessionManager.getSessionsForUser(null, true); // Admin gets all sessions
             res.status(200).json({ status: 'success', data: sessions });
         } catch (error) {
             logger.error('Failed to get sessions', 'API_V2', { error: error.message });
@@ -263,13 +123,9 @@ function initializeApiV2(services) {
     router.delete('/sessions/:sessionId', requireAuth, async (req, res) => {
         try {
             const { sessionId } = req.params;
-            const { email, role } = req.session.user;
             const session = sessionManager.getSession(sessionId);
             if (!session) {
                 return res.status(404).json({ status: 'error', message: 'Session not found' });
-            }
-            if (role !== 'admin' && session.owner !== email) {
-                return res.status(403).json({ status: 'error', message: 'Access denied' });
             }
             await sessionManager.deleteSession(sessionId);
             res.status(200).json({ status: 'success', message: `Session ${sessionId} deleted` });
@@ -309,15 +165,9 @@ function initializeApiV2(services) {
 
         try {
             const { sessionId } = req.params;
-            const { email, role } = req.session.user;
-
             const session = sessionManager.getSession(sessionId);
             if (!session) {
                 return res.status(404).json({ status: 'error', message: 'Session not found' });
-            }
-
-            if (role !== 'admin' && session.owner !== email) {
-                return res.status(403).json({ status: 'error', message: 'Access denied' });
             }
 
             await sessionManager.updateSettings(sessionId, req.body);

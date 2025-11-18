@@ -4,6 +4,19 @@ document.addEventListener('auth-success', function() {
     const logBox = document.getElementById('log-box');
     const sessionsData = new Map();
 
+    // --- System Monitoring ---
+    function updateSystemStats(sessions) {
+        const total = sessions.length;
+        const active = sessions.filter(s => s.status === 'CONNECTED').length;
+        const pending = sessions.filter(s => s.status === 'PAIRING' || s.status === 'CONNECTING' || s.status === 'SCAN_QR').length;
+        const failed = sessions.filter(s => s.status === 'DISCONNECTED' || s.status === 'ERROR' || s.status === 'FAILED').length;
+
+        document.getElementById('total-sessions').textContent = total;
+        document.getElementById('active-sessions').textContent = active;
+        document.getElementById('pending-sessions').textContent = pending;
+        document.getElementById('failed-sessions').textContent = failed;
+    }
+
     // --- Main Dashboard Logic ---
 
     function createSessionCard(session) {
@@ -82,10 +95,15 @@ document.addEventListener('auth-success', function() {
             if (!response.ok) throw new Error('Failed to fetch sessions');
             const { data } = await response.json();
             updateSessionCards(data);
+            updateSystemStats(data);
         } catch (error) {
             console.error('Error fetching sessions:', error);
             sessionsContainer.innerHTML = `<div class="col"><div class="alert alert-danger">Could not load sessions.</div></div>`;
         }
+    }
+
+    window.clearLogs = function() {
+        logBox.innerHTML = '<p class="text-muted">Logs cleared.</p>';
     }
 
     window.deleteSession = async function(sessionId) {
@@ -128,6 +146,7 @@ document.addEventListener('auth-success', function() {
                         // UPDATED: Handle new event-based updates
                         if (data.event === 'session-list') {
                             updateSessionCards(data.data);
+                            updateSystemStats(data.data);
                         } else if (data.event === 'session-state-changed') {
                             const sessionToUpdate = sessionsData.get(data.sessionId);
                             if (sessionToUpdate) {
@@ -136,9 +155,12 @@ document.addEventListener('auth-success', function() {
                                 sessionToUpdate.qr = data.qr;
                                 updateSessionCards([sessionToUpdate]);
                             }
+                            updateSystemStats(Array.from(sessionsData.values()));
                         } else if (data.event === 'session-deleted') {
                             const cardToRemove = document.getElementById(`session-${data.sessionId}`);
                             cardToRemove?.remove();
+                            sessionsData.delete(data.sessionId);
+                            updateSystemStats(Array.from(sessionsData.values()));
                         }
                         
                         // You can add a separate log handler if needed, but this simplifies the dashboard
