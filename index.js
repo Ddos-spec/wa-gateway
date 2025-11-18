@@ -128,19 +128,6 @@ app.use(rateLimit({
     legacyHeaders: false,
 }));
 
-// 2. Initialize Middleware that depends on DB/Redis
-app.use(session({
-    store: new RedisStore({ client: redis.client, prefix: process.env.REDIS_SESSION_PREFIX || 'wa-gateway:session:' }),
-    secret: process.env.SESSION_SECRET || 'a_very_secret_key',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: (parseInt(process.env.SESSION_TIMEOUT_DAYS) || 1) * 24 * 60 * 60 * 1000,
-    }
-}));
-
 // ============================================
 // PART 5: TOKEN MANAGEMENT (Legacy placeholders)
 // ============================================
@@ -163,6 +150,19 @@ async function startServer() {
     try {
         // 1. Initialize database
         await initializeDatabase();
+
+        // 2. Initialize session middleware AFTER Redis is connected
+        app.use(session({
+            store: new RedisStore({ client: redis.client, prefix: process.env.REDIS_SESSION_PREFIX || 'wa-gateway:session:' }),
+            secret: process.env.SESSION_SECRET || 'a_very_secret_key',
+            resave: false,
+            saveUninitialized: false,
+            cookie: {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                maxAge: (parseInt(process.env.SESSION_TIMEOUT_DAYS) || 1) * 24 * 60 * 60 * 1000,
+            }
+        }));
 
         app.use('/admin', express.static(path.join(__dirname, 'admin')));
         app.use('/media', express.static(path.join(__dirname, 'media')));
