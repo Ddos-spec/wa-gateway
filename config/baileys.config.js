@@ -48,13 +48,8 @@ class BaileysConfig {
 
         // Development-specific overrides
         if (this.environment === 'development') {
-            baseConfig.logger = pino({
-                level: 'debug',
-                transport: {
-                    target: 'pino-pretty',
-                    options: { colorize: true }
-                }
-            });
+            // Use simple logger without pino-pretty to avoid browser compatibility issues
+            baseConfig.logger = pino({ level: 'debug' });
             baseConfig.printQRInTerminal = true;
         }
 
