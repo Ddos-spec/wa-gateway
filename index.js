@@ -141,6 +141,29 @@ app.use(session({
     }
 }));
 
+// ============================================
+// PART 5: TOKEN MANAGEMENT (Legacy placeholders)
+// ============================================
+function loadTokens(sessionManager) {
+    // Legacy token loading functionality
+    // If you need to load persisted tokens, implement here
+    logger.info('Token loading skipped (legacy function)', 'SYSTEM');
+}
+
+function saveTokens() {
+    // Legacy token saving functionality
+    // If you need to save tokens, implement here
+    logger.info('Token saving skipped (legacy function)', 'SYSTEM');
+}
+
+// ============================================
+// PART 6: SERVER INITIALIZATION
+// ============================================
+async function startServer() {
+    try {
+        // 1. Initialize database
+        await initializeDatabase();
+
         app.use('/admin', express.static(path.join(__dirname, 'admin')));
         app.use('/media', express.static(path.join(__dirname, 'media')));
 
