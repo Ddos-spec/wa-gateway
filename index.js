@@ -10,7 +10,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const session = require('express-session');
-const { RedisStore } = require('connect-redis');
+const RedisStore = require('connect-redis')(session);
 
 // Database and new modules
 const { redis, initializeDatabase, User, Admin, WaNumber } = require('./db');
