@@ -167,6 +167,11 @@ async function startServer() {
         app.use('/admin', express.static(path.join(__dirname, 'admin')));
         app.use('/media', express.static(path.join(__dirname, 'media')));
 
+        // Root path handler - redirect to admin dashboard
+        app.get('/', (req, res) => {
+            res.redirect('/admin/login.html');
+        });
+
         // 3. Initialize services 
         const phonePairing = new PhonePairing(logger, redis);
         const sessionStorage = new SessionStorage(logger, { authDir: path.join(__dirname, 'auth_info_baileys') });
