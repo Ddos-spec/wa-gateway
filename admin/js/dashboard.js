@@ -127,7 +127,7 @@ document.addEventListener('auth-success', function() {
     }
 
     function initializeWebSocket() {
-        fetch('/api/v1/ws-auth') // This endpoint is fine as it's for getting a token
+        fetch('/api/v2/ws-auth')
             .then(res => res.json())
             .then(data => {
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

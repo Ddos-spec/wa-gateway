@@ -20,7 +20,7 @@ document.addEventListener('auth-success', function() {
 
         try {
             // 1. Get a one-time WebSocket authentication token
-            const authResponse = await fetch('/api/v1/ws-auth');
+            const authResponse = await fetch('/api/v2/ws-auth');
             if (!authResponse.ok) throw new Error('Failed to get WebSocket token');
             const { wsToken } = await authResponse.json();
 
