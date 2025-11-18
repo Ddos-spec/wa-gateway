@@ -20,7 +20,86 @@ function initializeApiV2(services) {
         }
         next();
     };
-    
+
+    // ============================================
+    // AUTHENTICATION
+    // ============================================
+
+    router.post('/admin/login', [
+        body('password').isString().notEmpty().withMessage('Password is required'),
+        body('email').optional().isEmail().withMessage('Invalid email format'),
+    ], async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ status: 'error', message: 'Validation failed', errors: errors.array() });
+        }
+
+        try {
+            const { email, password } = req.body;
+
+            // Legacy admin login (no email provided)
+            if (!email) {
+                const adminPassword = process.env.ADMIN_DASHBOARD_PASSWORD;
+                if (password === adminPassword) {
+                    // Create a default admin session (legacy mode)
+                    req.session.authed = true;
+                    req.session.user = {
+                        id: 0,
+                        email: 'admin@legacy',
+                        role: 'admin'
+                    };
+                    logger.info('Legacy admin login successful', 'AUTH');
+                    return res.status(200).json({
+                        status: 'success',
+                        message: 'Login successful',
+                        role: 'admin',
+                        email: 'admin@legacy'
+                    });
+                } else {
+                    logger.warn('Legacy admin login failed', 'AUTH');
+                    return res.status(401).json({ status: 'error', message: 'Invalid password' });
+                }
+            }
+
+            // Database-based login (email + password)
+            const authResult = await authService.authenticate(email, password);
+            if (!authResult.success) {
+                logger.warn('Authentication failed', 'AUTH', { email });
+                return res.status(401).json({ status: 'error', message: authResult.error });
+            }
+
+            // Set session
+            req.session.authed = true;
+            req.session.user = {
+                id: authResult.user.id,
+                email: authResult.user.email,
+                role: authResult.userType
+            };
+
+            logger.info('User login successful', 'AUTH', { email, role: authResult.userType });
+            return res.status(200).json({
+                status: 'success',
+                message: 'Login successful',
+                role: authResult.userType,
+                email: authResult.user.email
+            });
+
+        } catch (error) {
+            logger.error('Login error', 'AUTH', { error: error.message });
+            return res.status(500).json({ status: 'error', message: 'Internal server error during login' });
+        }
+    });
+
+    router.post('/logout', (req, res) => {
+        req.session.destroy((err) => {
+            if (err) {
+                logger.error('Logout error', 'AUTH', { error: err.message });
+                return res.status(500).json({ status: 'error', message: 'Failed to logout' });
+            }
+            res.status(200).json({ status: 'success', message: 'Logged out successfully' });
+        });
+    });
+
     // ============================================
     // USER MANAGEMENT (Admin Only)
     // ============================================

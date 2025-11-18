@@ -172,6 +172,74 @@ async function startServer() {
             res.redirect('/admin/login.html');
         });
 
+        // Admin login endpoint
+        app.post('/admin/login', async (req, res) => {
+            try {
+                const { email, password } = req.body;
+
+                // Legacy admin login (no email provided)
+                if (!email) {
+                    const adminPassword = process.env.ADMIN_DASHBOARD_PASSWORD;
+                    if (password === adminPassword) {
+                        req.session.authed = true;
+                        req.session.user = {
+                            id: 0,
+                            email: 'admin@legacy',
+                            role: 'admin'
+                        };
+                        logger.info('Legacy admin login successful', 'AUTH');
+                        return res.status(200).json({
+                            status: 'success',
+                            message: 'Login successful',
+                            role: 'admin',
+                            email: 'admin@legacy'
+                        });
+                    } else {
+                        logger.warn('Legacy admin login failed', 'AUTH');
+                        return res.status(401).json({ status: 'error', message: 'Invalid password' });
+                    }
+                }
+
+                // Database-based login (email + password)
+                const authResult = await authService.authenticate(email, password);
+                if (!authResult.success) {
+                    logger.warn('Authentication failed', 'AUTH', { email });
+                    return res.status(401).json({ status: 'error', message: authResult.error });
+                }
+
+                // Set session
+                req.session.authed = true;
+                req.session.user = {
+                    id: authResult.user.id,
+                    email: authResult.user.email,
+                    role: authResult.userType
+                };
+
+                logger.info('User login successful', 'AUTH', { email, role: authResult.userType });
+                return res.status(200).json({
+                    status: 'success',
+                    message: 'Login successful',
+                    role: authResult.userType,
+                    email: authResult.user.email
+                });
+
+            } catch (error) {
+                logger.error('Login error', 'AUTH', { error: error.message });
+                return res.status(500).json({ status: 'error', message: 'Internal server error during login' });
+            }
+        });
+
+        // Logout endpoint
+        app.post('/admin/logout', (req, res) => {
+            req.session.destroy((err) => {
+                if (err) {
+                    logger.error('Logout error', 'AUTH', { error: err.message });
+                    return res.status(500).json({ status: 'error', message: 'Failed to logout' });
+                }
+                res.status(200).json({ status: 'success', message: 'Logged out successfully' });
+            });
+        });
+
         // 3. Initialize services 
         const phonePairing = new PhonePairing(logger, redis);
         const sessionStorage = new SessionStorage(logger, { authDir: path.join(__dirname, 'auth_info_baileys') });
