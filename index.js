@@ -152,14 +152,19 @@ async function startServer() {
         await initializeDatabase();
 
         // 2. Initialize session middleware AFTER Redis is connected
+        const isProduction = process.env.NODE_ENV === 'production';
+        const useHttps = process.env.PUBLIC_URL?.startsWith('https://') || false;
+
         app.use(session({
             store: new RedisStore({ client: redis.client, prefix: process.env.REDIS_SESSION_PREFIX || 'wa-gateway:session:' }),
             secret: process.env.SESSION_SECRET || 'a_very_secret_key',
             resave: false,
             saveUninitialized: false,
+            name: 'wa-gateway.sid',
             cookie: {
                 httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
+                secure: useHttps,
+                sameSite: useHttps ? 'none' : 'lax',
                 maxAge: (parseInt(process.env.SESSION_TIMEOUT_DAYS) || 1) * 24 * 60 * 60 * 1000,
             }
         }));
@@ -187,7 +192,16 @@ async function startServer() {
                             email: 'admin@legacy',
                             role: 'admin'
                         };
-                        logger.info('Legacy admin login successful', 'AUTH');
+
+                        // Save session explicitly
+                        await new Promise((resolve, reject) => {
+                            req.session.save((err) => {
+                                if (err) reject(err);
+                                else resolve();
+                            });
+                        });
+
+                        logger.info('Legacy admin login successful', 'AUTH', { sessionId: req.sessionID });
                         return res.status(200).json({
                             status: 'success',
                             message: 'Login successful',
@@ -215,7 +229,15 @@ async function startServer() {
                     role: authResult.userType
                 };
 
-                logger.info('User login successful', 'AUTH', { email, role: authResult.userType });
+                // Save session explicitly
+                await new Promise((resolve, reject) => {
+                    req.session.save((err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                });
+
+                logger.info('User login successful', 'AUTH', { email, role: authResult.userType, sessionId: req.sessionID });
                 return res.status(200).json({
                     status: 'success',
                     message: 'Login successful',
@@ -224,7 +246,7 @@ async function startServer() {
                 });
 
             } catch (error) {
-                logger.error('Login error', 'AUTH', { error: error.message });
+                logger.error('Login error', 'AUTH', { error: error.message, stack: error.stack });
                 return res.status(500).json({ status: 'error', message: 'Internal server error during login' });
             }
         });
