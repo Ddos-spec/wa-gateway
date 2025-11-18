@@ -72,7 +72,7 @@
                                 <button class="nav-link active" id="tab-sessions" data-bs-toggle="tab" data-bs-target="#content-sessions" type="button" role="tab">API v1: Sessions</button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="tab-pairing" data-bs-toggle="tab" data-bs-target="#content-pairing" type="button" role="tab">API v1: Phone Pairing</button>
+                                <button class="nav-link" id="tab-pairing" data-bs-toggle="tab" data-bs-target="#content-pairing" type="button" role="tab">API v2: Phone Pairing</button>
                             </li>
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="tab-media" data-bs-toggle="tab" data-bs-target="#content-media" type="button" role="tab">API v1: Media Upload</button>
@@ -97,10 +97,7 @@
                                     <pre><code id="curl-create-session">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/sessions" \
 -H "X-Master-Key: YOUR_MASTER_API_KEY" \
 -H "Content-Type: application/json" \
--d 
-'{ 
-  "sessionId": "myNewSession"
-}'</code></pre>
+-d '{"sessionId": "myNewSession"}'</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-create-session', this)">Copy</button>
                                 </div>
                                 <div class="mb-3">
@@ -125,26 +122,36 @@
                                 </div>
                             </div>
 
-                            <!-- API v1: Phone Pairing -->
+                            <!-- API v2: Phone Pairing -->
                             <div class="tab-pane fade" id="content-pairing" role="tabpanel">
-                                <div class="alert alert-info"><i class="bi bi-info-circle-fill"></i> This is the recommended way to create new sessions without manual QR code scanning. This endpoint requires an authenticated browser session (it uses cookies, not bearer tokens) and is intended to be called from the dashboard.</div>
+                                <div class="alert alert-info"><i class="bi bi-info-circle-fill"></i> This is the recommended way to create new sessions without manual QR code scanning. This endpoint requires an authenticated browser session (it uses cookies, not bearer tokens) and is intended to be called from the dashboard. The pairing process uses WebSocket for real-time updates.</div>
                                 <div class="mb-3">
-                                    <strong>1. Initiate Pairing</strong>
-                                    <p class="text-muted small">Request a pairing code for a specific phone number. This will create a new session instance and return its <code>sessionId</code>.</p>
-                                    <pre><code id="curl-pair-phone">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/session/pair-phone" \
+                                    <strong>1. Initiate Pairing (API v2)</strong>
+                                    <p class="text-muted small">Request a pairing code for a specific phone number. This will create a new session instance and return its <code>sessionId</code>. You need to be logged in (cookie authentication).</p>
+                                    <pre><code id="curl-pair-phone">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v2/pairing/start" \
 -H "Content-Type: application/json" \
 --cookie "connect.sid=YOUR_SESSION_COOKIE" \
--d 
-'{ 
-  "phoneNumber": "6281234567890"
-}'</code></pre>
+-d '{"phoneNumber": "6281234567890"}'</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-pair-phone', this)">Copy</button>
                                 </div>
                                 <div class="mb-3">
-                                    <strong>2. Check Pairing Status</strong>
-                                    <p class="text-muted small">Poll this endpoint using the <code>sessionId</code> from the previous step. It is unprotected and will eventually return a <code>pairingCode</code>.</p>
-                                    <pre><code id="curl-pair-status">curl -X GET "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/session/SESSION_ID_FROM_STEP_1/pair-status"</code></pre>
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-pair-status', this)">Copy</button>
+                                    <strong>2. Monitor Pairing Status (WebSocket)</strong>
+                                    <p class="text-muted small">After initiating pairing, connect to WebSocket and subscribe to pairing updates using the <code>sessionId</code> from step 1. The pairing code will be sent via WebSocket in real-time.</p>
+                                    <pre><code id="curl-pair-websocket">// JavaScript WebSocket Example
+const ws = new WebSocket('ws://projek-n8n-whatsappgateway.qk6yxt.easypanel.host?token=WS_TOKEN');
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    type: 'subscribe_pairing',
+    sessionId: 'SESSION_ID_FROM_STEP_1'
+  }));
+};
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  if (data.pairingCode) {
+    console.log('Pairing Code:', data.pairingCode);
+  }
+};</code></pre>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-pair-websocket', this)">Copy</button>
                                     <p class="text-muted small mt-2">Once you get the code, go to WhatsApp on your phone &gt; Linked Devices &gt; Link with phone number, and enter the code.</p>
                                 </div>
                             </div>
@@ -169,12 +176,7 @@
                                     <pre><code id="curl-send-text">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
--d 
-'{ 
-  "to": "6281234567890",
-  "type": "text",
-  "text": { "body": "Hello from the API!\n*This is bold text*." }
-}'</code></pre>
+-d '{"to": "6281234567890", "type": "text", "text": {"body": "Hello from the API!\n*This is bold text*."}}'</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-send-text', this)">Copy</button>
                                 </div>
                                 <div class="mb-3">
@@ -182,15 +184,7 @@
                                     <pre><code id="curl-send-image-url">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
--d 
-'{ 
-  "to": "6281234567890",
-  "type": "image",
-  "image": {
-    "link": "https://picsum.photos/200",
-    "caption": "This is a test image."
-  }
-}'</code></pre>
+-d '{"to": "6281234567890", "type": "image", "image": {"link": "https://picsum.photos/200", "caption": "This is a test image."}}'</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-send-image-url', this)">Copy</button>
                                 </div>
                                 <div class="mb-3">
@@ -198,15 +192,7 @@
                                     <pre><code id="curl-send-image-id">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
--d 
-'{ 
-  "to": "6281234567890",
-  "type": "image",
-  "image": {
-    "id": "YOUR_MEDIA_ID_FROM_UPLOAD",
-    "caption": "This is from an uploaded file."
-  }
-}'</code></pre>
+-d '{"to": "6281234567890", "type": "image", "image": {"id": "YOUR_MEDIA_ID_FROM_UPLOAD", "caption": "This is from an uploaded file."}}'</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-send-image-id', this)">Copy</button>
                                 </div>
                                 <div class="mb-3">
@@ -215,16 +201,7 @@
                                     <pre><code id="curl-send-doc-group">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
--d 
-'{ 
-  "recipient_type": "group",
-  "to": "GROUP_JID@g.us",
-  "type": "document",
-  "document": {
-    "link": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-    "filename": "Report.pdf"
-  }
-}'</code></pre>
+-d '{"recipient_type": "group", "to": "GROUP_JID@g.us", "type": "document", "document": {"link": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", "filename": "Report.pdf"}}'</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-send-doc-group', this)">Copy</button>
                                 </div>
                                 <div class="mb-3">
@@ -233,19 +210,7 @@
                                     <pre><code id="curl-send-batch">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
--d 
-'[
-  {
-    "to": "6281234567890",
-    "type": "text",
-    "text": { "body": "Message 1: This is the first message." }
-  },
-  {
-    "to": "6280987654321",
-    "type": "text",
-    "text": { "body": "Message 2: To a different recipient." }
-  }
-]'</code></pre>
+-d '[{"to": "6281234567890", "type": "text", "text": {"body": "Message 1: This is the first message."}}, {"to": "6280987654321", "type": "text", "text": {"body": "Message 2: To a different recipient."}}]'</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-send-batch', this)">Copy</button>
                                 </div>
                                 <div class="mb-3">
@@ -254,12 +219,7 @@
                                     <pre><code id="curl-delete-message">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/message/delete" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
--d 
-'{ 
-  "sessionId": "YOUR_SESSION_ID",
-  "messageId": "MESSAGE_ID_TO_DELETE",
-  "remoteJid": "RECIPIENT_JID"
-}'</code></pre>
+-d '{"sessionId": "YOUR_SESSION_ID", "messageId": "MESSAGE_ID_TO_DELETE", "remoteJid": "RECIPIENT_JID"}'</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-delete-message', this)">Copy</button>
                                 </div>
                             </div>
@@ -272,11 +232,7 @@
                                     <pre><code id="curl-set-webhook">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/webhook" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
--d 
-'{ 
-  "sessionId": "YOUR_SESSION_ID",
-  "url": "https://your-webhook-receiver.com/events"
-}'</code></pre>
+-d '{"sessionId": "YOUR_SESSION_ID", "url": "https://your-webhook-receiver.com/events"}'</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-set-webhook', this)">Copy</button>
                                 </div>
                                 <div class="mb-3">
@@ -292,10 +248,7 @@
                                     <pre><code id="curl-delete-webhook">curl -X DELETE "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/webhook" \
 -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
 -H "Content-Type: application/json" \
--d 
-'{ 
-  "sessionId": "YOUR_SESSION_ID"
-}'</code></pre>
+-d '{"sessionId": "YOUR_SESSION_ID"}'</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-delete-webhook', this)">Copy</button>
                                 </div>
                             </div>
@@ -320,13 +273,7 @@
                                     <strong>Send Text Message (POST)</strong>
                                     <pre><code id="curl-apiv2-send-text-post">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v2/send-message" \
 -H "Content-Type: application/json" \
--d 
-'{ 
-  "apikey": "YOUR_API_KEY",
-  "mtype": "text",
-  "receiver": "6281234567890",
-  "text": "Hello from API v2!"
-}'</code></pre>
+-d '{"apikey": "YOUR_API_KEY", "mtype": "text", "receiver": "6281234567890", "text": "Hello from API v2!"}'</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-apiv2-send-text-post', this)">Copy</button>
                                 </div>
 
@@ -341,14 +288,7 @@
                                     <strong>Send Document Message (POST)</strong>
                                     <pre><code id="curl-apiv2-send-doc-post">curl -X POST "http://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v2/send-message" \
 -H "Content-Type: application/json" \
--d 
-'{ 
-  "apikey": "YOUR_API_KEY",
-  "mtype": "document",
-  "receiver": "6281234567890",
-  "url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-  "filename": "APIv2_Document.pdf"
-}'</code></pre>
+-d '{"apikey": "YOUR_API_KEY", "mtype": "document", "receiver": "6281234567890", "url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", "filename": "APIv2_Document.pdf"}'</code></pre>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyCurl('curl-apiv2-send-doc-post', this)">Copy</button>
                                 </div>
                             </div>
