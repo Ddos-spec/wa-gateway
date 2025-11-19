@@ -11,7 +11,8 @@ class PhonePairing {
         }
         this.log = logger;
         this.redis = redis;
-        this.publisher = redis.client.duplicate(); // Klien khusus untuk publish
+        // Use the same client for publish since it's already connected
+        this.publisher = redis.client;
     }
 
     _getKey(sessionId) {
