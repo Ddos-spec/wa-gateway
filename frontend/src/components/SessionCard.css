@@ -1,0 +1,160 @@
+.session-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.session-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.session-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.session-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdown {
+  position: relative;
+}
+
+.dropdown-toggle {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px 8px;
+  color: #666;
+  transition: color 0.2s;
+}
+
+.dropdown-toggle:hover {
+  color: #333;
+}
+
+.dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 140px;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.dropdown-menu button {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: #333;
+  transition: background 0.2s;
+}
+
+.dropdown-menu button:hover {
+  background: #f5f5f5;
+}
+
+.dropdown-menu button.danger {
+  color: #dc3545;
+}
+
+.dropdown-menu button.danger:hover {
+  background: #ffebee;
+}
+
+.session-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.session-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.session-info-row .label {
+  font-weight: 500;
+  color: #666;
+  font-size: 14px;
+}
+
+.session-info-row .value {
+  color: #333;
+  font-size: 14px;
+}
+
+.auth-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.auth-badge-pairing {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.auth-badge-qr {
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.auth-badge-restored {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.auth-badge-default {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.socket-indicator {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.socket-indicator.active {
+  color: #28a745;
+}
+
+.socket-indicator.inactive {
+  color: #6c757d;
+}
+
+@media (max-width: 768px) {
+  .session-card {
+    padding: 16px;
+  }
+
+  .session-name {
+    font-size: 16px;
+  }
+}
