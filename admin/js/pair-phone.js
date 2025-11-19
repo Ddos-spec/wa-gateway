@@ -51,8 +51,8 @@ document.addEventListener('auth-success', function() {
                     if (data.pairingCode) {
                         pairingCodeDisplay.innerHTML = `<strong>${data.pairingCode}</strong>`;
 
-                        // Start countdown timer (3 minutes = 180 seconds)
-                        startCountdownTimer(180);
+                        // Start countdown timer (30 seconds)
+                        startCountdownTimer(30);
 
                         // Show pairing status
                         if (pairingStatus) {

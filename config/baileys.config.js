@@ -25,7 +25,7 @@ class BaileysConfig {
             printQRInTerminal: false,
 
             // Connection Settings
-            qrTimeout: 60000,                    // 60 seconds for QR/Pairing timeout (reduced from 30s to allow proper pairing)
+            qrTimeout: 30000,                    // 30 seconds for QR/Pairing timeout
             connectTimeoutMs: 60000,             // 60 seconds connection timeout (increased for pairing flow)
             keepAliveIntervalMs: 25000,          // 25 seconds keep-alive (improved from 45s)
             retryRequestDelayMs: 2000,           // 2 seconds retry delay (reduced from 3s)
