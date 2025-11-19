@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wa-gateway-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - API_KEY=${API_KEY}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - BASE_WEBHOOK_URL=${BASE_WEBHOOK_URL}
+      - SESSION_PATH=/app/session
+      - AUTO_RESTORE_SESSIONS=true
+      - LOG_LEVEL=info
+    volumes:
+      - session-data:/app/session
+      - logs-data:/app/logs
+    networks:
+      - wa-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=http://localhost:3000
+        - REACT_APP_WS_URL=ws://localhost:3000
+        - REACT_APP_API_KEY=${API_KEY}
+    container_name: wa-gateway-frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - wa-network
+    restart: unless-stopped
+
+networks:
+  wa-network:
+    driver: bridge
+
+volumes:
+  session-data:
+  logs-data:
