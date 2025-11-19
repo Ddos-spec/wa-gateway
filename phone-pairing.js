@@ -2,7 +2,7 @@ const { formatPhoneNumber } = require('./phone-utils');
 
 const PAIRING_PREFIX = 'wa-gateway:pairing:';
 const PAIRING_CHANNEL_PREFIX = 'wa-gateway:pairing-updates:';
-const PAIRING_TTL = 900; // 15 menit
+const PAIRING_TTL = 180; // 3 menit (sesuai dengan countdown frontend dan validitas kode WhatsApp)
 
 class PhonePairing {
     constructor(logger, redis) {
