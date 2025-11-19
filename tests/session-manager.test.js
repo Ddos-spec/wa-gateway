@@ -143,17 +143,20 @@ describe('SessionManager', () => {
     describe('deleteSession', () => {
         it('should delete a session successfully', async () => {
             const sessionId = 'session-to-delete';
-            const mockSocketMgr = { close: jest.fn().mockResolvedValue(true) };
+            const creatorEmail = 'test@example.com';
+
+            // Create a session first to ensure connectionHandler is properly mocked and set
+            await sessionManager.createSession(sessionId, creatorEmail);
+
+            const session = sessionManager.sessions.get(sessionId);
+            const mockSocketMgr = session.socketManager; // Get the mocked socketManager from the session
+            const connHandlerInstance = session.connectionHandler; // Get the mocked connectionHandler from the session
             
-            // Use the actual ConnectionHandler mock to get an instance
-            const connHandlerInstance = new ConnectionHandler();
+            // Ensure mocks are correctly spied on
+            jest.spyOn(mockSocketMgr, 'close');
+            jest.spyOn(connHandlerInstance, 'cleanup');
             
-            sessionManager.sessions.set(sessionId, {
-                owner: 'user@test.com',
-                socketManager: mockSocketMgr,
-                connectionHandler: connHandlerInstance,
-            });
-            sessionManager.sessionTokens.set(sessionId, 'some-token');
+            sessionManager.sessionTokens.set(sessionId, 'some-token'); // Ensure token exists for deletion logic
 
             const result = await sessionManager.deleteSession(sessionId);
 

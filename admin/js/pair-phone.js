@@ -107,14 +107,11 @@ document.addEventListener('auth-success', function() {
                     if (data.pairingCode) {
                         pairingCodeDisplay.innerHTML = `<strong>${data.pairingCode}</strong>`;
 
-                        // Start countdown timer (30 seconds)
-                        startCountdownTimer(30);
-
                         // Show pairing status
                         if (pairingStatus) {
                             pairingStatus.style.display = 'block';
-                            pairingStatus.className = 'alert alert-warning';
-                            pairingStatusText.innerHTML = '<i class="bi bi-hourglass-split"></i> Waiting for you to enter the code in WhatsApp...';
+                            pairingStatus.className = 'alert alert-info';
+                            pairingStatusText.innerHTML = '<i class="bi bi-phone"></i> Enter the code in WhatsApp to connect.';
                         }
                     }
 
@@ -364,43 +361,7 @@ document.addEventListener('auth-success', function() {
         });
     }
 
-    // Function to start countdown timer
-    function startCountdownTimer(seconds) {
-        if (countdownInterval) {
-            clearInterval(countdownInterval);
-        }
 
-        let remaining = seconds;
-
-        if (countdownTimer) {
-            countdownTimer.style.display = 'block';
-        }
-
-        countdownInterval = setInterval(() => {
-            remaining--;
-
-            const minutes = Math.floor(remaining / 60);
-            const secs = remaining % 60;
-
-            if (countdownText) {
-                countdownText.textContent = `Code valid for: ${minutes}:${secs.toString().padStart(2, '0')}`;
-            }
-
-            if (remaining <= 0) {
-                clearInterval(countdownInterval);
-                countdownInterval = null;
-
-                if (countdownText) {
-                    countdownText.textContent = 'Code expired. New code will be generated...';
-                }
-
-                if (pairingStatus) {
-                    pairingStatus.className = 'alert alert-info';
-                    pairingStatusText.innerHTML = '<i class="bi bi-arrow-repeat"></i> Code expired. Generating new code...';
-                }
-            }
-        }, 1000);
-    }
 
     // Back to step 1
     if (backToStep1) {

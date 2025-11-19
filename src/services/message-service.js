@@ -1,7 +1,7 @@
-const { jidNormalizedUser, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { jidNormalizedUser, downloadMediaMessage, jidDecode } = require('@whiskeysockets/baileys');
 const fs = require('fs');
 const path = require('path');
-const { formatPhoneNumber, toWhatsAppJid, isValidJid } = require('../../phone-utils');
+const { formatPhoneNumber, toWhatsAppFormat } = require('../../phone-utils');
 
 /**
  * Message Service
@@ -233,12 +233,12 @@ class MessageService {
      * @private
      */
     _normalizeJid(identifier) {
-        if (isValidJid(identifier)) {
+        if (jidDecode(identifier)) {
             return identifier;
         }
         const formatted = formatPhoneNumber(identifier);
         if (formatted) {
-            return toWhatsAppJid(formatted);
+            return toWhatsAppFormat(formatted);
         }
         throw new Error('Invalid recipient JID');
     }

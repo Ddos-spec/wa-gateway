@@ -71,6 +71,20 @@ class SessionManager {
                 phoneNumber: phoneNumber || 'QR'
             });
 
+            // Get user ID
+            const user = await this.db.User.findByEmail(creatorEmail);
+            if (!user) {
+                throw new Error(`User with email ${creatorEmail} not found.`);
+            }
+            const userId = user.id;
+
+            // Save session info to WaNumber model
+            await this.db.WaNumber.create({
+                userId: userId,
+                sessionName: sessionId,
+                phoneNumber: phoneNumber || sessionId, // Use sessionId as fallback for QR sessions
+            });
+
             // Generate API token
             const token = randomUUID();
             this.sessionTokens.set(sessionId, token);
@@ -499,24 +513,20 @@ class SessionManager {
     generateWsToken(userInfo) {
         const token = randomUUID();
         this.wsAuthTokens.set(token, {
-            userInfo,
-            expires: Date.now() + 30000 // 30 detik
+            userInfo
         });
-        // Hapus token setelah kedaluwarsa
-        setTimeout(() => this.wsAuthTokens.delete(token), 31000);
         return token;
     }
 
     validateWsToken(token) {
         const tokenData = this.wsAuthTokens.get(token);
         if (!tokenData) return false;
-        return Date.now() < tokenData.expires;
+        return true;
     }
 
     getUserInfoFromWsToken(token) {
         const tokenData = this.wsAuthTokens.get(token);
         if (tokenData && this.validateWsToken(token)) {
-            this.wsAuthTokens.delete(token); // Token sekali pakai
             return tokenData.userInfo;
         }
         return null;

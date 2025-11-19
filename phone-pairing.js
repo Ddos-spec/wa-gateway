@@ -2,7 +2,7 @@ const { formatPhoneNumber } = require('./phone-utils');
 
 const PAIRING_PREFIX = 'wa-gateway:pairing:';
 const PAIRING_CHANNEL_PREFIX = 'wa-gateway:pairing-updates:';
-const PAIRING_TTL = 30; // 30 detik (timeout cepat untuk pairing code)
+
 
 class PhonePairing {
     constructor(logger, redis) {
@@ -59,7 +59,7 @@ class PhonePairing {
             createdAt: new Date().toISOString()
         };
 
-        await this.redis.set(key, newPairing, PAIRING_TTL);
+        await this.redis.set(key, newPairing);
         this.log.info(`Phone pairing created for ${formattedPhoneNumber}`, 'PAIRING', { sessionId, customName: !!customSessionName });
 
         return { sessionId };
@@ -86,7 +86,7 @@ class PhonePairing {
         };
 
         // Jika terhubung, buat sesi permanen (hapus TTL)
-        const ttl = updatedStatus.status === 'CONNECTED' ? null : PAIRING_TTL;
+        const ttl = null;
         await this.redis.set(key, updatedStatus, ttl);
 
         // Publikasikan pembaruan ke channel Redis
