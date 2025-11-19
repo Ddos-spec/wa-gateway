@@ -1,9 +1,13 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
+const RateLimiter = require('./src/middleware/rate-limiter');
 
 function initializeApiV2(services) {
-    const { sessionManager, messageService, phonePairing, authService, logger } = services;
+    const { sessionManager, messageService, phonePairing, authService, logger, redis } = services;
     const router = express.Router();
+
+    // Initialize rate limiter
+    const rateLimiter = new RateLimiter(redis, logger);
 
     // --- Middleware ---
 
@@ -13,6 +17,14 @@ function initializeApiV2(services) {
         }
         next();
     };
+
+    // Rate limiting for pairing endpoint (3 attempts per 2 minutes)
+    const pairingRateLimit = rateLimiter.create({
+        windowMs: 120000, // 2 minutes
+        max: 3, // 3 pairing attempts
+        keyPrefix: 'pairing',
+        message: 'Too many pairing attempts. Please wait 2 minutes before trying again.'
+    });
 
     // ============================================
     // AUTHENTICATION
@@ -243,7 +255,7 @@ function initializeApiV2(services) {
     // PHONE PAIRING
     // ============================================
     
-    router.post('/pairing/start', requireAuth, [
+    router.post('/pairing/start', requireAuth, pairingRateLimit, [
         body('phoneNumber').isString().notEmpty().withMessage('phoneNumber is required'),
         body('sessionName')
             .optional()

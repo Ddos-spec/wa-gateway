@@ -253,7 +253,7 @@ async function startServer() {
         const messageService = new MessageService(sessionManager, logger, { mediaDir: path.join(__dirname, 'media') });
 
         // 4. Initialize API routes which depend on all services
-        const apiV2Router = initializeApiV2({ sessionManager, messageService, phonePairing, authService, logger });
+        const apiV2Router = initializeApiV2({ sessionManager, messageService, phonePairing, authService, logger, redis });
         app.use('/api/v2', apiV2Router);
 
         // Redirect legacy API calls
@@ -285,7 +285,12 @@ async function startServer() {
             }
         });
 
-        // 6. Load persistent data and start server
+        // 6. Run startup cleanup for orphaned sessions
+        const StartupCleanup = require('./src/utils/startup-cleanup');
+        const startupCleanup = new StartupCleanup(redis, logger);
+        await startupCleanup.runAll();
+
+        // 7. Load persistent data and start server
         loadTokens(sessionManager);
         await sessionManager.initializeExistingSessions();
 
