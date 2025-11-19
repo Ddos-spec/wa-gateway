@@ -71,19 +71,7 @@ class SessionManager {
                 phoneNumber: phoneNumber || 'QR'
             });
 
-            // Get user ID
-            const user = await this.db.User.findByEmail(creatorEmail);
-            if (!user) {
-                throw new Error(`User with email ${creatorEmail} not found.`);
-            }
-            const userId = user.id;
 
-            // Save session info to WaNumber model
-            await this.db.WaNumber.create({
-                userId: userId,
-                sessionName: sessionId,
-                phoneNumber: phoneNumber || sessionId, // Use sessionId as fallback for QR sessions
-            });
 
             // Generate API token
             const token = randomUUID();

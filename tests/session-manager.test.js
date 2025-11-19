@@ -78,11 +78,7 @@ describe('SessionManager', () => {
             expect(result.sessionId).toBe(sessionId);
             expect(result.token).toBeDefined();
             expect(sessionManager.sessions.has(sessionId)).toBe(true);
-            expect(mockDbModels.WaNumber.create).toHaveBeenCalledWith({
-                userId: 1,
-                sessionName: sessionId,
-                phoneNumber: sessionId, // Falls back to sessionId
-            });
+
             expect(SocketManager).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.any(Object),
