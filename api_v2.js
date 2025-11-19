@@ -245,14 +245,30 @@ function initializeApiV2(services) {
     
     router.post('/pairing/start', requireAuth, [
         body('phoneNumber').isString().notEmpty().withMessage('phoneNumber is required'),
+        body('sessionName')
+            .optional()
+            .isString()
+            .matches(/^[a-zA-Z0-9_-]{3,30}$/)
+            .withMessage('sessionName must be 3-30 characters (letters, numbers, hyphens, underscores only)'),
     ], async (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return res.status(400).json({ status: 'error', errors: errors.array() });
         }
         try {
-            const { phoneNumber } = req.body;
+            const { phoneNumber, sessionName } = req.body;
             const creatorEmail = req.session.user.email;
+
+            // If custom sessionName provided, check if it already exists
+            if (sessionName) {
+                const existingSession = sessionManager.getSession(sessionName);
+                if (existingSession) {
+                    return res.status(409).json({
+                        status: 'error',
+                        message: `Session name "${sessionName}" already exists. Please choose a different name.`
+                    });
+                }
+            }
 
             // Check if there's already an active pairing session for this number
             const existingPairing = await phonePairing.findStalePairing(phoneNumber);
@@ -270,7 +286,7 @@ function initializeApiV2(services) {
                 });
             }
 
-            const { sessionId } = await phonePairing.createPairing(creatorEmail, phoneNumber);
+            const { sessionId } = await phonePairing.createPairing(creatorEmail, phoneNumber, sessionName);
             await sessionManager.createSession(sessionId, creatorEmail, phoneNumber);
             res.status(202).json({
                 status: 'success',

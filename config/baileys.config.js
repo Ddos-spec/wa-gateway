@@ -84,6 +84,11 @@ class BaileysConfig {
 
             // Fatal error codes that should NOT reconnect
             fatalStatusCodes: [401, 403, 428],
+
+            // Post-pairing restart codes (EXPECTED after successful pairing)
+            // Error 515 = "Stream Errored (restart required)" - normal after pairing
+            postPairingRestartCodes: [515],
+            postPairingWindow: 10000,            // 10 seconds window to detect post-pairing restart
         };
     }
 

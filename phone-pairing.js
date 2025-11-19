@@ -27,11 +27,25 @@ class PhonePairing {
      * Membuat permintaan pairing baru dan menyimpannya di Redis.
      * @param {string} userId - ID pengguna yang membuat permintaan.
      * @param {string} phoneNumber - Nomor telepon untuk pairing.
+     * @param {string} customSessionName - Optional custom session name (e.g., "WA-Marketing")
      * @returns {Object} Objek berisi sessionId.
      */
-    async createPairing(userId, phoneNumber) {
+    async createPairing(userId, phoneNumber, customSessionName = null) {
         const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
-        const sessionId = `pair_${formattedPhoneNumber.replace(/\D/g, '')}_${Date.now()}`;
+
+        // Use custom name if provided, otherwise generate default name
+        let sessionId;
+        if (customSessionName) {
+            // Validate custom name format
+            if (!/^[a-zA-Z0-9_-]{3,30}$/.test(customSessionName)) {
+                throw new Error('Session name must be 3-30 characters (letters, numbers, hyphens, underscores only)');
+            }
+            sessionId = customSessionName;
+        } else {
+            // Default: pair_{phone}_{timestamp}
+            sessionId = `pair_${formattedPhoneNumber.replace(/\D/g, '')}_${Date.now()}`;
+        }
+
         const key = this._getKey(sessionId);
 
         const newPairing = {
@@ -46,7 +60,7 @@ class PhonePairing {
         };
 
         await this.redis.set(key, newPairing, PAIRING_TTL);
-        this.log.info(`Phone pairing created for ${formattedPhoneNumber}`, 'PAIRING', { sessionId });
+        this.log.info(`Phone pairing created for ${formattedPhoneNumber}`, 'PAIRING', { sessionId, customName: !!customSessionName });
 
         return { sessionId };
     }
