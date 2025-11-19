@@ -66,6 +66,12 @@
                                     <div class="spinner-border text-primary" role="status"></div>
                                     <span class="ms-2">Waiting for code...</span>
                                 </div>
+                                <div id="countdownTimer" class="text-center mt-2 text-muted" style="display: none;">
+                                    <small><i class="bi bi-clock"></i> <span id="countdownText">Code valid for: 3:00</span></small>
+                                </div>
+                            </div>
+                            <div class="alert alert-warning" id="pairingStatus" style="display: none;">
+                                <i class="bi bi-hourglass-split"></i> <span id="pairingStatusText">Waiting for you to enter the code...</span>
                             </div>
                             <div class="d-grid">
                                 <button class="btn btn-secondary" id="backToStep1">Cancel & Go Back</button>

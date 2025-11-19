@@ -60,7 +60,7 @@ class ConnectionHandler {
      */
     async _handleConnectionUpdate(update, session) {
         try {
-            const { connection, lastDisconnect, qr } = update;
+            const { connection, lastDisconnect, qr, isNewLogin } = update;
 
             // Handle QR code or pairing code
             if (qr) {
@@ -70,7 +70,7 @@ class ConnectionHandler {
 
             // Handle connection open
             if (connection === 'open') {
-                await this._handleConnectionOpen(session);
+                await this._handleConnectionOpen(session, isNewLogin);
                 return;
             }
 
@@ -78,6 +78,28 @@ class ConnectionHandler {
             if (connection === 'close') {
                 await this._handleConnectionClose(lastDisconnect);
                 return;
+            }
+
+            // Handle connecting state (shows user is entering code)
+            if (connection === 'connecting' && this.isPhonePairing) {
+                this.logger.info(
+                    'Connection state changed to connecting - user may be entering code',
+                    this.sessionId
+                );
+
+                // Notify that pairing might be in progress
+                if (this.onPhonePairingUpdate) {
+                    this.onPhonePairingUpdate(this.sessionId, {
+                        status: 'PAIRING_IN_PROGRESS',
+                        detail: 'Attempting to connect... Please wait.'
+                    });
+                }
+
+                this.onStateChange(
+                    this.sessionId,
+                    'CONNECTING',
+                    'Connecting to WhatsApp...'
+                );
             }
 
             // Handle other connection states
@@ -181,27 +203,38 @@ class ConnectionHandler {
      * Handle connection open
      * @private
      */
-    async _handleConnectionOpen(session) {
+    async _handleConnectionOpen(session, isNewLogin) {
         try {
             const sock = this.socketManager.getSocket();
             const userName = sock.user?.name || 'Unknown';
+            const userJid = sock.user?.id || '';
 
             this.logger.success(
                 `Connection is now open for ${this.sessionId}`,
-                this.sessionId
+                this.sessionId,
+                { userName, userJid, isNewLogin }
             );
 
             let detailMessage = `Connected as ${userName}`;
 
             // Handle phone pairing success
             if (this.isPhonePairing) {
-                detailMessage = `Phone number ${this.phoneNumber} successfully paired!`;
+                detailMessage = `Phone number ${this.phoneNumber} successfully paired as ${userName}!`;
 
-                // Notify pairing success
+                this.logger.info(
+                    `Phone pairing successful: ${this.phoneNumber} -> ${userName} (${userJid})`,
+                    this.sessionId
+                );
+
+                // Notify pairing success with complete information
                 if (this.onPhonePairingUpdate) {
                     this.onPhonePairingUpdate(this.sessionId, {
                         status: 'CONNECTED',
-                        detail: detailMessage
+                        detail: detailMessage,
+                        phoneNumber: this.phoneNumber,
+                        userName: userName,
+                        userJid: userJid,
+                        isNewLogin: isNewLogin
                     });
                 }
 
@@ -210,6 +243,8 @@ class ConnectionHandler {
                     event: 'phone-pair-success',
                     sessionId: this.sessionId,
                     phoneNumber: this.phoneNumber,
+                    userName: userName,
+                    userJid: userJid,
                     message: 'Phone number successfully paired.'
                 });
             }

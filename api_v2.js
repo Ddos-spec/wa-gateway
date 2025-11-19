@@ -253,6 +253,23 @@ function initializeApiV2(services) {
         try {
             const { phoneNumber } = req.body;
             const creatorEmail = req.session.user.email;
+
+            // Check if there's already an active pairing session for this number
+            const existingPairing = await phonePairing.findStalePairing(phoneNumber);
+            if (existingPairing) {
+                logger.info('Found existing pairing session, reusing it', 'API_V2', {
+                    sessionId: existingPairing.sessionId,
+                    phoneNumber
+                });
+
+                // Return existing session instead of creating duplicate
+                return res.status(202).json({
+                    status: 'success',
+                    message: 'Returning existing pairing session.',
+                    sessionId: existingPairing.sessionId
+                });
+            }
+
             const { sessionId } = await phonePairing.createPairing(creatorEmail, phoneNumber);
             await sessionManager.createSession(sessionId, creatorEmail, phoneNumber);
             res.status(202).json({

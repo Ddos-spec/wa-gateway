@@ -9,8 +9,13 @@ document.addEventListener('auth-success', function() {
     const backToStep1 = document.getElementById('backToStep1');
     const pairedPhoneNumber = document.getElementById('pairedPhoneNumber');
     const pairedSessionId = document.getElementById('pairedSessionId');
+    const countdownTimer = document.getElementById('countdownTimer');
+    const countdownText = document.getElementById('countdownText');
+    const pairingStatus = document.getElementById('pairingStatus');
+    const pairingStatusText = document.getElementById('pairingStatusText');
 
     let ws = null;
+    let countdownInterval = null;
 
     // Function to connect to WebSocket and handle real-time updates
     async function connectWebSocket(sessionId) {
@@ -45,19 +50,67 @@ document.addEventListener('auth-success', function() {
                     // Update pairing code display
                     if (data.pairingCode) {
                         pairingCodeDisplay.innerHTML = `<strong>${data.pairingCode}</strong>`;
+
+                        // Start countdown timer (3 minutes = 180 seconds)
+                        startCountdownTimer(180);
+
+                        // Show pairing status
+                        if (pairingStatus) {
+                            pairingStatus.style.display = 'block';
+                            pairingStatus.className = 'alert alert-warning';
+                            pairingStatusText.innerHTML = '<i class="bi bi-hourglass-split"></i> Waiting for you to enter the code in WhatsApp...';
+                        }
+                    }
+
+                    // Handle pairing in progress (user entering code)
+                    if (data.status === 'PAIRING_IN_PROGRESS') {
+                        if (pairingStatus) {
+                            pairingStatus.className = 'alert alert-info';
+                            pairingStatusText.innerHTML = '<i class="bi bi-arrow-repeat"></i> Connecting... Please wait.';
+                        }
+                    }
+
+                    // Handle connecting state
+                    if (data.status === 'CONNECTING') {
+                        if (pairingStatus) {
+                            pairingStatus.className = 'alert alert-info';
+                            pairingStatusText.innerHTML = '<i class="bi bi-arrow-repeat"></i> Establishing connection...';
+                        }
                     }
 
                     // Handle connection success
                     if (data.status === 'CONNECTED') {
+                        // Stop countdown
+                        if (countdownInterval) {
+                            clearInterval(countdownInterval);
+                            countdownInterval = null;
+                        }
+
+                        // Show success feedback
+                        if (pairingStatus) {
+                            pairingStatus.className = 'alert alert-success';
+                            pairingStatusText.innerHTML = '<i class="bi bi-check-circle"></i> Successfully connected! Redirecting...';
+                        }
+
+                        // Close WebSocket and transition to success screen
                         if (ws) ws.close();
-                        pairedPhoneNumber.textContent = data.phoneNumber || 'N/A';
-                        pairedSessionId.textContent = sessionId;
-                        step2.style.display = 'none';
-                        step3.style.display = 'block';
+
+                        setTimeout(() => {
+                            pairedPhoneNumber.textContent = data.phoneNumber || 'N/A';
+                            pairedSessionId.textContent = sessionId;
+                            step2.style.display = 'none';
+                            step3.style.display = 'block';
+                        }, 1000);
                     }
-                    
+
                     // Handle error or timeout
                     if (data.status === 'ERROR' || data.status === 'TIMEOUT') {
+                         // Stop countdown
+                         if (countdownInterval) {
+                             clearInterval(countdownInterval);
+                             countdownInterval = null;
+                         }
+
                          if (ws) ws.close();
                          alert(`Pairing failed: ${data.detail || 'An unknown error occurred.'}`);
                          // Optionally, reset the view
@@ -88,9 +141,17 @@ document.addEventListener('auth-success', function() {
 
     // Handle form submission - Step 1
     if (pairingForm) {
+        let isSubmitting = false; // Debounce flag
+
         pairingForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
+            // Debounce: prevent double submission
+            if (isSubmitting) {
+                console.log('Pairing request already in progress, ignoring duplicate');
+                return;
+            }
+
             const phoneNumber = phoneNumberInput.value.trim();
             if (!phoneNumber) {
                 alert('Please enter a phone number');
@@ -100,10 +161,11 @@ document.addEventListener('auth-success', function() {
             const submitButton = this.querySelector('button[type="submit"]');
             submitButton.disabled = true;
             submitButton.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Initiating...';
+            isSubmitting = true;
 
             try {
                 const formattedPhone = phoneNumber.replace(/\D/g, '');
-                
+
                 // Use the new, correct API v2 endpoint
                 const response = await fetch('/api/v2/pairing/start', {
                     method: 'POST',
@@ -123,16 +185,17 @@ document.addEventListener('auth-success', function() {
                 }
 
                 const data = await response.json();
-                
+
                 step1.style.display = 'none';
                 step2.style.display = 'block';
-                
+
                 // Start listening for real-time updates instead of polling
                 connectWebSocket(data.sessionId);
 
             } catch (error) {
                 console.error('Error initiating pairing:', error);
                 alert('Error initiating pairing: ' + error.message);
+                isSubmitting = false; // Reset flag on error
             } finally {
                 submitButton.disabled = false;
                 submitButton.textContent = 'Generate Pairing Code';
@@ -140,15 +203,71 @@ document.addEventListener('auth-success', function() {
         });
     }
 
+    // Function to start countdown timer
+    function startCountdownTimer(seconds) {
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+
+        let remaining = seconds;
+
+        if (countdownTimer) {
+            countdownTimer.style.display = 'block';
+        }
+
+        countdownInterval = setInterval(() => {
+            remaining--;
+
+            const minutes = Math.floor(remaining / 60);
+            const secs = remaining % 60;
+
+            if (countdownText) {
+                countdownText.textContent = `Code valid for: ${minutes}:${secs.toString().padStart(2, '0')}`;
+            }
+
+            if (remaining <= 0) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+
+                if (countdownText) {
+                    countdownText.textContent = 'Code expired';
+                }
+
+                if (pairingStatus) {
+                    pairingStatus.className = 'alert alert-danger';
+                    pairingStatusText.innerHTML = '<i class="bi bi-x-circle"></i> Code expired. Please try again.';
+                }
+            }
+        }, 1000);
+    }
+
     // Back to step 1
     if (backToStep1) {
         backToStep1.addEventListener('click', function() {
+            // Stop countdown
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+
             if (ws) {
                 ws.close();
             }
+
             step2.style.display = 'none';
             step1.style.display = 'block';
             pairingCodeDisplay.innerHTML = `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><span class="ms-2">Waiting for code...</span>`;
+
+            // Reset countdown display
+            if (countdownTimer) {
+                countdownTimer.style.display = 'none';
+            }
+
+            // Reset pairing status
+            if (pairingStatus) {
+                pairingStatus.style.display = 'none';
+                pairingStatus.className = 'alert alert-warning';
+            }
         });
     }
 });
