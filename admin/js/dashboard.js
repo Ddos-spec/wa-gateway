@@ -209,11 +209,17 @@ document.addEventListener('auth-success', function() {
     const pairingError = document.getElementById('pairing-error');
     const errorMessage = document.getElementById('error-message');
 
+    let mainModalCountdownTimer = null;
+
     // Reset modal on close
     modal.addEventListener('hidden.bs.modal', function() {
         if (pairingWs) {
             pairingWs.close();
             pairingWs = null;
+        }
+        if (mainModalCountdownTimer) {
+            clearInterval(mainModalCountdownTimer);
+            mainModalCountdownTimer = null;
         }
         currentSessionId = null;
         phoneNumberInput.value = '';
@@ -224,6 +230,13 @@ document.addEventListener('auth-success', function() {
         pairingError.style.display = 'none';
         startPairingBtn.disabled = false;
         startPairingBtn.innerHTML = '<i class="bi bi-play-circle"></i> Start Pairing';
+
+        // Reset countdown timer display
+        const countdownEl = document.getElementById('countdown-timer');
+        if (countdownEl) {
+            countdownEl.style.display = 'none';
+            countdownEl.textContent = '';
+        }
     });
 
     startPairingBtn.addEventListener('click', async function() {
@@ -278,39 +291,77 @@ document.addEventListener('auth-success', function() {
                 statusMessage.textContent = 'Waiting for pairing code...';
             };
 
+            let pairingCodeReceived = false;
+
             pairingWs.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
 
-                    if (data.pairingCode) {
+                    // Handle pairing code display (only once)
+                    if (data.pairingCode && !pairingCodeReceived) {
+                        pairingCodeReceived = true;
+
                         // Show pairing code
                         pairingForm.style.display = 'none';
                         pairingCodeDisplay.style.display = 'block';
                         pairingCodeEl.textContent = data.pairingCode;
                         statusMessage.textContent = 'Enter this code in WhatsApp';
+
+                        // Start countdown timer (3 minutes)
+                        startMainModalCountdownTimer(180);
                     }
 
-                    if (data.event === 'session-state-changed' && data.sessionId === currentSessionId) {
-                        if (data.status === 'CONNECTED') {
-                            // Success!
-                            pairingStatus.style.display = 'none';
-                            pairingCodeDisplay.style.display = 'none';
-                            pairingSuccess.style.display = 'block';
+                    // Handle connection status updates
+                    // The pairing update messages have status field directly, not event field
+                    if (data.status === 'CONNECTED' && data.sessionId === currentSessionId) {
+                        // Success!
+                        if (mainModalCountdownTimer) clearInterval(mainModalCountdownTimer);
 
-                            setTimeout(() => {
-                                const modalInstance = bootstrap.Modal.getInstance(modal);
-                                modalInstance.hide();
-                                fetchSessions(); // Refresh session list
-                            }, 2000);
-                        } else if (data.status === 'ERROR' || data.status === 'FAILED') {
-                            throw new Error(data.detail || 'Pairing failed');
-                        }
+                        pairingStatus.style.display = 'none';
+                        pairingCodeDisplay.style.display = 'none';
+                        pairingSuccess.style.display = 'block';
+
+                        setTimeout(() => {
+                            const modalInstance = bootstrap.Modal.getInstance(modal);
+                            modalInstance.hide();
+                            fetchSessions(); // Refresh session list
+                        }, 2000);
+                    } else if (data.status === 'ERROR' || data.status === 'FAILED' || data.status === 'PAIRING_FAILED') {
+                        if (mainModalCountdownTimer) clearInterval(mainModalCountdownTimer);
+                        throw new Error(data.detail || 'Pairing failed');
                     }
                 } catch (error) {
                     console.error('Pairing error:', error);
                     showPairingError(error.message);
                 }
             };
+
+            function startMainModalCountdownTimer(seconds) {
+                let remaining = seconds;
+                const countdownEl = document.getElementById('countdown-timer');
+
+                if (!countdownEl) {
+                    console.warn('Countdown timer element not found');
+                    return;
+                }
+
+                countdownEl.style.display = 'block';
+
+                mainModalCountdownTimer = setInterval(() => {
+                    remaining--;
+
+                    const minutes = Math.floor(remaining / 60);
+                    const secs = remaining % 60;
+                    countdownEl.textContent = `Code valid for: ${minutes}:${secs.toString().padStart(2, '0')}`;
+
+                    if (remaining <= 0) {
+                        clearInterval(mainModalCountdownTimer);
+                        mainModalCountdownTimer = null;
+                        countdownEl.textContent = 'Code expired. Please try again.';
+                        showPairingError('Pairing code expired. Please try again.');
+                    }
+                }, 1000);
+            }
 
             pairingWs.onerror = (error) => {
                 console.error('WebSocket error:', error);
@@ -356,6 +407,7 @@ document.addEventListener('auth-success', function() {
     const pairingModal = document.getElementById('pairingModal');
 
     let modalWs = null;
+    let modalCountdownTimer = null;
 
     // Reset modal when closed
     pairingModal.addEventListener('hidden.bs.modal', function () {
@@ -363,11 +415,22 @@ document.addEventListener('auth-success', function() {
             modalWs.close();
             modalWs = null;
         }
+        if (modalCountdownTimer) {
+            clearInterval(modalCountdownTimer);
+            modalCountdownTimer = null;
+        }
         modalStep1.style.display = 'block';
         modalStep2.style.display = 'none';
         modalStep3.style.display = 'none';
         modalPhoneNumberInput.value = '';
         modalPairingCodeDisplay.innerHTML = '<div class="spinner-border text-primary" role="status"></div><span class="ms-2">Waiting for code...</span>';
+
+        // Reset modal countdown timer display
+        const modalCountdownEl = document.getElementById('modal-countdown-timer');
+        if (modalCountdownEl) {
+            modalCountdownEl.style.display = 'none';
+            modalCountdownEl.textContent = '';
+        }
     });
 
     // Function to connect to WebSocket for pairing updates
@@ -395,19 +458,28 @@ document.addEventListener('auth-success', function() {
                 }));
             };
 
+            let modalCodeReceived = false;
+
             modalWs.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
                     console.log('Received modal pairing update:', data);
 
-                    // Update pairing code display
-                    if (data.pairingCode) {
+                    // Update pairing code display (only once to prevent regeneration loop)
+                    if (data.pairingCode && !modalCodeReceived) {
+                        modalCodeReceived = true;
                         modalPairingCodeDisplay.innerHTML = `<strong>${data.pairingCode}</strong>`;
+
+                        // Start countdown timer (3 minutes)
+                        startModalCountdownTimer(180);
                     }
 
                     // Handle connection success
+                    // The pairing update messages have status field directly, not event field
                     if (data.status === 'CONNECTED') {
+                        if (modalCountdownTimer) clearInterval(modalCountdownTimer);
                         if (modalWs) modalWs.close();
+
                         modalPairedPhoneNumber.textContent = data.phoneNumber || 'N/A';
                         modalPairedSessionId.textContent = sessionId;
                         modalStep2.style.display = 'none';
@@ -418,7 +490,8 @@ document.addEventListener('auth-success', function() {
                     }
 
                     // Handle error or timeout
-                    if (data.status === 'ERROR' || data.status === 'TIMEOUT') {
+                    if (data.status === 'ERROR' || data.status === 'TIMEOUT' || data.status === 'PAIRING_FAILED') {
+                        if (modalCountdownTimer) clearInterval(modalCountdownTimer);
                         if (modalWs) modalWs.close();
                         alert(`Pairing failed: ${data.detail || 'An unknown error occurred.'}`);
                         modalStep2.style.display = 'none';
@@ -429,6 +502,37 @@ document.addEventListener('auth-success', function() {
                     console.error('Error processing modal WebSocket message:', error);
                 }
             };
+
+            function startModalCountdownTimer(seconds) {
+                let remaining = seconds;
+                const countdownEl = document.getElementById('modal-countdown-timer');
+
+                if (!countdownEl) {
+                    console.warn('Modal countdown timer element not found');
+                    return;
+                }
+
+                countdownEl.style.display = 'block';
+
+                modalCountdownTimer = setInterval(() => {
+                    remaining--;
+
+                    const minutes = Math.floor(remaining / 60);
+                    const secs = remaining % 60;
+                    countdownEl.textContent = `Code valid for: ${minutes}:${secs.toString().padStart(2, '0')}`;
+
+                    if (remaining <= 0) {
+                        clearInterval(modalCountdownTimer);
+                        modalCountdownTimer = null;
+                        countdownEl.textContent = 'Code expired. Please try again.';
+
+                        if (modalWs) modalWs.close();
+                        alert('Pairing code expired. Please try again.');
+                        modalStep2.style.display = 'none';
+                        modalStep1.style.display = 'block';
+                    }
+                }, 1000);
+            }
 
             modalWs.onerror = (error) => {
                 console.error('Modal WebSocket error:', error);
