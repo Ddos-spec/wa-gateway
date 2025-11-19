@@ -21,6 +21,12 @@ const contactController = require('./controllers/contactController')
 
 // API endpoint to check if server is alive
 routes.get('/ping', healthController.ping)
+
+// API endpoint to check API key validity
+routes.get('/checkApiKey', middleware.apikey, (req, res) => {
+  res.json({ success: true, message: 'API key is valid' })
+})
+
 // API basic callback
 if (enableLocalCallbackExample) {
   routes.post('/localCallbackExample', [middleware.apikey, middleware.rateLimiter], healthController.localCallbackExample)

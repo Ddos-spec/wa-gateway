@@ -1,6 +1,6 @@
 import './App.scss';
 import "../src/styles/main.scss";
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import SocketConnection from './SocketConnection'
 import { checkApiKey } from './clients/ApiClient'
 import ErrorModal from './components/error_modal/ErrorModal'; // Import your ErrorModal component
@@ -11,11 +11,7 @@ function App() {
   const [errorModalOpen, setErrorModalOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
-  useEffect(() => {
-    handleCheckApiKey();
-  }, []);
-
-  const handleCheckApiKey = async () => {
+  const handleCheckApiKey = useCallback(async () => {
     // We handle the case there is no spi key
     if (enteredApiKey === '') {
       try{
@@ -41,7 +37,11 @@ function App() {
       setErrorMessage(error.message || 'An unexpected error occurred.');
       setErrorModalOpen(true);
     }
-  };
+  }, [enteredApiKey]);
+
+  useEffect(() => {
+    handleCheckApiKey();
+  }, [handleCheckApiKey]);
 
   return (
     <div className="App">
