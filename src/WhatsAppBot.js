@@ -1,11 +1,9 @@
-import pkg from "@whiskeysockets/baileys";
-const {
-    default: makeWASocket,
+import makeWASocket, {
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
     DisconnectReason,
     delay
-} = pkg;
+} from "@whiskeysockets/baileys";
 import pino from "pino";
 import readline from "readline";
 // Queue system removed - direct execution
