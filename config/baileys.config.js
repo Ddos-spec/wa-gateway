@@ -25,10 +25,10 @@ class BaileysConfig {
             printQRInTerminal: false,
 
             // Connection Settings
-            qrTimeout: 30000,                    // 30 seconds for QR timeout
-            connectTimeoutMs: 30000,             // 30 seconds connection timeout
+            qrTimeout: 60000,                    // 60 seconds for QR/Pairing timeout (reduced from 30s to allow proper pairing)
+            connectTimeoutMs: 60000,             // 60 seconds connection timeout (increased for pairing flow)
             keepAliveIntervalMs: 25000,          // 25 seconds keep-alive (improved from 45s)
-            retryRequestDelayMs: 3000,           // 3 seconds retry delay
+            retryRequestDelayMs: 2000,           // 2 seconds retry delay (reduced from 3s)
             maxMsgRetryCount: 3,                 // Max 3 retries for messages
 
             // Privacy & Performance Settings
@@ -44,6 +44,9 @@ class BaileysConfig {
 
             // Query Settings
             fireInitQueries: true,               // Enable init queries for proper handshake
+
+            // Mobile API options for pairing code
+            mobile: false,                       // Ensure we're using web API for pairing
         };
 
         // Development-specific overrides

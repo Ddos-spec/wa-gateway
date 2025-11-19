@@ -32,6 +32,11 @@ class SocketManager {
 
         // WebSocket state constants
         this.wsStates = baileysConfig.getWebSocketStates();
+
+        // Pairing code state - prevent duplicates
+        this.pairingCodeRequested = false;
+        this.lastPairingCode = null;
+        this.pairingCodeTimestamp = null;
     }
 
     /**
@@ -209,7 +214,23 @@ class SocketManager {
             throw new Error('Socket not initialized');
         }
 
+        // Prevent duplicate requests within 5 seconds
+        const now = Date.now();
+        if (this.pairingCodeRequested && this.pairingCodeTimestamp) {
+            const timeSinceLastRequest = now - this.pairingCodeTimestamp;
+            if (timeSinceLastRequest < 5000) {
+                this.logger.debug(
+                    'Pairing code already requested recently, returning cached code',
+                    this.sessionId
+                );
+                return this.lastPairingCode;
+            }
+        }
+
         try {
+            this.pairingCodeRequested = true;
+            this.pairingCodeTimestamp = now;
+
             this.logger.info(
                 `Requesting pairing code for ${this.phoneNumber}...`,
                 this.sessionId
@@ -217,6 +238,8 @@ class SocketManager {
 
             const code = await this.sock.requestPairingCode(this.phoneNumber);
             const formattedCode = code.slice(0, 4) + '-' + code.slice(4);
+
+            this.lastPairingCode = formattedCode;
 
             this.logger.info(
                 `Pairing code generated: ${formattedCode}`,
@@ -230,6 +253,7 @@ class SocketManager {
                 `Failed to request pairing code: ${error.message}`,
                 this.sessionId
             );
+            this.pairingCodeRequested = false; // Reset on error
             throw error;
         }
     }
@@ -267,6 +291,11 @@ class SocketManager {
 
         // Stop health monitoring
         this.stopHealthMonitoring();
+
+        // Reset pairing code state
+        this.pairingCodeRequested = false;
+        this.lastPairingCode = null;
+        this.pairingCodeTimestamp = null;
 
         // Close socket
         if (this.sock) {
