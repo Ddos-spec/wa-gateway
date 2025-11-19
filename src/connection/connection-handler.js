@@ -25,6 +25,9 @@ class ConnectionHandler {
         this.sessionId = socketManager.sessionId;
         this.phoneNumber = socketManager.phoneNumber;
         this.isPhonePairing = !!this.phoneNumber;
+
+        // Pairing state - prevent multiple pairing code requests
+        this.pairingCodeRequested = false;
     }
 
     /**
@@ -103,6 +106,17 @@ class ConnectionHandler {
     async _handleQrOrPairing(qr) {
         try {
             if (this.isPhonePairing) {
+                // Prevent multiple pairing code requests
+                if (this.pairingCodeRequested) {
+                    this.logger.debug(
+                        'Pairing code already requested, ignoring duplicate QR event',
+                        this.sessionId
+                    );
+                    return;
+                }
+
+                this.pairingCodeRequested = true;
+
                 // Request pairing code
                 this.logger.info(
                     `Requesting pairing code for ${this.phoneNumber}...`,
@@ -152,6 +166,8 @@ class ConnectionHandler {
                 `Failed to handle QR/pairing: ${error.message}`,
                 this.sessionId
             );
+
+            this.pairingCodeRequested = false; // Reset flag on error
 
             this.onStateChange(
                 this.sessionId,
@@ -364,6 +380,7 @@ class ConnectionHandler {
     cleanup() {
         this.socketManager.stopHealthMonitoring();
         this.reconnectStrategy.cleanup(this.sessionId);
+        this.pairingCodeRequested = false; // Reset flag
         this.logger.debug('Connection handler cleaned up', this.sessionId);
     }
 }
