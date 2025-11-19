@@ -84,18 +84,21 @@ class ConnectionHandler {
                     this.sessionId
                 );
 
+                // Mark pairing as in progress - this helps detect post-pairing restart
+                this.reconnectStrategy.markPairingSuccess(this.sessionId);
+
                 // Notify that pairing might be in progress
                 if (this.onPhonePairingUpdate) {
                     this.onPhonePairingUpdate(this.sessionId, {
-                        status: 'PAIRING_IN_PROGRESS',
-                        detail: 'Attempting to connect... Please wait.'
+                        status: 'CODE_ENTERED',
+                        detail: 'Code entered! Connecting... (< 5 seconds)'
                     });
                 }
 
                 this.onStateChange(
                     this.sessionId,
                     'CONNECTING',
-                    'Connecting to WhatsApp...'
+                    'Code entered! Connecting...'
                 );
             }
 
@@ -266,26 +269,48 @@ class ConnectionHandler {
             // Stop health monitoring
             this.socketManager.stopHealthMonitoring();
 
-            // Determine if should reconnect
-            const { shouldReconnect, reason, statusCode, isFatal } =
-                this.reconnectStrategy.shouldReconnect(lastDisconnect);
+            // Determine if should reconnect (pass sessionId for post-pairing detection)
+            const { shouldReconnect, reason, statusCode, isFatal, isPostPairingRestart } =
+                this.reconnectStrategy.shouldReconnect(lastDisconnect, this.sessionId);
 
-            this.logger.warn(
-                `Connection closed. Reason: ${reason}, statusCode: ${statusCode}. Will reconnect: ${shouldReconnect}`,
-                this.sessionId
-            );
+            // Log with context about post-pairing restart
+            if (isPostPairingRestart) {
+                this.logger.info(
+                    `Post-pairing restart detected (Error ${statusCode}). This is EXPECTED after successful pairing. Reconnecting immediately...`,
+                    this.sessionId
+                );
 
-            // Update state
-            this.onStateChange(
-                this.sessionId,
-                'DISCONNECTED',
-                'Connection closed.',
-                '',
-                reason
-            );
+                // Notify user that pairing is completing
+                if (this.isPhonePairing && this.onPhonePairingUpdate) {
+                    this.onPhonePairingUpdate(this.sessionId, {
+                        status: 'RESTARTING',
+                        detail: 'Pairing successful! Finalizing connection...'
+                    });
+                }
+
+                this.onStateChange(
+                    this.sessionId,
+                    'RESTARTING',
+                    'Pairing successful! Finalizing connection...'
+                );
+            } else {
+                this.logger.warn(
+                    `Connection closed. Reason: ${reason}, statusCode: ${statusCode}. Will reconnect: ${shouldReconnect}`,
+                    this.sessionId
+                );
+
+                // Update state
+                this.onStateChange(
+                    this.sessionId,
+                    'DISCONNECTED',
+                    'Connection closed.',
+                    '',
+                    reason
+                );
+            }
 
             if (shouldReconnect) {
-                // Schedule reconnection
+                // Schedule reconnection (immediate for post-pairing restart)
                 const result = this.reconnectStrategy.scheduleReconnect(
                     this.sessionId,
                     async () => {
@@ -295,16 +320,25 @@ class ConnectionHandler {
                         this.onWebhookEvent({
                             event: 'reconnection-attempt',
                             sessionId: this.sessionId,
-                            reason
+                            reason,
+                            isPostPairingRestart
                         });
-                    }
+                    },
+                    { isPostPairingRestart }
                 );
 
                 if (result.scheduled) {
-                    this.logger.info(
-                        `Reconnection scheduled in ${result.delay}ms (attempt ${result.attempt})`,
-                        this.sessionId
-                    );
+                    if (isPostPairingRestart) {
+                        this.logger.info(
+                            `Post-pairing reconnection scheduled in ${result.delay}ms (immediate)`,
+                            this.sessionId
+                        );
+                    } else {
+                        this.logger.info(
+                            `Reconnection scheduled in ${result.delay}ms (attempt ${result.attempt})`,
+                            this.sessionId
+                        );
+                    }
                 } else {
                     this.logger.error(
                         `Reconnection not scheduled: ${result.reason}`,

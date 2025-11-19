@@ -13,19 +13,61 @@ class ReconnectStrategy {
         this.maxAttempts = config.maxAttempts || 10;           // Max attempts
         this.fatalStatusCodes = config.fatalStatusCodes || [401, 403, 428];
 
+        // Post-pairing restart codes (EXPECTED disconnects after successful pairing)
+        this.postPairingRestartCodes = config.postPairingRestartCodes || [515];
+        this.postPairingWindow = config.postPairingWindow || 10000; // 10 seconds window after pairing
+
         // Track reconnection attempts per session
         this.retries = new Map();
         this.reconnectTimers = new Map();
+
+        // Track pairing success timestamps for post-pairing detection
+        this.pairingSuccessTimestamps = new Map();
+    }
+
+    /**
+     * Mark pairing as successful for a session
+     * This helps detect post-pairing expected disconnects (like error 515)
+     * @param {string} sessionId - Session identifier
+     */
+    markPairingSuccess(sessionId) {
+        this.pairingSuccessTimestamps.set(sessionId, Date.now());
+    }
+
+    /**
+     * Check if disconnect is a post-pairing restart
+     * Error 515 after successful pairing is EXPECTED - it means "restart required"
+     * @param {string} sessionId - Session identifier
+     * @param {number} statusCode - Disconnect status code
+     * @returns {boolean} True if this is a post-pairing restart
+     */
+    isPostPairingRestart(sessionId, statusCode) {
+        if (!this.postPairingRestartCodes.includes(statusCode)) {
+            return false;
+        }
+
+        const pairingTime = this.pairingSuccessTimestamps.get(sessionId);
+        if (!pairingTime) {
+            return false;
+        }
+
+        const timeSincePairing = Date.now() - pairingTime;
+        return timeSincePairing <= this.postPairingWindow;
     }
 
     /**
      * Determine if should reconnect based on error
      * @param {Object} lastDisconnect - Last disconnect info from Baileys
-     * @returns {Object} { shouldReconnect, reason, statusCode }
+     * @param {string} sessionId - Session identifier (optional, for post-pairing detection)
+     * @returns {Object} { shouldReconnect, reason, statusCode, isPostPairingRestart }
      */
-    shouldReconnect(lastDisconnect) {
+    shouldReconnect(lastDisconnect, sessionId = null) {
         const statusCode = this._extractStatusCode(lastDisconnect);
         const reason = this._extractReason(lastDisconnect);
+
+        // Check if it's a post-pairing restart (expected disconnect)
+        const isPostPairingRestart = sessionId ?
+            this.isPostPairingRestart(sessionId, statusCode) : false;
 
         // Check if it's a fatal error
         const isFatal = this.fatalStatusCodes.includes(statusCode);
@@ -34,7 +76,8 @@ class ReconnectStrategy {
             shouldReconnect: !isFatal,
             reason,
             statusCode,
-            isFatal
+            isFatal,
+            isPostPairingRestart
         };
     }
 
@@ -42,14 +85,17 @@ class ReconnectStrategy {
      * Schedule reconnection with exponential backoff
      * @param {string} sessionId - Session identifier
      * @param {Function} reconnectFn - Function to call for reconnection
+     * @param {Object} options - Options { isPostPairingRestart: boolean }
      * @returns {Object} { delay, attempt }
      */
-    scheduleReconnect(sessionId, reconnectFn) {
+    scheduleReconnect(sessionId, reconnectFn, options = {}) {
+        const { isPostPairingRestart = false } = options;
+
         // Get current retry count
         const attempt = this.getRetryCount(sessionId);
 
-        // Check if max attempts reached
-        if (attempt >= this.maxAttempts) {
+        // Check if max attempts reached (skip for post-pairing restart)
+        if (!isPostPairingRestart && attempt >= this.maxAttempts) {
             return {
                 scheduled: false,
                 reason: 'Max reconnection attempts reached',
@@ -57,8 +103,15 @@ class ReconnectStrategy {
             };
         }
 
-        // Calculate delay with exponential backoff
-        const delay = this.calculateDelay(attempt);
+        // Calculate delay
+        let delay;
+        if (isPostPairingRestart) {
+            // IMMEDIATE reconnect for post-pairing (< 100ms)
+            delay = 50; // 50ms minimal delay for safety
+        } else {
+            // Normal exponential backoff
+            delay = this.calculateDelay(attempt);
+        }
 
         // Clear any existing timer
         this.cancelScheduledReconnect(sessionId);
@@ -67,8 +120,9 @@ class ReconnectStrategy {
         const timer = setTimeout(async () => {
             try {
                 await reconnectFn();
-                // On success, reset retry count
+                // On success, reset retry count and clear pairing timestamp
                 this.resetRetries(sessionId);
+                this.pairingSuccessTimestamps.delete(sessionId);
             } catch (error) {
                 // On failure, increment will happen on next call
                 console.error(`Reconnection failed for ${sessionId}:`, error.message);
@@ -81,13 +135,16 @@ class ReconnectStrategy {
         // Store timer reference
         this.reconnectTimers.set(sessionId, timer);
 
-        // Increment retry count
-        this.incrementRetries(sessionId);
+        // Increment retry count (but don't count post-pairing restart as retry)
+        if (!isPostPairingRestart) {
+            this.incrementRetries(sessionId);
+        }
 
         return {
             scheduled: true,
             delay,
-            attempt: attempt + 1
+            attempt: isPostPairingRestart ? 0 : attempt + 1,
+            isPostPairingRestart
         };
     }
 
@@ -169,6 +226,7 @@ class ReconnectStrategy {
     cleanup(sessionId) {
         this.cancelScheduledReconnect(sessionId);
         this.resetRetries(sessionId);
+        this.pairingSuccessTimestamps.delete(sessionId);
     }
 
     /**
@@ -180,8 +238,9 @@ class ReconnectStrategy {
             this.cancelScheduledReconnect(sessionId);
         }
 
-        // Clear retry counts
+        // Clear retry counts and pairing timestamps
         this.retries.clear();
+        this.pairingSuccessTimestamps.clear();
     }
 
     /**
