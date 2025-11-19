@@ -152,9 +152,23 @@ document.addEventListener('auth-success', function() {
                 return;
             }
 
+            const sessionName = document.getElementById('sessionName').value.trim();
             const phoneNumber = phoneNumberInput.value.trim();
+
+            if (!sessionName) {
+                alert('Please enter a session name');
+                return;
+            }
+
             if (!phoneNumber) {
                 alert('Please enter a phone number');
+                return;
+            }
+
+            // Validate session name format
+            const sessionNameRegex = /^[a-zA-Z0-9_-]{3,30}$/;
+            if (!sessionNameRegex.test(sessionName)) {
+                alert('Session name must be 3-30 characters long and contain only letters, numbers, hyphens, or underscores.');
                 return;
             }
 
@@ -171,7 +185,10 @@ document.addEventListener('auth-success', function() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
-                    body: JSON.stringify({ phoneNumber: formattedPhone })
+                    body: JSON.stringify({
+                        phoneNumber: formattedPhone,
+                        sessionName: sessionName
+                    })
                 });
 
                 if (response.status === 401) {

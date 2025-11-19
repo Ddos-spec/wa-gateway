@@ -41,8 +41,17 @@
                             <h4>Step 1: Enter Your WhatsApp Number</h4>
                             <form id="pairingForm">
                                 <div class="mb-3">
+                                    <label for="sessionName" class="form-label">Session Name</label>
+                                    <input type="text" class="form-control" id="sessionName"
+                                        placeholder="e.g., WA-Marketing, Customer-Service, Sales-Team-1"
+                                        pattern="^[a-zA-Z0-9_-]{3,30}$" required>
+                                    <div class="form-text">
+                                        3-30 characters. Use letters, numbers, hyphens, or underscores only.
+                                    </div>
+                                </div>
+                                <div class="mb-3">
                                     <label for="phoneNumber" class="form-label">WhatsApp Number</label>
-                                    <input type="tel" class="form-control" id="phoneNumber" 
+                                    <input type="tel" class="form-control" id="phoneNumber"
                                         placeholder="e.g., +6281234567890" required>
                                     <div class="form-text">
                                         Enter in international format (e.g., +6281234567890)
