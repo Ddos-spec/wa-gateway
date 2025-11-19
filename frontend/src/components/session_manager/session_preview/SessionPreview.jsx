@@ -1,6 +1,6 @@
 import "./SessionPreview.scss";
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import {
   getSessionStatus,
   getSessionQr,
@@ -57,7 +57,7 @@ const SessionPreview = ({
     // Process 'webhookEvent' from the server
     console.log('Unhandled data from webhook');
     console.log(webSocketData);
-  }, [webSocketData]);
+  }, [webSocketData, selectedSessionId]);
 
   useEffect( () => {
     async function initializeSessionInfo()
@@ -83,7 +83,7 @@ const SessionPreview = ({
     if (selectedSessionId) {
       initializeSessionInfo();
     }
-  }, [selectedSessionId]);
+  }, [selectedSessionId, apiKey.apiKey]);
 
   const handleRestartSession = async () => {
     try {

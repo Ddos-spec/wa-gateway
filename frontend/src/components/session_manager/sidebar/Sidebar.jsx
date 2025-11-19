@@ -1,5 +1,5 @@
 import './Sidebar.scss'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { getAllSessions, terminateAllSessions, terminateInactiveSessions } from '../../../clients/ApiClient'
 import Modal from './modal/Modal'
 import ErrorModal from '../../error_modal/ErrorModal'
@@ -20,6 +20,20 @@ const Sidebar = ({
   const handleCloseMenu = () => {
     setCloseMenu(!closeMenu)
   }
+
+  const reloadSessions = useCallback(async () => {
+    try {
+      await getAllSessions(apiKey.apiKey).then(r => {
+        setAllSessionIds(r.ids)
+        if (!r.ids.includes(selectedSessionId)) {
+          setSelectedSessionId(null)
+        }
+      })
+    } catch (error) {
+      setErrorMessage(error.message)
+      setErrorModalOpen(true)
+    }
+  }, [apiKey.apiKey, selectedSessionId, setAllSessionIds, setSelectedSessionId]);
 
   function handleTerminateAllSessions () {
     try {
@@ -43,23 +57,9 @@ const Sidebar = ({
     }
   }
 
-  const reloadSessions = async () => {
-    try {
-      await getAllSessions(apiKey.apiKey).then(r => {
-        setAllSessionIds(r.ids)
-        if (!r.ids.includes(selectedSessionId)) {
-          setSelectedSessionId(null)
-        }
-      })
-    } catch (error) {
-      setErrorMessage(error.message)
-      setErrorModalOpen(true)
-    }
-  }
-
   useEffect(() => {
     reloadSessions()
-  }, [])
+  }, [reloadSessions])
 
   let sessionListView
 
