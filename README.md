@@ -125,9 +125,9 @@ curl -X POST http://localhost:3000/api/pairing/send-bulk/SESSION001 \
 ```env
 PORT=3000
 API_KEY=your-secret-api-key
-REDIS_HOST=163.61.44.41
+REDIS_HOST=your-redis-host
 REDIS_PORT=6379
-REDIS_PASSWORD=b5cf82712e2201393c9e
+REDIS_PASSWORD=your-redis-password
 BASE_WEBHOOK_URL=https://your-webhook-url.com/webhook
 SESSION_PATH=./session
 AUTO_RESTORE_SESSIONS=true
@@ -180,8 +180,8 @@ node scripts/test-webhook.js
 ### Redis Connection Failed
 
 - Check Redis host/port/password in `.env`
-- Verify network access to `163.61.44.41:6379`
-- Test connection: `redis-cli -h 163.61.44.41 -p 6379 -a <password> ping`
+- Verify network access to your Redis server
+- Test connection: `redis-cli -h <your-redis-host> -p <your-redis-port> -a <your-redis-password> ping`
 
 ### Pairing Code Not Working
 

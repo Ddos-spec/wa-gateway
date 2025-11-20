@@ -24,13 +24,14 @@ const Sidebar = ({
   const reloadSessions = useCallback(async () => {
     try {
       await getAllSessions(apiKey.apiKey).then(r => {
-        setAllSessionIds(r.ids)
-        if (!r.ids.includes(selectedSessionId)) {
+        const sessionIds = r.ids || [];
+        setAllSessionIds(sessionIds)
+        if (!sessionIds.includes(selectedSessionId)) {
           setSelectedSessionId(null)
         }
       })
     } catch (error) {
-      setErrorMessage(error.message)
+      setErrorMessage(error.message || 'Failed to load sessions')
       setErrorModalOpen(true)
     }
   }, [apiKey.apiKey, selectedSessionId, setAllSessionIds, setSelectedSessionId]);
