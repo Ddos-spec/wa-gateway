@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import Navbar from './components/Navbar/Navbar';
+import DetailSession from './pages/DetailSession/DetailSession';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -13,7 +15,11 @@ function App() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [authMethod, setAuthMethod] = useState('qr');
   const [otpCode, setOtpCode] = useState('');
+  const [selectedFolderId, setSelectedFolderId] = useState('');
   const [connectionStatus, setConnectionStatus] = useState('connected');
+
+  // Session detail states
+  const [selectedSession, setSelectedSession] = useState(null);
   const [folders, setFolders] = useState([
     { id: 1, name: 'Marketing', sessionIds: [1, 3] },
     { id: 2, name: 'Support', sessionIds: [2] }
@@ -163,9 +169,34 @@ function App() {
   };
 
   const handleQRConfirm = () => {
+    // Create new session
+    const newSession = {
+      id: sessions.length + 1,
+      name: sessionName,
+      status: 'connected',
+      lastActivity: 'Just now',
+      folderId: selectedFolderId ? parseInt(selectedFolderId) : null
+    };
+
+    setSessions([...sessions, newSession]);
+
+    // Update folder's sessionIds if folder was selected
+    if (selectedFolderId) {
+      setFolders(folders.map(folder => {
+        if (folder.id === parseInt(selectedFolderId)) {
+          return {
+            ...folder,
+            sessionIds: [...folder.sessionIds, newSession.id]
+          };
+        }
+        return folder;
+      }));
+    }
+
     alert(`QR code for session "${sessionName}" has been confirmed!`);
     setShowQRModal(false);
     setSessionName('');
+    setSelectedFolderId('');
   };
 
   const handleOTPConfirm = () => {
@@ -174,50 +205,70 @@ function App() {
       return;
     }
 
+    // Create new session
+    const newSession = {
+      id: sessions.length + 1,
+      name: sessionName,
+      status: 'connected',
+      lastActivity: 'Just now',
+      folderId: selectedFolderId ? parseInt(selectedFolderId) : null
+    };
+
+    setSessions([...sessions, newSession]);
+
+    // Update folder's sessionIds if folder was selected
+    if (selectedFolderId) {
+      setFolders(folders.map(folder => {
+        if (folder.id === parseInt(selectedFolderId)) {
+          return {
+            ...folder,
+            sessionIds: [...folder.sessionIds, newSession.id]
+          };
+        }
+        return folder;
+      }));
+    }
+
     alert(`Phone verification for ${phoneNumber} with OTP ${otpCode} completed!`);
     setShowOTPModal(false);
     setSessionName('');
     setPhoneNumber('');
     setOtpCode('');
+    setSelectedFolderId('');
+  };
+
+  // Session detail functions
+  const handleViewSessionDetail = (session) => {
+    setSelectedSession(session);
+    setActiveTab('session-detail');
+  };
+
+  const handleDeleteSession = (sessionId, sessionName) => {
+    if (!window.confirm(`Are you sure you want to delete session "${sessionName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    // Remove session from sessions array
+    setSessions(sessions.filter(s => s.id !== sessionId));
+
+    // Remove session from folder's sessionIds
+    setFolders(folders.map(folder => ({
+      ...folder,
+      sessionIds: folder.sessionIds.filter(id => id !== sessionId)
+    })));
+
+    // If currently viewing this session's detail, go back to dashboard
+    if (selectedSession && selectedSession.id === sessionId) {
+      setSelectedSession(null);
+      setActiveTab('dashboard');
+    }
+
+    alert(`Session "${sessionName}" has been deleted successfully.`);
   };
 
   return (
     <div className="App">
-      <nav className="navbar">
-        <div className="logo">WhatsApp Gateway</div>
-        <div className="nav-tabs">
-          <button
-            className={activeTab === 'dashboard' ? 'active' : ''}
-            onClick={() => setActiveTab('dashboard')}
-          >
-            Dashboard
-          </button>
-          <button
-            className={activeTab === 'messages' ? 'active' : ''}
-            onClick={() => setActiveTab('messages')}
-          >
-            Messages
-          </button>
-          <button
-            className={activeTab === 'contacts' ? 'active' : ''}
-            onClick={() => setActiveTab('contacts')}
-          >
-            Contacts
-          </button>
-          <button
-            className={activeTab === 'documentation' ? 'active' : ''}
-            onClick={() => setActiveTab('documentation')}
-          >
-            Documentation
-          </button>
-          <button
-            className={activeTab === 'settings' ? 'active' : ''}
-            onClick={() => setActiveTab('settings')}
-          >
-            Settings
-          </button>
-        </div>
-      </nav>
+      <Navbar activeTab={activeTab} onTabChange={setActiveTab} />
 
       <div className="container">
         {activeTab === 'dashboard' && (
@@ -272,19 +323,34 @@ function App() {
                         </div>
                         <div className="folder-sessions">
                           {folderSessions.map(session => (
-                            <div key={session.id} className="session-card">
-                              <div className="session-header">
-                                <span className="session-name">{session.name}</span>
-                                <span className={`session-status ${session.status}`}>
-                                  {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
-                                </span>
-                              </div>
-                              <div className="session-details">
-                                <div className="detail-item">
-                                  <span className="detail-label">Last Activity:</span>
-                                  <span className="detail-value">{session.lastActivity}</span>
+                            <div
+                              key={session.id}
+                              className="session-card"
+                            >
+                              <div onClick={() => handleViewSessionDetail(session)} style={{ flex: 1 }}>
+                                <div className="session-header">
+                                  <span className="session-name">{session.name}</span>
+                                  <span className={`session-status ${session.status}`}>
+                                    {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
+                                  </span>
+                                </div>
+                                <div className="session-details">
+                                  <div className="detail-item">
+                                    <span className="detail-label">Last Activity:</span>
+                                    <span className="detail-value">{session.lastActivity}</span>
+                                  </div>
                                 </div>
                               </div>
+                              <button
+                                className="session-delete-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSession(session.id, session.name);
+                                }}
+                                title="Delete Session"
+                              >
+                                🗑️
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -301,19 +367,34 @@ function App() {
                       </div>
                       <div className="folder-sessions">
                         {sessions.filter(session => !session.folderId).map(session => (
-                          <div key={session.id} className="session-card">
-                            <div className="session-header">
-                              <span className="session-name">{session.name}</span>
-                              <span className={`session-status ${session.status}`}>
-                                {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
-                              </span>
-                            </div>
-                            <div className="session-details">
-                              <div className="detail-item">
-                                <span className="detail-label">Last Activity:</span>
-                                <span className="detail-value">{session.lastActivity}</span>
+                          <div
+                            key={session.id}
+                            className="session-card"
+                          >
+                            <div onClick={() => handleViewSessionDetail(session)} style={{ flex: 1 }}>
+                              <div className="session-header">
+                                <span className="session-name">{session.name}</span>
+                                <span className={`session-status ${session.status}`}>
+                                  {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
+                                </span>
+                              </div>
+                              <div className="session-details">
+                                <div className="detail-item">
+                                  <span className="detail-label">Last Activity:</span>
+                                  <span className="detail-value">{session.lastActivity}</span>
+                                </div>
                               </div>
                             </div>
+                            <button
+                              className="session-delete-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteSession(session.id, session.name);
+                              }}
+                              title="Delete Session"
+                            >
+                              🗑️
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -325,35 +406,67 @@ function App() {
           </div>
         )}
 
-        {activeTab === 'messages' && (
-          <div className="messages">
-            <h1>Message History</h1>
-            <div className="message-list">
-              <div className="message-item">
-                <div className="contact">+1234567890</div>
-                <div className="message-content">Hello, how are you?</div>
-                <div className="timestamp">2025-11-20 10:30</div>
-              </div>
-              <div className="message-item">
-                <div className="contact">+0987654321</div>
-                <div className="message-content">Thanks for your help!</div>
-                <div className="timestamp">2025-11-20 09:15</div>
+        {activeTab === 'log-chat' && (
+          <div className="log-chat">
+            <h1>Log Chat</h1>
+
+            {/* Messages Section */}
+            <div className="log-section">
+              <h2>Messages</h2>
+              <div className="message-list">
+                <div className="message-item">
+                  <div className="message-header">
+                    <div className="contact-info">
+                      <span className="contact-name">John Doe</span>
+                      <span className="contact-phone">+1234567890</span>
+                    </div>
+                    <div className="timestamp">2025-11-20 10:30</div>
+                  </div>
+                  <div className="message-content">Hello, how are you?</div>
+                </div>
+                <div className="message-item">
+                  <div className="message-header">
+                    <div className="contact-info">
+                      <span className="contact-name">Jane Smith</span>
+                      <span className="contact-phone">+0987654321</span>
+                    </div>
+                    <div className="timestamp">2025-11-20 09:15</div>
+                  </div>
+                  <div className="message-content">Thanks for your help!</div>
+                </div>
+                <div className="message-item">
+                  <div className="message-header">
+                    <div className="contact-info">
+                      <span className="contact-name">Michael Johnson</span>
+                      <span className="contact-phone">+4455667788</span>
+                    </div>
+                    <div className="timestamp">2025-11-20 08:45</div>
+                  </div>
+                  <div className="message-content">Can you send me the files?</div>
+                </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {activeTab === 'contacts' && (
-          <div className="contacts">
-            <h1>Contact List</h1>
-            <div className="contact-list">
-              <div className="contact-item">
-                <div className="contact-name">John Doe</div>
-                <div className="contact-phone">+1234567890</div>
-              </div>
-              <div className="contact-item">
-                <div className="contact-name">Jane Smith</div>
-                <div className="contact-phone">+0987654321</div>
+            {/* Contacts Section */}
+            <div className="log-section">
+              <h2>Contacts</h2>
+              <div className="contact-list">
+                <div className="contact-item">
+                  <div className="contact-name">John Doe</div>
+                  <div className="contact-phone">+1234567890</div>
+                </div>
+                <div className="contact-item">
+                  <div className="contact-name">Jane Smith</div>
+                  <div className="contact-phone">+0987654321</div>
+                </div>
+                <div className="contact-item">
+                  <div className="contact-name">Michael Johnson</div>
+                  <div className="contact-phone">+4455667788</div>
+                </div>
+                <div className="contact-item">
+                  <div className="contact-name">Sarah Williams</div>
+                  <div className="contact-phone">+9988776655</div>
+                </div>
               </div>
             </div>
           </div>
@@ -492,15 +605,35 @@ function App() {
             </div>
           </div>
         )}
+
+        {activeTab === 'session-detail' && selectedSession && (
+          <DetailSession
+            session={selectedSession}
+            onBack={() => setActiveTab('dashboard')}
+            onUpdateSession={(updatedSession) => {
+              setSessions(sessions.map(s =>
+                s.id === updatedSession.id ? updatedSession : s
+              ));
+              setSelectedSession(updatedSession);
+            }}
+            onDeleteSession={handleDeleteSession}
+          />
+        )}
       </div>
 
       {/* New Session Modal */}
       {showNewSessionModal && (
-        <div className="modal-overlay" onClick={() => setShowNewSessionModal(false)}>
+        <div className="modal-overlay" onClick={() => {
+          setShowNewSessionModal(false);
+          setSelectedFolderId('');
+        }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Create New Session</h2>
-              <button className="modal-close" onClick={() => setShowNewSessionModal(false)}>
+              <button className="modal-close" onClick={() => {
+                setShowNewSessionModal(false);
+                setSelectedFolderId('');
+              }}>
                 &times;
               </button>
             </div>
@@ -515,6 +648,22 @@ function App() {
                   value={sessionName}
                   onChange={(e) => setSessionName(e.target.value)}
                 />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="folderSelect">Select Folder</label>
+                <select
+                  id="folderSelect"
+                  value={selectedFolderId}
+                  onChange={(e) => setSelectedFolderId(e.target.value)}
+                >
+                  <option value="">Unorganized</option>
+                  {folders.map(folder => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="auth-method-selection">
@@ -539,7 +688,10 @@ function App() {
             <div className="modal-footer">
               <button
                 className="cancel-btn"
-                onClick={() => setShowNewSessionModal(false)}
+                onClick={() => {
+                  setShowNewSessionModal(false);
+                  setSelectedFolderId('');
+                }}
               >
                 Cancel
               </button>
