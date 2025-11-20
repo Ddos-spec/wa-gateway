@@ -1,0 +1,22 @@
+{
+  "name": "wa-gateway-backend",
+  "version": "1.0.0",
+  "description": "Backend server for WhatsApp Gateway",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc.8",
+    "express": "^5.1.0",
+    "@hapi/boom": "^10.0.1",
+    "pino": "^9.6.0",
+    "file-type": "^19.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  },
+  "author": "",
+  "license": "ISC"
+}
