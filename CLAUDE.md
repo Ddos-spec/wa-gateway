@@ -23,6 +23,323 @@ This project follows **Single Responsibility Principle**. Every file has ONE spe
 - ✅ **Clear Naming** - File name describes its content (`NewSessionModal.js` not `Modal.js`)
 - ✅ **Proper Structure** - Follow the folder structure below
 
+## 📏 Code Quality Principles
+
+### KISS (Keep It Simple, Stupid)
+
+**Rule**: Choose the simplest solution that solves the current problem. Add complexity ONLY when absolutely needed.
+
+**File Size Limits (Hard Rules):**
+- `server.js`: MAX 100 lines (currently 88 lines ✅)
+- Controllers: MAX 150 lines per file
+- Services: MAX 200 lines per file
+- React Components: MAX 250 lines per file
+- If exceeding limit → Split into smaller files
+
+**When to Use Simple vs Complex:**
+- Functions < 20 lines → Use simple function
+- Functions > 20 lines → Consider breaking down
+- 1-3 similar operations → Keep inline
+- 4+ similar operations → Extract to function/component
+
+**❌ BAD Example (Over-Engineered):**
+```javascript
+// Don't do this for simple session display
+class SessionManager {
+  constructor(sessions) {
+    this.sessions = sessions;
+    this.filters = new FilterEngine();
+    this.sorter = new SortingStrategy();
+    this.renderer = new SessionRenderer();
+  }
+
+  applyFilters(criteria) {
+    return this.filters.apply(this.sessions, criteria);
+  }
+
+  renderSessions() {
+    const filtered = this.applyFilters(this.criteria);
+    const sorted = this.sorter.sort(filtered);
+    return this.renderer.render(sorted);
+  }
+}
+```
+
+**✅ GOOD Example (Simple & Clear):**
+```javascript
+// Just filter and map - simple and works
+function SessionList({ sessions, folderId }) {
+  const filteredSessions = folderId
+    ? sessions.filter(s => s.folderId === folderId)
+    : sessions;
+
+  return filteredSessions.map(session => (
+    <SessionCard key={session.id} session={session} />
+  ));
+}
+```
+
+**Decision Criteria:**
+- Will this be used in 3+ places? → Extract it
+- Is the logic complex? → Keep it simple first, refactor if needed
+- Can a junior dev understand it in 30 seconds? → Good sign
+
+---
+
+### YAGNI (You Aren't Gonna Need It)
+
+**Rule**: Only build features that are needed RIGHT NOW. Don't add "future-proof" features based on assumptions.
+
+**Trigger Points for Adding Complexity:**
+- Pagination: Add when >50 items, not at 3 items
+- Search: Add when >20 items, not at 5 items
+- Database: Add when persistence needed, not "just in case"
+- Caching: Add when performance issue measured, not assumed
+
+**❌ BAD Example (Building Too Early):**
+```javascript
+// Don't add pagination for 3 sessions
+function Dashboard({ sessions }) {
+  const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [sortBy, setSortBy] = useState('name');
+  const [sortOrder, setSortOrder] = useState('asc');
+
+  const paginatedSessions = useMemo(() => {
+    const sorted = sortSessions(sessions, sortBy, sortOrder);
+    return paginate(sorted, page, itemsPerPage);
+  }, [sessions, page, itemsPerPage, sortBy, sortOrder]);
+
+  return (
+    <>
+      {paginatedSessions.map(...)}
+      <Pagination page={page} total={sessions.length} onChange={setPage} />
+    </>
+  );
+}
+```
+
+**✅ GOOD Example (Build What's Needed):**
+```javascript
+// Just show all sessions - add pagination when needed
+function Dashboard({ sessions }) {
+  return sessions.map(session => (
+    <SessionCard key={session.id} session={session} />
+  ));
+}
+
+// Add pagination LATER when sessions.length > 50
+```
+
+**Real Project Example:**
+```javascript
+// Current: In-memory session storage (simple, works now)
+const activeConnections = {};
+
+// Future: Database storage (add ONLY when restart persistence needed)
+// Don't build database integration until it's actually required
+```
+
+**When to Add Features:**
+- User explicitly requests it → Build it
+- Performance problem measured → Fix it
+- Current solution breaks → Improve it
+- "Might need it someday" → DON'T build it
+
+---
+
+### DRY (Don't Repeat Yourself)
+
+**Rule**: If you copy-paste code 3 times, extract it to a reusable function/component.
+
+**Thresholds:**
+- 1x: Write inline
+- 2x: Copy-paste is OK (might be coincidence)
+- 3x: STOP! Extract to function/utility/component
+- 4x+: You're creating maintenance hell
+
+**❌ BAD Example (Repeated Validation):**
+```javascript
+// auth.controller.js
+const startQRAuth = async (req, res) => {
+  const { sessionId } = req.body;
+  if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+    return res.status(400).json({ error: 'Invalid session ID' });
+  }
+  // ... auth logic
+};
+
+// session.controller.js
+const getSessionStatus = async (req, res) => {
+  const { sessionId } = req.body;
+  if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+    return res.status(400).json({ error: 'Invalid session ID' });
+  }
+  // ... status logic
+};
+
+// message.controller.js
+const sendMessage = async (req, res) => {
+  const { sessionId } = req.body;
+  if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+    return res.status(400).json({ error: 'Invalid session ID' });
+  }
+  // ... message logic
+};
+```
+
+**✅ GOOD Example (Extracted Middleware):**
+```javascript
+// middleware/validation.js
+function validateSessionId(req, res, next) {
+  const { sessionId } = req.body;
+  if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+    return res.status(400).json({ error: 'Invalid session ID' });
+  }
+  next();
+}
+
+// Now use in routes
+router.post('/qr', validateSessionId, authController.startQRAuth);
+router.get('/status', validateSessionId, sessionController.getSessionStatus);
+router.post('/send', validateSessionId, messageController.sendMessage);
+```
+
+**React Component Example:**
+
+**❌ BAD:**
+```javascript
+// Repeated modal structure in NewSessionModal, NewFolderModal, DeleteConfirmModal
+function NewSessionModal() {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>New Session</h2>
+          <button onClick={onClose}>×</button>
+        </div>
+        {/* Unique content */}
+      </div>
+    </div>
+  );
+}
+```
+
+**✅ GOOD:**
+```javascript
+// components/modals/BaseModal.js
+function BaseModal({ title, onClose, children }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>{title}</h2>
+          <button onClick={onClose}>×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Now create specific modals
+function NewSessionModal({ onClose }) {
+  return (
+    <BaseModal title="New Session" onClose={onClose}>
+      {/* Unique content only */}
+    </BaseModal>
+  );
+}
+```
+
+---
+
+### Function Complexity Rules
+
+**Max Indentation: 3 levels**
+
+**❌ BAD (Too Nested):**
+```javascript
+function processMessage(message) {
+  if (message) {
+    if (message.type === 'text') {
+      if (message.from.includes('@s.whatsapp.net')) {
+        if (!message.key.fromMe) {
+          if (message.message.conversation) {
+            // Level 5 indentation - HARD TO READ
+            handleIncomingMessage(message);
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**✅ GOOD (Early Returns):**
+```javascript
+function processMessage(message) {
+  // Guard clauses at top
+  if (!message) return;
+  if (message.type !== 'text') return;
+  if (!message.from.includes('@s.whatsapp.net')) return;
+  if (message.key.fromMe) return;
+  if (!message.message.conversation) return;
+
+  // Main logic at level 1 indentation - EASY TO READ
+  handleIncomingMessage(message);
+}
+```
+
+**Function Length: Max 30 lines**
+- If function > 30 lines → Break into smaller functions
+- Each function should do ONE thing
+- Name functions by what they do: `validateSessionId()`, `sendWhatsAppMessage()`, `formatPhoneNumber()`
+
+**Real Project Example:**
+```javascript
+// ✅ GOOD: Small, focused functions
+async function sendMessage(req, res) {
+  try {
+    const { phone, message, sessionId = 'default' } = req.body;
+
+    if (!phone || !message) {
+      return res.status(400).json({ error: 'Phone number and message are required' });
+    }
+
+    const sock = sessionService.getConnection(sessionId);
+    if (!sock) {
+      return res.status(500).json({ error: 'WhatsApp connection not established' });
+    }
+
+    const response = await sock.sendMessage(
+      phone + '@s.whatsapp.net',
+      { text: message }
+    );
+
+    res.json({ success: true, response, message: 'Message sent successfully' });
+  } catch (error) {
+    console.error('Error sending message:', error);
+    res.status(500).json({ error: error.message });
+  }
+}
+```
+
+---
+
+### Summary Checklist
+
+Before committing code, ask:
+- [ ] Is this file under the size limit?
+- [ ] Is this function under 30 lines?
+- [ ] Did I copy-paste code 3+ times? (Extract it!)
+- [ ] Am I building features not requested? (YAGNI check)
+- [ ] Can I simplify this? (KISS check)
+- [ ] Max 3 levels of indentation? (Use early returns)
+- [ ] Does each file have ONE clear responsibility?
+
+**Remember**: Code quality is about making future changes EASY, not making current code "clever".
+
 ## Architecture
 
 ### Monorepo Structure
