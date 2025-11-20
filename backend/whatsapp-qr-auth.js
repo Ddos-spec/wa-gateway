@@ -1,11 +1,8 @@
-const { default: makeWASocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeInMemoryStore } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeInMemoryStore, Browsers } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const fs = require('fs');
 const path = require('path');
 const pino = require('pino');
-
-// Store for WhatsApp connections
-const store = makeInMemoryStore({ logger: pino().child({ level: 'silent', stream: 'store' }) });
 
 /**
  * Function to connect to WhatsApp with QR code authentication
@@ -17,7 +14,9 @@ async function connectWithQR(sessionId, onQR) {
   try {
     const authPath = path.join(__dirname, `./auth_info_${sessionId}.json`);
     const { state, saveState } = useSingleFileAuthState(authPath);
-    
+
+    const store = makeInMemoryStore({ logger: pino().child({ level: 'silent', stream: 'store' }) });
+
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(`Using WA v${version.join('.')}, isLatest: ${isLatest}`);
 
@@ -26,7 +25,7 @@ async function connectWithQR(sessionId, onQR) {
       logger: pino({ level: 'debug' }),
       printQRInTerminal: false,
       auth: state,
-      browser: ['WhatsApp Gateway', 'Chrome', '1.0.0']
+      browser: Browsers['chrome'] // Updated browser option
     });
 
     store.bind(sock.ev);
@@ -41,22 +40,20 @@ async function connectWithQR(sessionId, onQR) {
         // Connection updated
         if (events['connection.update']) {
           const { connection, lastDisconnect } = events['connection.update'];
-          
+
           if (connection === 'close') {
             const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
             console.log('Connection closed due to', lastDisconnect?.error, ', reconnecting:', shouldReconnect);
           }
-          
+
           if (connection === 'open') {
             console.log('WhatsApp connection opened for session:', sessionId);
           }
         }
 
         // Print QR code when auth failure occurs
-        if(events['creds.update'] && !sock.authState.creds.registered) {
-          if (events['connection.update'].qr) {
-            onQR(events['connection.update'].qr);
-          }
+        if(events['connection.update'].qr) {
+          onQR(events['connection.update'].qr);
         }
       }
     );

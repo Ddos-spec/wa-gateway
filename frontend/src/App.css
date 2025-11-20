@@ -33,17 +33,20 @@ body {
 
 .nav-tabs {
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem; /* Reduced gap to accommodate more buttons */
+  flex-wrap: wrap; /* Allow wrapping for smaller screens */
 }
 
 .nav-tabs button {
   background: transparent;
   border: none;
   color: white;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 0.75rem;
   cursor: pointer;
   border-radius: 4px;
   transition: background-color 0.3s;
+  font-size: 0.9rem;
+  white-space: nowrap; /* Prevent button text from wrapping */
 }
 
 .nav-tabs button:hover {
@@ -239,24 +242,608 @@ h1 {
   color: #25D366;
 }
 
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.new-session-btn {
+  background-color: #25D366;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.new-session-btn:hover {
+  background-color: #1da851;
+}
+
+.new-folder-btn {
+  background-color: #f0f0f0;
+  color: #333;
+  border: 1px solid #ddd;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  margin-right: 0.5rem;
+}
+
+.new-folder-btn:hover {
+  background-color: #e0e0e0;
+}
+
+.dashboard-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Status Monitor Styles */
+.status-monitor {
+  margin-bottom: 1.5rem;
+}
+
+.monitor-box {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  margin-bottom: 1.5rem;
+}
+
+.monitor-content h2 {
+  margin: 0 0 1.5rem 0;
+  color: #2a3a5a;
+}
+
+.status-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+}
+
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.status-item:last-child {
+  border-bottom: none;
+}
+
+.status-label {
+  color: #666;
+  font-weight: 500;
+}
+
+.status-value {
+  font-weight: bold;
+}
+
+.status-value.connected {
+  color: #25D366;
+}
+
+.status-value.disconnected {
+  color: #ff6b6b;
+}
+
+.sessions-list h3 {
+  margin: 0 0 1rem 0;
+  color: #2a3a5a;
+}
+
+.folders-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.folder-section {
+  background: white;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  border: 1px solid #eee;
+}
+
+.folder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.folder-header h4 {
+  margin: 0;
+  color: #2a3a5a;
+  font-size: 1.1rem;
+}
+
+.session-count {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.folder-sessions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.session-card {
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.session-name {
+  font-weight: bold;
+  color: #2a3a5a;
+}
+
+.session-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.session-status.connected {
+  background-color: #e8f7f0;
+  color: #25D366;
+}
+
+.session-status.disconnected {
+  background-color: #ffe8e8;
+  color: #ff6b6b;
+}
+
+.session-details {
+  border-top: 1px solid #eee;
+  padding-top: 0.75rem;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.detail-label {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.detail-value {
+  font-weight: 500;
+  color: #555;
+}
+
+
+.log-message.info {
+  color: #555;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #2a3a5a;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-close:hover {
+  color: #222;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+  color: #555;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.auth-method-selection h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #2a3a5a;
+}
+
+.auth-methods {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.auth-methods button {
+  flex: 1;
+  padding: 1rem;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.3s;
+}
+
+.auth-methods button:hover {
+  border-color: #aaa;
+}
+
+.auth-methods button.selected {
+  border-color: #25D366;
+  background-color: #e8f7f0;
+  color: #25D366;
+}
+
+.modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.cancel-btn, .create-btn {
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.cancel-btn {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  color: #666;
+}
+
+.cancel-btn:hover {
+  background: #e0e0e0;
+}
+
+.create-btn {
+  background-color: #25D366;
+  color: white;
+  border: none;
+}
+
+.create-btn:hover {
+  background-color: #1da851;
+}
+
+/* QR Modal Specific Styles */
+.qr-modal-content {
+  background: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.qr-content {
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.qr-placeholder {
+  display: flex;
+  justify-content: center;
+  margin: 1.5rem 0;
+}
+
+.qr-placeholder img {
+  width: 200px;
+  height: 200px;
+  padding: 1rem;
+  border: 1px solid #eee;
+  background: white;
+}
+
+.qr-content p {
+  margin: 0.5rem 0;
+  color: #666;
+}
+
+.otp-display {
+  margin-top: 1rem;
+}
+
+.otp-code-display {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.otp-digit {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #25D366;
+  border-radius: 4px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #25D366;
+  background-color: #e8f7f0;
+}
+
+.otp-input-container {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 1rem 0;
+}
+
+.otp-digit-input {
+  width: 40px;
+  height: 40px;
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: bold;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.3s;
+}
+
+.otp-digit-input:focus {
+  border-color: #25D366;
+  box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.2);
+}
+
+/* Documentation Page Styles */
+.documentation {
+  background: white;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.documentation h1 {
+  color: #2a3a5a;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 1rem;
+  margin-bottom: 2rem;
+}
+
+.documentation h2 {
+  color: #2a3a5a;
+  margin: 2rem 0 1rem 0;
+}
+
+.doc-section {
+  margin-bottom: 2rem;
+}
+
+.api-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  margin: 1rem 0;
+  flex-wrap: wrap;
+}
+
+.method-get {
+  background-color: #d4edda;
+  color: #155724;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.method-post {
+  background-color: #cce5ff;
+  color: #004085;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.api-endpoint code {
+  flex: 1;
+  background: none;
+  border: none;
+  font-family: monospace;
+  font-size: 1rem;
+  color: #333;
+  padding: 0.25rem 0.5rem;
+  word-break: break-all;
+}
+
+.params-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.9rem;
+}
+
+.params-table th,
+.params-table td {
+  border: 1px solid #ddd;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.params-table th {
+  background-color: #f8f9fa;
+  font-weight: bold;
+  color: #495057;
+}
+
+.params-table tr:nth-child(even) {
+  background-color: #f8f9fa;
+}
+
+.params-table tr:hover {
+  background-color: #e9ecef;
+}
+
 @media (max-width: 768px) {
   .navbar {
     flex-direction: column;
     gap: 1rem;
     padding: 1rem;
   }
-  
+
   .nav-tabs {
     flex-wrap: wrap;
     justify-content: center;
   }
-  
+
+  .dashboard-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
   .message-item {
     flex-direction: column;
     gap: 0.5rem;
   }
-  
+
   .container {
     padding: 1rem;
+  }
+
+  .auth-methods {
+    flex-direction: column;
+  }
+
+  .documentation {
+    padding: 1rem;
+  }
+
+  .api-endpoint {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .status-overview {
+    grid-template-columns: 1fr; /* Stack on mobile */
+    gap: 1rem;
+  }
+
+  .folder-sessions {
+    grid-template-columns: 1fr; /* Single column on mobile */
+  }
+
+  .dashboard-actions {
+    flex-direction: column;
+  }
+
+  .new-folder-btn, .new-session-btn {
+    width: 100%;
+  }
+
+  .params-table {
+    font-size: 0.8rem;
+  }
+
+  .params-table th,
+  .params-table td {
+    padding: 0.5rem;
+  }
+
+  .qr-modal-content,
+  .modal-content {
+    width: 95%;
+  }
+
+  .qr-placeholder img {
+    width: 150px;
+    height: 150px;
   }
 }

@@ -1,11 +1,8 @@
-const { default: makeWASocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeInMemoryStore, useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeInMemoryStore, useMultiFileAuthState, Browsers } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const fs = require('fs');
 const path = require('path');
 const pino = require('pino');
-
-// Store for WhatsApp connections
-const store = makeInMemoryStore({ logger: pino().child({ level: 'silent', stream: 'store' }) });
 
 /**
  * Function to connect to WhatsApp with phone number authentication (OTP)
@@ -18,7 +15,9 @@ async function connectWithPhoneNumber(sessionId, phoneNumber, onOTP) {
   try {
     const authPath = path.join(__dirname, `./auth_info_${sessionId}`);
     const { state, saveCreds } = await useMultiFileAuthState(authPath);
-    
+
+    const store = makeInMemoryStore({ logger: pino().child({ level: 'silent', stream: 'store' }) });
+
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(`Using WA v${version.join('.')}, isLatest: ${isLatest}`);
 
@@ -27,7 +26,7 @@ async function connectWithPhoneNumber(sessionId, phoneNumber, onOTP) {
       logger: pino({ level: 'debug' }),
       printQRInTerminal: false,
       auth: state,
-      browser: ['WhatsApp Gateway', 'Chrome', '1.0.0'],
+      browser: Browsers['chrome'],
       syncFullHistory: false,
     });
 
@@ -43,12 +42,12 @@ async function connectWithPhoneNumber(sessionId, phoneNumber, onOTP) {
         // Connection updated
         if (events['connection.update']) {
           const { connection, lastDisconnect, isNewLogin } = events['connection.update'];
-          
+
           if (connection === 'close') {
             const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
             console.log('Connection closed due to', lastDisconnect?.error, ', reconnecting:', shouldReconnect);
           }
-          
+
           if (connection === 'open') {
             console.log('WhatsApp connection opened for session:', sessionId);
             console.log('New login:', isNewLogin);
@@ -56,19 +55,16 @@ async function connectWithPhoneNumber(sessionId, phoneNumber, onOTP) {
         }
 
         // Handle authentication credentials
-        if (events['creds.update']) {
-          const authState = state;
-          if (isNewLogin || !authState.creds.registered) {
-            // Request phone code for registration
-            if (phoneNumber) {
-              try {
-                const code = await sock.requestPairingCode(phoneNumber);
-                console.log(`Pairing code for ${phoneNumber}: ${code}`);
-                onOTP(code);
-              } catch (err) {
-                console.error('Error requesting pairing code:', err);
-                throw err;
-              }
+        if (events['connection.update']) {
+          // Request phone code for registration
+          if (phoneNumber && events['connection.update'].isNewLogin) {
+            try {
+              const code = await sock.requestPairingCode(phoneNumber);
+              console.log(`Pairing code for ${phoneNumber}: ${code}`);
+              onOTP(code);
+            } catch (err) {
+              console.error('Error requesting pairing code:', err);
+              throw err;
             }
           }
         }
