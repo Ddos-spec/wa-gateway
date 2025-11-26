@@ -13,63 +13,8 @@ const { formatPhoneNumber, toWhatsAppFormat, isValidPhoneNumber } = require('./p
 
 const router = express.Router();
 
-// Webhook URLs will be stored in Redis by default
-let redisClient = null;
-const webhookUrls = new Map(); // fallback in-memory storage
-
-// Function to set Redis client if available
-function setRedisClient(client) {
-  redisClient = client;
-}
-
-async function getWebhookUrl(sessionId) {
-  if (redisClient) {
-    try {
-      const url = await redisClient.get(`webhook:url:${sessionId}`);
-      if (url) return url;
-    } catch (error) {
-      console.error('Redis error in getWebhookUrl, falling back to in-memory:', error.message);
-    }
-  }
-  // Fallback to in-memory map
-  return webhookUrls.get(sessionId) || process.env.WEBHOOK_URL || '';
-}
-
-async function setWebhookUrl(sessionId, url) {
-  if (redisClient) {
-    try {
-      if (url) {
-        await redisClient.setEx(`webhook:url:${sessionId}`, 86400 * 30, url); // 30 days TTL
-      } else {
-        await redisClient.del(`webhook:url:${sessionId}`);
-      }
-      return true;
-    } catch (error) {
-      console.error('Redis error in setWebhookUrl, falling back to in-memory:', error.message);
-    }
-  }
-  // Fallback to in-memory map
-  if (url) {
-    webhookUrls.set(sessionId, url);
-  } else {
-    webhookUrls.delete(sessionId);
-  }
-  return false;
-}
-
-async function deleteWebhookUrl(sessionId) {
-  if (redisClient) {
-    try {
-      await redisClient.del(`webhook:url:${sessionId}`);
-      return true;
-    } catch (error) {
-      console.error('Redis error in deleteWebhookUrl, falling back to in-memory:', error.message);
-    }
-  }
-  // Fallback to in-memory map
-  webhookUrls.delete(sessionId);
-  return false;
-}
+// Webhook URL management is now handled by saveSessionSettings/loadSessionSettings in index.js
+// The old functions (get/set/deleteWebhookUrl) are obsolete and removed.
 
 // Multer setup for file uploads
 const mediaDir = path.join(__dirname, 'media');
@@ -112,6 +57,16 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     // router.use(csurf()); // Uncomment if you want CSRF for all POST/DELETE
 
     const validateToken = (req, res, next) => {
+        // Allow access if the user is authenticated via admin session cookie
+        if (req.session && req.session.adminAuthed) {
+            // To make downstream logic consistent, we can attach currentUser like in checkAuth
+            req.currentUser = {
+                email: req.session.userEmail,
+                role: req.session.userRole
+            };
+            return next();
+        }
+
         const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1];
 
@@ -213,9 +168,9 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
     });
 
-    // Campaign functionality removed per user request
-    
-    // Middleware to check campaign access (session-based)
+    // All obsolete campaign and recipient list endpoints have been removed.
+
+    // Middleware for session-based authentication check
     const checkAuth = async (req, res, next) => {
         const currentUser = req.session && req.session.adminAuthed ? {
             email: req.session.userEmail,
@@ -229,362 +184,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         req.currentUser = currentUser;
         next();
     };
-    const checkCampaignAccess = checkAuth;
     
-
-    
-// Function checkAndStartScheduledCampaigns Removed
-
-    router.get('/campaigns/csv-template', checkCampaignAccess, (req, res) => {
-        const csvContent = `WhatsApp Number,Name,Job Title,Company Name
-+1234567890,John Doe,Sales Manager,ABC Corporation
-+0987654321,Jane Smith,Marketing Director,XYZ Company
-+1122334455,Bob Johnson,CEO,Startup Inc
-+5544332211,Alice Brown,CTO,Tech Solutions
-+9988776655,Charlie Davis,Product Manager,Innovation Labs`;
-        
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', 'attachment; filename="whatsapp_campaign_template.csv"');
-        res.send(csvContent);
-    });
-
-    // Manual trigger endpoint for checking scheduled campaigns (MUST be before /:id route)
-    router.get('/campaigns/check-scheduled', checkCampaignAccess, async (req, res) => {
-        console.log('🔍 Manual scheduler check triggered by:', req.currentUser.email);
-        try {
-            const result = await checkAndStartScheduledCampaigns();
-            res.json({
-                status: 'success',
-                message: 'Scheduler check completed',
-                ...result
-            });
-        } catch (error) {
-            res.status(500).json({ 
-                status: 'error', 
-                message: error.message 
-            });
-        }
-    });
-
-    // Endpoint to get campaigns that should have been started but are still in ready status (MUST be before /:id route)
-    router.get('/campaigns/overdue', checkCampaignAccess, (req, res) => {
-        try {
-            if (!campaignManager) {
-                return res.status(503).json({ error: 'Campaign manager not initialized' });
-            }
-            
-            const now = new Date();
-            const campaigns = campaignManager.getAllCampaigns();
-            
-            const overdueCampaigns = campaigns.filter(campaign => {
-                return (
-                    campaign.status === 'ready' && 
-                    campaign.scheduledAt && 
-                    new Date(campaign.scheduledAt) <= now
-                );
-            });
-            
-            res.json({
-                totalCampaigns: campaigns.length,
-                overdueCampaigns: overdueCampaigns.length,
-                campaigns: overdueCampaigns.map(c => ({
-                    id: c.id,
-                    name: c.name,
-                    status: c.status,
-                    scheduledAt: c.scheduledAt,
-                    createdAt: c.createdAt,
-                    minutesOverdue: Math.floor((now - new Date(c.scheduledAt)) / 60000)
-                }))
-            });
-            
-        } catch (error) {
-            res.status(500).json({ error: error.message });
-        }
-    });
-    
-// Route removed
-    
-// Route removed
-    
-// Route removed
-    
-// Route removed
-    
-    router.post('/campaigns/:id/clone', checkCampaignAccess, async (req, res) => {
-        try {
-            const cloned = campaignManager.cloneCampaign(req.params.id, req.currentUser.email);
-            res.status(201).json(cloned);
-        } catch (error) {
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
-    
-    router.post('/campaigns/:id/send', checkCampaignAccess, async (req, res) => {
-        try {
-            const result = await campaignSender.startCampaign(req.params.id, req.currentUser.email);
-            res.json(result);
-        } catch (error) {
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
-    
-// Route removed
-    
-    router.post('/campaigns/:id/resume', checkCampaignAccess, async (req, res) => {
-        try {
-            const result = await campaignSender.resumeCampaign(req.params.id, req.currentUser.email);
-            res.json({ status: 'success', message: 'Campaign resumed' });
-        } catch (error) {
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
-    
-    router.post('/campaigns/:id/retry', checkCampaignAccess, async (req, res) => {
-        try {
-            const result = await campaignSender.retryFailed(req.params.id, req.currentUser.email);
-            res.json(result);
-        } catch (error) {
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
-    
-    router.get('/campaigns/:id/status', checkCampaignAccess, (req, res) => {
-        const status = campaignSender.getCampaignStatus(req.params.id);
-        if (!status) {
-            return res.status(404).json({ status: 'error', message: 'Campaign not found' });
-        }
-        res.json(status);
-    });
-    
-    router.get('/campaigns/:id/export', checkCampaignAccess, (req, res) => {
-        const campaign = campaignManager.loadCampaign(req.params.id);
-        if (!campaign) {
-            return res.status(404).json({ status: 'error', message: 'Campaign not found' });
-        }
-        
-        // Check access
-        if (req.currentUser.role !== 'admin' && campaign.createdBy !== req.currentUser.email) {
-            return res.status(403).json({ status: 'error', message: 'Access denied' });
-        }
-        
-        const csv = campaignManager.exportResults(req.params.id);
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename="${campaign.name}_results.csv"`);
-        res.send(csv);
-    });
-    
-    router.post('/campaigns/preview-csv', checkCampaignAccess, upload.single('file'), (req, res) => {
-        if (!req.file) {
-            return res.status(400).json({ status: 'error', message: 'No file uploaded' });
-        }
-        
-        try {
-            const csvContent = fs.readFileSync(req.file.path, 'utf-8');
-            const result = campaignManager.parseCSV(csvContent);
-            
-            // Clean up uploaded file
-            fs.unlinkSync(req.file.path);
-            
-            res.json(result);
-        } catch (error) {
-            // Clean up uploaded file
-            if (req.file && fs.existsSync(req.file.path)) {
-                fs.unlinkSync(req.file.path);
-            }
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
-
-
-
-    // Export the function for use by the main scheduler
-    router.checkAndStartScheduledCampaigns = checkAndStartScheduledCampaigns;
-
-    // Recipient List Management Endpoints (Session-based auth, not token-based)
-    
-    // Get all recipient lists
-    router.get('/recipient-lists', checkCampaignAccess, (req, res) => {
-        const lists = recipientListManager.getAllLists(
-            req.currentUser.email,
-            req.currentUser.role === 'admin'
-        );
-        res.json(lists);
-    });
-    
-    // Get specific recipient list
-    router.get('/recipient-lists/:id', checkCampaignAccess, (req, res) => {
-        const list = recipientListManager.loadList(req.params.id);
-        if (!list) {
-            return res.status(404).json({ status: 'error', message: 'Recipient list not found' });
-        }
-        
-        // Check access
-        if (req.currentUser.role !== 'admin' && list.createdBy !== req.currentUser.email) {
-            return res.status(403).json({ status: 'error', message: 'Access denied' });
-        }
-        
-        res.json(list);
-    });
-    
-    // Create new recipient list
-    router.post('/recipient-lists', checkCampaignAccess, (req, res) => {
-        try {
-            const listData = {
-                ...req.body,
-                createdBy: req.currentUser.email
-            };
-            
-            const list = recipientListManager.createList(listData);
-            res.status(201).json(list);
-        } catch (error) {
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
-    
-    // Update recipient list
-    router.put('/recipient-lists/:id', checkCampaignAccess, (req, res) => {
-        try {
-            const list = recipientListManager.loadList(req.params.id);
-            if (!list) {
-                return res.status(404).json({ status: 'error', message: 'Recipient list not found' });
-            }
-            
-            // Check access
-            if (req.currentUser.role !== 'admin' && list.createdBy !== req.currentUser.email) {
-                return res.status(403).json({ status: 'error', message: 'Access denied' });
-            }
-            
-            const updated = recipientListManager.updateList(req.params.id, req.body);
-            res.json(updated);
-        } catch (error) {
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
-    
-    // Delete recipient list
-    router.delete('/recipient-lists/:id', checkCampaignAccess, (req, res) => {
-        const list = recipientListManager.loadList(req.params.id);
-        if (!list) {
-            return res.status(404).json({ status: 'error', message: 'Recipient list not found' });
-        }
-        
-        // Check access
-        if (req.currentUser.role !== 'admin' && list.createdBy !== req.currentUser.email) {
-            return res.status(403).json({ status: 'error', message: 'Access denied' });
-        }
-        
-        const success = recipientListManager.deleteList(req.params.id);
-        if (success) {
-            res.json({ status: 'success', message: 'Recipient list deleted' });
-        } else {
-            res.status(500).json({ status: 'error', message: 'Failed to delete recipient list' });
-        }
-    });
-    
-    // Clone recipient list
-    router.post('/recipient-lists/:id/clone', checkCampaignAccess, (req, res) => {
-        try {
-            const cloned = recipientListManager.cloneList(req.params.id, req.currentUser.email, req.body.name);
-            res.status(201).json(cloned);
-        } catch (error) {
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
-    
-    // Add recipient to list
-    router.post('/recipient-lists/:id/recipients', checkCampaignAccess, (req, res) => {
-        try {
-            const list = recipientListManager.loadList(req.params.id);
-            if (!list) {
-                return res.status(404).json({ status: 'error', message: 'Recipient list not found' });
-            }
-            
-            // Check access
-            if (req.currentUser.role !== 'admin' && list.createdBy !== req.currentUser.email) {
-                return res.status(403).json({ status: 'error', message: 'Access denied' });
-            }
-            
-            const updated = recipientListManager.addRecipient(req.params.id, req.body);
-            res.status(201).json(updated);
-        } catch (error) {
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
-    
-    // Update recipient in list
-    router.put('/recipient-lists/:id/recipients/:number', checkCampaignAccess, (req, res) => {
-        try {
-            const list = recipientListManager.loadList(req.params.id);
-            if (!list) {
-                return res.status(404).json({ status: 'error', message: 'Recipient list not found' });
-            }
-            
-            // Check access
-            if (req.currentUser.role !== 'admin' && list.createdBy !== req.currentUser.email) {
-                return res.status(403).json({ status: 'error', message: 'Access denied' });
-            }
-            
-            const updated = recipientListManager.updateRecipient(req.params.id, req.params.number, req.body);
-            res.json(updated);
-        } catch (error) {
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
-    
-    // Remove recipient from list
-    router.delete('/recipient-lists/:id/recipients/:number', checkCampaignAccess, (req, res) => {
-        try {
-            const list = recipientListManager.loadList(req.params.id);
-            if (!list) {
-                return res.status(404).json({ status: 'error', message: 'Recipient list not found' });
-            }
-            
-            // Check access
-            if (req.currentUser.role !== 'admin' && list.createdBy !== req.currentUser.email) {
-                return res.status(403).json({ status: 'error', message: 'Access denied' });
-            }
-            
-            const updated = recipientListManager.removeRecipient(req.params.id, req.params.number);
-            res.json(updated);
-        } catch (error) {
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
-    
-    // Search recipients across all lists
-    router.get('/recipient-lists/search/:query', checkCampaignAccess, (req, res) => {
-        const results = recipientListManager.searchRecipients(
-            req.params.query,
-            req.currentUser.email,
-            req.currentUser.role === 'admin'
-        );
-        res.json(results);
-    });
-    
-    // Get recipient lists statistics
-    router.get('/recipient-lists-stats', checkCampaignAccess, (req, res) => {
-        const stats = recipientListManager.getStatistics(
-            req.currentUser.email,
-            req.currentUser.role === 'admin'
-        );
-        res.json(stats);
-    });
-    
-    // Mark recipient list as used
-    router.post('/recipient-lists/:id/mark-used', checkCampaignAccess, (req, res) => {
-        const list = recipientListManager.loadList(req.params.id);
-        if (!list) {
-            return res.status(404).json({ status: 'error', message: 'Recipient list not found' });
-        }
-        
-        // Check access
-        if (req.currentUser.role !== 'admin' && list.createdBy !== req.currentUser.email) {
-            return res.status(403).json({ status: 'error', message: 'Access denied' });
-        }
-        
-        recipientListManager.markAsUsed(req.params.id);
-        res.json({ status: 'success', message: 'List marked as used' });
-    });
     
     // Debug endpoint to check session status
     router.get('/debug/sessions', checkCampaignAccess, (req, res) => {
@@ -604,7 +204,8 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     // Official WhatsApp Phone Pairing Endpoint
     router.post('/session/pair-phone', checkAuth, async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
-        const { phoneNumber } = req.body;
+        // Accept sessionId from frontend, default to null if not provided
+        const { phoneNumber, sessionId: customSessionId } = req.body;
         const currentUser = req.currentUser;
 
         if (!phoneNumber) {
@@ -623,6 +224,14 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
 
         try {
+            // If a custom session ID is provided, check if it already exists.
+            if (customSessionId && (sessions.has(customSessionId) || phonePairing.getPairingStatus(customSessionId))) {
+                return res.status(409).json({
+                    status: 'error',
+                    message: `Session with ID "${customSessionId}" already exists or is pending.`
+                });
+            }
+
             // Find and delete any stale pairing sessions for this number to ensure a fresh start
             const stalePairing = phonePairing.findStalePairing(phoneNumber);
             if (stalePairing && stalePairing.sessionId) {
@@ -632,7 +241,10 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
                 phonePairing.deletePairing(staleSessionId); // Deletes from pairing_statuses.json
             }
 
-            const { sessionId } = await phonePairing.createPairing(currentUser.email, phoneNumber);
+            // Use the custom session ID if provided, otherwise create a new one.
+            // The 'createPairing' function now needs to accept an optional sessionId.
+            // This change will be made to the PhonePairing class definition.
+            const { sessionId } = await phonePairing.createPairing(currentUser.email, phoneNumber, customSessionId);
 
             // This will create a session and start the connection process
             // The connectToWhatsApp function will see the PENDING_REQUEST and handle pairing
@@ -715,23 +327,33 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     // All routes below this are protected by token
     router.use(validateToken);
 
-    router.post('/sessions/:sessionId/settings', async (req, res) => {
-        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
-        const { sessionId } = req.params;
-        const settings = req.body;
+    // Consolidated endpoint for GETTING and POSTING session settings
+    router.route('/sessions/:sessionId/settings')
+        .get(async (req, res) => {
+            const { sessionId } = req.params;
+            const session = sessions.get(sessionId);
+            if (!session) {
+                return res.status(404).json({ error: 'Session not found' });
+            }
+            res.status(200).json(session.settings || {});
+        })
+        .post(async (req, res) => {
+            log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
+            const { sessionId } = req.params;
+            const settings = req.body;
 
-        if (typeof settings !== 'object' || settings === null) {
-            return res.status(400).json({ status: 'error', message: 'Invalid settings format. Expected an object.' });
-        }
+            if (typeof settings !== 'object' || settings === null) {
+                return res.status(400).json({ status: 'error', message: 'Invalid settings format. Expected an object.' });
+            }
 
-        try {
-            await saveSessionSettings(sessionId, settings);
-            res.status(200).json({ status: 'success', message: 'Settings saved successfully.' });
-        } catch (error) {
-            log(`API Error saving settings for ${sessionId}: ${error.message}`, 'SYSTEM', { error });
-            res.status(500).json({ status: 'error', message: 'Failed to save settings.' });
-        }
-    });
+            try {
+                await saveSessionSettings(sessionId, settings);
+                res.status(200).json({ status: 'success', message: 'Settings saved successfully.' });
+            } catch (error) {
+                log(`API Error saving settings for ${sessionId}: ${error.message}`, 'SYSTEM', { error });
+                res.status(500).json({ status: 'error', message: 'Failed to save settings.' });
+            }
+        });
 
     router.delete('/sessions/:sessionId', async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, params: req.params });
@@ -744,17 +366,6 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         } : null;
         
         try {
-            // Check ownership if user is authenticated
-            if (currentUser && currentUser.role !== 'admin' && userManager) {
-                const sessionOwner = userManager.getSessionOwner(sessionId);
-                if (sessionOwner && sessionOwner.email !== currentUser.email) {
-                    return res.status(403).json({ 
-                        status: 'error', 
-                        message: 'You can only delete your own sessions' 
-                    });
-                }
-            }
-            
             await deleteSession(sessionId);
             
             // Log activity
@@ -778,38 +389,6 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
     }
 
-    // Webhook setup endpoint
-    router.post('/webhook', async (req, res) => {
-        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
-        const { url, sessionId } = req.body;
-        if (!url || !sessionId) {
-            log('API error', 'SYSTEM', { event: 'api-error', error: 'URL and sessionId are required.', endpoint: req.originalUrl });
-            return res.status(400).json({ status: 'error', message: 'URL and sessionId are required.' });
-        }
-        await setWebhookUrl(sessionId, url);
-        log('Webhook URL updated', url, { event: 'webhook-updated', sessionId, url });
-        res.status(200).json({ status: 'success', message: `Webhook URL for session ${sessionId} updated to ${url}` });
-    });
-    
-    // Add GET and DELETE endpoints for webhook management
-    router.get('/webhook', async (req, res) => {
-        const { sessionId } = req.query;
-        if (!sessionId) {
-            return res.status(400).json({ status: 'error', message: 'sessionId is required.' });
-        }
-        const url = await getWebhookUrl(sessionId);
-        res.status(200).json({ status: 'success', sessionId, url: url || null });
-    });
-
-    router.delete('/webhook', async (req, res) => {
-        const { sessionId } = req.body;
-        if (!sessionId) {
-            return res.status(400).json({ status: 'error', message: 'sessionId is required.' });
-        }
-        await deleteWebhookUrl(sessionId);
-        log('Webhook URL deleted', '', { event: 'webhook-deleted', sessionId });
-        res.status(200).json({ status: 'success', message: `Webhook for session ${sessionId} deleted.` });
-    });
 
     // Hardened media upload endpoint
     router.post('/media', upload.single('file'), (req, res) => {
@@ -988,6 +567,21 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         res.status(200).json(results);
     });
 
+    // Endpoint to regenerate API token
+    router.post('/sessions/:sessionId/regenerate-token', checkAuth, async (req, res) => {
+        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl });
+        const { sessionId } = req.params;
+
+        try {
+            // The regenerateSessionToken function needs to be passed into initializeApi
+            const newToken = await regenerateSessionToken(sessionId);
+            res.status(200).json({ status: 'success', message: 'Token regenerated successfully.', token: newToken });
+        } catch (error) {
+            log(`API Error regenerating token for ${sessionId}: ${error.message}`, 'SYSTEM', { error });
+            res.status(500).json({ status: 'error', message: 'Failed to regenerate token.' });
+        }
+    });
+
     router.delete('/message', async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
         const { sessionId, messageId, remoteJid } = req.body;
@@ -1020,10 +614,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
     });
 
-    // Make campaign sender available for WebSocket updates
-    router.campaignSender = campaignSender;
-    
     return router;
 }
 
-module.exports = { initializeApi, getWebhookUrl: getWebhookUrl };
+module.exports = { initializeApi };

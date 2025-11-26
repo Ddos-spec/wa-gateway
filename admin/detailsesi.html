@@ -1,316 +1,148 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+<html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SIMPEL API WA - Session Detail</title>
+    <title>Detail Sesi - WA Gateway</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <style>
-        .qr-container {
-            min-height: 300px;
-            border: 2px dashed #dee2e6;
-            border-radius: 0.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .logs-container {
-            background-color: #212529;
-            color: #f8f9fa;
-            font-family: 'Menlo', 'Courier New', Courier, monospace;
-            padding: 1.25rem;
-            overflow-y: scroll;
-            border-radius: 0.375rem;
-            font-size: 0.9em;
-            height: 250px;
-        }
-    </style>
-    <link rel="stylesheet" href="/admin/css/custom.css">
+    <link rel="stylesheet" href="/css/style.css">
 </head>
-<body class="bg-light">
-    <div id="offcanvas-container"></div>
-    <div class="main-content-wrapper">
-        <header class="py-3 mb-4 border-bottom">
-            <div class="container-fluid d-flex align-items-center">
-                <button class="btn btn-primary me-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
-                    <i class="bi bi-list"></i>
-                </button>
-                <h4 class="mb-0">Session Detail</h4>
-            </div>
-        </header>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
+                <div class="position-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" aria-current="page" href="/dashboard.html">
+                                <i class="bi bi-grid-fill"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/users.html">
+                                <i class="bi bi-people-fill"></i>
+                                Kelola Pengguna
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" id="logout-link">
+                                <i class="bi bi-box-arrow-right"></i>
+                                Keluar
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
 
-    <!-- Main Content -->
-    <div class="container my-4">
-        <div class="row g-4">
-            <!-- Left: QR & Connection -->
-            <div class="col-lg-6">
-                <div class="card shadow-sm h-100">
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">Detail Sesi: <span id="session-id-title" class="text-primary">Memuat...</span></h1>
+                </div>
+
+                <!-- Session Status Card -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        Status Sesi
+                    </div>
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-4">
-                            <h5 class="card-title mb-0">Connection</h5>
-                            <span id="status-badge" class="badge bg-secondary">Offline</span>
-                        </div>
-
-                        <div class="d-flex align-items-center gap-3 text-muted mb-3">
-                            <span>Session: <code id="session-id-display" class="bg-light p-1 rounded">...</code></span>
-                            <span id="user-display">User: <strong>...</strong></span>
-                        </div>
-
-                        <div id="qr-container" class="qr-container d-flex justify-content-center align-items-center">
-                            <div id="qr-preview" class="d-none"></div>
-                            <div id="display-connected" class="d-none flex-column align-items-center text-success">
-                                <i class="bi bi-check-circle-fill" style="font-size: 4rem;"></i>
-                                <span class="fw-medium mt-2">Connected</span>
+                        <div id="session-status-container" class="d-flex align-items-center">
+                            <div id="status-indicator" class="spinner-border text-secondary me-3" role="status">
+                                <span class="visually-hidden">Memuat...</span>
                             </div>
-                            <div id="display-loading" class="d-none flex-column align-items-center text-muted">
-                                <div class="spinner-border" role="status">
-                                    <span class="visually-hidden">Loading...</span>
+                            <div>
+                                <h5 id="session-status" class="card-title mb-0">Memuat...</h5>
+                                <p id="session-detail" class="card-text text-muted mb-0">Menunggu data dari server.</p>
+                            </div>
+                        </div>
+                         <div id="pairing-code-container" class="mt-3" style="display: none;">
+                            <h5>Kode Pairing:</h5>
+                            <div class="alert alert-success d-flex align-items-center" role="alert">
+                                <i class="bi bi-qr-code-scan fs-2 me-3"></i>
+                                <div>
+                                    <strong id="pairing-code" class="fs-4">...</strong>
+                                    <p class="mb-0">Silakan tautkan perangkat baru dari dalam WhatsApp di ponsel Anda dan masukkan kode ini.</p>
                                 </div>
-                                <span class="fw-medium mt-2">Loading...</span>
                             </div>
-                            <div id="display-error" class="d-flex flex-column align-items-center text-danger">
-                                <i class="bi bi-x-circle-fill" style="font-size: 4rem;"></i>
-                                <span class="fw-medium mt-2">Offline</span>
-                            </div>
-                        </div>
-
-                        <div class="d-flex flex-wrap gap-2 justify-content-center">
-                            <button id="btn-scan-qr" class="btn btn-primary"><i class="bi bi-qr-code-scan me-1"></i> Generate QR</button>
-                            <button id="btn-pairing-code" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#pairing-modal"><i class="bi bi-phone me-1"></i> Pairing Code</button>
-                            <button id="btn-delete" class="btn btn-danger"><i class="bi bi-trash me-1"></i> Delete Session</button>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Right: Configuration -->
-            <div class="col-lg-6">
-                <div class="card shadow-sm h-100">
-                    <div class="card-body">
-                        <h5 class="card-title mb-4">Configuration</h5>
-                        
-                        <div id="config-loader" class="text-center p-5">
-                            <div class="spinner-border" role="status">
-                                <span class="visually-hidden">Loading...</span>
+                <!-- Session Info -->
+                <div class="row">
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                Informasi Sesi
                             </div>
-                            <p class="text-muted mt-2">Loading Configuration...</p>
+                            <div class="card-body">
+                                <p><strong>Pemilik:</strong> <span id="session-owner">Memuat...</span></p>
+                                <p><strong>Nomor Telepon:</strong> <span id="session-phone">Memuat...</span></p>
+                            </div>
                         </div>
+                    </div>
 
-                        <form id="settings-form" style="display: none;">
-                            <!-- API Key -->
-                            <h6 class="mb-3">API</h6>
-                            <div class="input-group mb-3">
-                                <span class="input-group-text">API Key</span>
-                                <input id="apikey-input" type="text" class="form-control" readonly placeholder="Click Generate API Key">
-                                <button type="button" id="generate-apikey" class="btn btn-outline-secondary">Generate</button>
+                    <!-- API Token -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                Token API
                             </div>
+                            <div class="card-body">
+                                <p>Gunakan token ini untuk otorisasi API pada sesi ini.</p>
+                                <div class="input-group mb-3">
+                                    <input type="text" id="api-token" class="form-control" readonly>
+                                    <button class="btn btn-outline-secondary" type="button" id="copy-token-btn" title="Salin ke Clipboard">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                </div>
+                                <button class="btn btn-sm btn-warning" id="regenerate-token-btn">
+                                    <i class="bi bi-arrow-clockwise"></i> Buat Ulang Token
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                            <!-- Webhook Configuration -->
-                            <h6 class="mb-3">Webhook Configuration</h6>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" name="webhook_individual" id="webhook_individual">
-                                            <option value="1" selected>Yes</option>
-                                            <option value="0">No</option>
-                                        </select>
-                                        <label for="webhook_individual">Webhook Individual</label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" name="webhook_group" id="webhook_group">
-                                            <option value="1">Yes</option>
-                                            <option value="0" selected>No</option>
-                                        </select>
-                                        <label for="webhook_group">Webhook Group</label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" name="webhook_from_me" id="webhook_from_me">
-                                            <option value="1">Yes</option>
-                                            <option value="0" selected>No</option>
-                                        </select>
-                                        <label for="webhook_from_me">Webhook From Me</label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" name="webhook_update_status" id="webhook_update_status">
-                                            <option value="1">Yes</option>
-                                            <option value="0" selected>No</option>
-                                        </select>
-                                        <label for="webhook_update_status">Webhook Update Status</label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" name="save_image" id="save_image">
-                                            <option value="1">Yes</option>
-                                            <option value="0" selected>No</option>
-                                        </select>
-                                        <label for="save_image">Webhook Image</label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" name="save_video" id="save_video">
-                                            <option value="1">Yes</option>
-                                            <option value="0" selected>No</option>
-                                        </select>
-                                        <label for="save_video">Webhook Video</label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" name="save_audio" id="save_audio">
-                                            <option value="1">Yes</option>
-                                            <option value="0" selected>No</option>
-                                        </select>
-                                        <label for="save_audio">Webhook Audio</label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" name="save_sticker" id="save_sticker">
-                                            <option value="1">Yes</option>
-                                            <option value="0" selected>No</option>
-                                        </select>
-                                        <label for="save_sticker">Webhook Sticker</label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-floating mb-3">
-                                        <select class="form-select" name="save_document" id="save_document">
-                                            <option value="1">Yes</option>
-                                            <option value="0" selected>No</option>
-                                        </select>
-                                        <label for="save_document">Webhook Document</label>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Webhook URLs -->
+
+                <!-- Webhook Settings -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        Pengaturan Webhook
+                    </div>
+                    <div class="card-body">
+                        <form id="webhook-form">
                             <div class="mb-3">
-                                <label class="form-label">Webhook URLs</label>
-                                <div id="webhook-list"></div>
-                                <button type="button" id="add-webhook" class="btn btn-sm btn-outline-primary mt-2"><i class="bi bi-plus-lg me-1"></i> Add URL</button>
+                                <label for="webhook-url" class="form-label">URL Webhook</label>
+                                <input type="url" class="form-control" id="webhook-url" placeholder="https://domain-anda.com/webhook">
+                                <div class="form-text">Masukkan URL untuk menerima notifikasi (misal: pesan masuk, status terkirim). Biarkan kosong untuk menonaktifkan.</div>
                             </div>
-
-                            <button type="button" id="save-config-btn" class="btn btn-primary w-100">Save Configuration</button>
+                            <button type="submit" class="btn btn-primary">
+                                <span id="webhook-spinner" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="display: none;"></span>
+                                Simpan Pengaturan
+                            </button>
                         </form>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Logs -->
-        <div class="card shadow-sm mt-4">
-            <div class="card-header">
-                <h5 class="mb-0">Live Logs</h5>
-            </div>
-            <div class="card-body">
-                <div id="logs" class="logs-container"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Pairing Code Modal -->
-    <div class="modal fade" id="pairing-modal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Link with Phone Number</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <!-- Danger Zone -->
+                <div class="card border-danger">
+                    <div class="card-header bg-danger text-white">
+                        Zona Berbahaya
+                    </div>
+                    <div class="card-body">
+                        <p class="text-danger">Tindakan ini tidak dapat diurungkan. Harap berhati-hati.</p>
+                        <button class="btn btn-danger" id="delete-session-btn">
+                            <i class="bi bi-trash-fill"></i> Hapus Sesi Ini
+                        </button>
+                    </div>
                 </div>
-                <div class="modal-body">
-                    <form id="pairing-form">
-                        <div class="form-floating mb-3">
-                            <input type="number" class="form-control" id="phone-number" placeholder="Enter phone number" required>
-                            <label for="phone-number">Phone number with country code</label>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 mb-3">Next</button>
-                        <div id="pairing-code-display" class="text-center fs-4 fw-bold"></div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Generic Confirmation Modal -->
-    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="confirmationModalTitle">Confirmation</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body" id="confirmationModalBody">
-                    Are you sure?
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
-                    <button type="button" class="btn btn-primary" id="confirmationModalConfirmBtn">Yes</button>
-                </div>
-            </div>
+            </main>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.0/axios.min.js"></script>
-    <script src="/admin/js/auth-check.js"></script>
-    <script src="/admin/js/loadNavbar.js"></script>
-    <script>
-        // Placeholder for the new detailsesi.js logic
-        document.addEventListener('DOMContentLoaded', () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const sessionId = urlParams.get('sessionId');
-            if (!sessionId) {
-                alert('No session ID provided!');
-                window.location.href = '/admin/dashboard.html';
-                return;
-            }
-
-            document.getElementById('session-id-display').textContent = sessionId;
-            // Further logic will be in a separate detailsesi.js file
-        });
-
-        // Webhook Management
-        function addWebhookField(value = '') {
-            const webhookList = document.getElementById('webhook-list');
-            const item = document.createElement('div');
-            item.className = 'input-group mb-2';
-            item.innerHTML = `
-                <input type="text" name="webhook[]" class="form-control" placeholder="https://webhook.com/example" value="${value}">
-                <button type="button" class="btn btn-outline-danger" onclick="removeWebhook(this)">
-                    <i class="bi bi-trash"></i>
-                </button>
-            `;
-            webhookList.appendChild(item);
-        }
-
-        function removeWebhook(btn) {
-            if (confirm('Remove this webhook URL?')) {
-                btn.closest('.input-group').remove();
-            }
-        }
-
-        document.getElementById('add-webhook').addEventListener('click', () => addWebhookField());
-
-        // Logs
-        function addLog(type, message) {
-            const logsContainer = document.getElementById('logs');
-            const timestamp = new Date().toLocaleString();
-            const log = document.createElement('div');
-            log.innerHTML = `<span class="text-success">[${timestamp}]</span> <span class="text-warning">${type.toUpperCase()}:</span> ${message}`;
-            logsContainer.appendChild(log);
-            logsContainer.scrollTop = logsContainer.scrollHeight;
-        }
-
-        // Example usage
-        addLog('info', 'Dashboard loaded');
-    </script>
     <script src="/admin/js/detailsesi.js"></script>
-</div> <!-- End of main-content-wrapper -->
 </body>
 </html>

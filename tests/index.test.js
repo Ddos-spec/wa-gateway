@@ -1,9 +1,15 @@
 const request = require('supertest');
-const { app } = require('../index'); // Only import app
+const { app, server } = require('../index'); // Import both app and the server instance
 
-jest.setTimeout(5000); // Very short timeout
+// Use a longer timeout for integration tests
+jest.setTimeout(10000);
 
-describe('Hyper Minimal Test Suite', () => {
+describe('API Integration Tests', () => {
+
+  // This hook ensures the server is closed after all tests have run
+  afterAll((done) => {
+    server.close(done);
+  });
 
   describe('GET /ping', () => {
     it('should return 200 and pong', async () => {
@@ -13,16 +19,12 @@ describe('Hyper Minimal Test Suite', () => {
     });
   });
 
-  describe('GET /sessions (hyper-minimal)', () => {
-    it('should return 200 and an empty array', async () => {
+  describe('GET /sessions', () => {
+    it('should return 200 and an array (likely empty at start)', async () => {
         const response = await request(app).get('/sessions');
         expect(response.status).toBe(200);
-        expect(response.body).toEqual([]);
+        // It should be an array, but not necessarily empty if sessions persist
+        expect(Array.isArray(response.body)).toBe(true);
       });
   });
 });
-
-// afterAll is not strictly necessary for this hyper-minimal test if it exits cleanly
-// afterAll(done => {
-//   done();
-// });

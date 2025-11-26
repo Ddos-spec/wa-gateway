@@ -332,7 +332,7 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
 
                     <div class="d-grid gap-2">
                          <a href="${detailUrl}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i> Details</a>
-                         <button class="btn btn-outline-danger btn-sm" onclick="deleteSession('${session.sessionId}')"><i class="bi bi-trash"></i> Delete</button>
+                         <button class="btn btn-outline-danger btn-sm delete-session-btn" data-session-id="${session.sessionId}"><i class="bi bi-trash"></i> Delete</button>
                     </div>
                 </div>
             </div>`;
@@ -403,22 +403,31 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
         }
     }
 
-    window.deleteSession = async function(sessionId) {
-        if (!confirm(`Are you sure you want to delete session ${sessionId}?`)) return;
-        try {
-            const response = await fetch(`/api/v1/sessions/${sessionId}`, {
-                method: 'DELETE'
-            });
-            const result = await response.json();
-            if (response.ok) {
-                fetchSessions();
-            } else {
-                alert(result.message || 'Failed to delete session');
+    // Using event delegation for delete buttons
+    sessionsContainer.addEventListener('click', async (event) => {
+        const deleteButton = event.target.closest('.delete-session-btn');
+        if (deleteButton) {
+            const sessionId = deleteButton.dataset.sessionId;
+            if (!sessionId) return;
+
+            if (!confirm(`Are you sure you want to delete session ${sessionId}?`)) return;
+            try {
+                // No token is needed as auth is handled by the session cookie
+                const response = await fetch(`/api/v1/sessions/${sessionId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    // No need to call fetchSessions(), websocket will update the UI
+                    console.log(result.message);
+                } else {
+                    alert(result.message || 'Failed to delete session');
+                }
+            } catch (error) {
+                alert(`An error occurred: ${error.message}`);
             }
-        } catch (error) {
-            alert(`An error occurred: ${error.message}`);
         }
-    }
+    });
 
     function initializeWebSocket() {
         // Just try to connect without auth first, since we removed auth

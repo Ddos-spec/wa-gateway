@@ -1,309 +1,270 @@
-// admin/js/detailsesi.js
+document.addEventListener('DOMContentLoaded', () => {
+    const sessionIdTitle = document.getElementById('session-id-title');
+    const statusIndicator = document.getElementById('status-indicator');
+    const sessionStatus = document.getElementById('session-status');
+    const sessionDetail = document.getElementById('session-detail');
+    const pairingCodeContainer = document.getElementById('pairing-code-container');
+    const pairingCodeEl = document.getElementById('pairing-code');
 
-document.addEventListener('auth-success', function() {
+    const sessionOwner = document.getElementById('session-owner');
+    const sessionPhone = document.getElementById('session-phone');
+    const apiTokenInput = document.getElementById('api-token');
+    const copyTokenBtn = document.getElementById('copy-token-btn');
+    const regenerateTokenBtn = document.getElementById('regenerate-token-btn');
+
+    const webhookForm = document.getElementById('webhook-form');
+    const webhookUrlInput = document.getElementById('webhook-url');
+    const webhookSpinner = document.getElementById('webhook-spinner');
+
+    const deleteSessionBtn = document.getElementById('delete-session-btn');
+    const logoutLink = document.getElementById('logout-link');
+
     const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('sessionId');
+    const sessionId = urlParams.get('id');
 
     if (!sessionId) {
-        alert('No session ID provided!');
-        window.location.href = '/admin/dashboard.html';
+        alert('Session ID tidak ditemukan!');
+        window.location.href = '/dashboard.html';
         return;
     }
 
-    // --- DOM Elements ---
-    const statusBadge = document.getElementById('status-badge');
-    const sessionIdDisplay = document.getElementById('session-id-display');
-    const userDisplay = document.getElementById('user-display');
+    sessionIdTitle.textContent = sessionId;
+    let sessionDataCache = null; // To store session details
+    let statusPollInterval;
+
+    const showAlert = (message, type = 'danger') => {
+        const alertContainer = document.createElement('div');
+        alertContainer.className = `alert alert-${type} alert-dismissible fade show`;
+        alertContainer.setAttribute('role', 'alert');
+        alertContainer.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        document.querySelector('main').prepend(alertContainer);
+        setTimeout(() => {
+            const bsAlert = new bootstrap.Alert(alertContainer);
+            bsAlert.close();
+        }, 5000);
+    };
     
-    const qrContainer = document.getElementById('qr-container');
-    const qrPreview = document.getElementById('qr-preview');
-    const displayConnected = document.getElementById('display-connected');
-    const displayLoading = document.getElementById('display-loading');
-    const displayError = document.getElementById('display-error');
+    const updateStatusUI = (status, detail, pairingCode = null) => {
+        sessionStatus.textContent = status;
+        sessionDetail.textContent = detail || '...';
+        statusIndicator.className = 'me-3'; // Reset classes
 
-    const btnScanQr = document.getElementById('btn-scan-qr');
-    const btnPairingCode = document.getElementById('btn-pairing-code');
-    const btnDelete = document.getElementById('btn-delete');
-
-    const apikeyInput = document.getElementById('apikey-input');
-    const generateApikeyBtn = document.getElementById('generate-apikey');
-
-    // New elements for loading state and confirmation
-    const configLoader = document.getElementById('config-loader');
-    const settingsForm = document.getElementById('settings-form');
-    const saveConfigBtn = document.getElementById('save-config-btn');
-    const confirmationModalEl = document.getElementById('confirmationModal');
-    const confirmationModal = new bootstrap.Modal(confirmationModalEl);
-    const confirmationModalTitle = document.getElementById('confirmationModalTitle');
-    const confirmationModalBody = document.getElementById('confirmationModalBody');
-    const confirmationModalConfirmBtn = document.getElementById('confirmationModalConfirmBtn');
-
-    const webhookList = document.getElementById('webhook-list');
-    const logsContainer = document.getElementById('logs');
-    
-    const pairingForm = document.getElementById('pairing-form');
-    const phoneNumberInput = document.getElementById('phone-number');
-    const pairingCodeDisplay = document.getElementById('pairing-code-display');
-
-    let sessionToken = null;
-
-    // --- Main Functions ---
-
-    function updatePage(session) {
-        if (!session) return;
-
-        sessionToken = session.token;
-        sessionIdDisplay.textContent = session.sessionId;
-        userDisplay.innerHTML = `User: <strong>${session.owner || 'N/A'}</strong>`;
-
-        statusBadge.textContent = session.status;
-        statusBadge.className = 'badge ';
-        if (session.status === 'CONNECTED') {
-            statusBadge.classList.add('bg-success');
-            showQrState('connected');
-        } else if (session.status === 'DISCONNECTED' || session.status === 'UNPAIRED') {
-            statusBadge.classList.add('bg-danger');
-            showQrState('error');
-        } else {
-            statusBadge.classList.add('bg-warning', 'text-dark');
-            showQrState('loading');
-        }
-
-        if (session.status === 'GENERATING_QR' && session.qr) {
-            showQrState('qr');
-            qrPreview.innerHTML = '';
-            new QRCode(qrPreview, { text: session.qr, width: 250, height: 250 });
-        }
-        
-        if (session.token) {
-            apikeyInput.value = session.token;
-        }
-
-        if (session.settings) {
-            for (const key in session.settings) {
-                const input = settingsForm.elements[key];
-                if (input) {
-                    if (input.type === 'select-one') {
-                        input.value = session.settings[key] ? '1' : '0';
-                    }
+        switch (status) {
+            case 'CONNECTED':
+                statusIndicator.classList.add('bi', 'bi-check-circle-fill', 'text-success');
+                pairingCodeContainer.style.display = 'none';
+                break;
+            case 'DISCONNECTED':
+            case 'ERROR':
+                statusIndicator.classList.add('bi', 'bi-x-circle-fill', 'text-danger');
+                pairingCodeContainer.style.display = 'none';
+                break;
+            case 'PAIRING':
+                statusIndicator.classList.add('spinner-border', 'text-warning');
+                 if (pairingCode) {
+                    pairingCodeEl.textContent = pairingCode;
+                    pairingCodeContainer.style.display = 'block';
                 }
-            }
-            webhookList.innerHTML = '';
-            if (session.settings.webhooks && Array.isArray(session.settings.webhooks)) {
-                session.settings.webhooks.forEach(url => addWebhookField(url));
-            }
+                break;
+            default:
+                statusIndicator.classList.add('spinner-border', 'text-secondary');
+                pairingCodeContainer.style.display = 'none';
         }
+    };
 
-        // Show form and hide loader
-        configLoader.style.display = 'none';
-        settingsForm.style.display = 'block';
-    }
-    
-    function showQrState(state) {
-        [qrPreview, displayConnected, displayLoading, displayError].forEach(el => el.classList.add('d-none'));
-        if (state === 'qr') qrPreview.classList.remove('d-none');
-        else if (state === 'connected') displayConnected.classList.remove('d-none');
-        else if (state === 'loading') displayLoading.classList.remove('d-none');
-        else if (state === 'error') displayError.classList.remove('d-none');
-    }
 
-    async function fetchSessionData() {
+    const fetchSessionStatus = async () => {
+        try {
+            // Using the new pairing status endpoint which also covers regular sessions
+            const response = await fetch(`/api/v1/session/${sessionId}/pair-status`);
+
+            if (response.status === 404) {
+                updateStatusUI('NOT FOUND', 'Sesi ini tidak ditemukan atau sudah dihapus.');
+                clearInterval(statusPollInterval); // Stop polling
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error('Gagal mengambil status sesi.');
+            }
+
+            const data = await response.json();
+            updateStatusUI(data.sessionStatus, data.detail, data.pairingCode);
+
+            // If session is found and details are not loaded yet, load them
+            if (!sessionDataCache) {
+                loadInitialData();
+            }
+
+        } catch (error) {
+            console.error('Error fetching session status:', error);
+            // Don't show alert for polling errors to avoid spamming user
+        }
+    };
+
+    const loadInitialData = async () => {
         try {
             const response = await fetch('/api/v1/sessions');
-            if (!response.ok) throw new Error('Failed to fetch sessions');
+            if (!response.ok) throw new Error('Gagal mengambil daftar sesi.');
+
             const sessions = await response.json();
-            const currentSession = sessions.find(s => s.sessionId === sessionId);
-            if (currentSession) {
-                updatePage(currentSession);
+            const sessionDetails = sessions.find(s => s.sessionId === sessionId);
+
+            if (!sessionDetails) {
+                 showAlert('Detail sesi tidak dapat ditemukan.');
+                 sessionDataCache = {}; // Mark as loaded to prevent re-fetch
+                 return;
+            }
+
+            sessionDataCache = sessionDetails;
+
+            // Populate session info
+            sessionOwner.textContent = sessionDetails.owner || 'Tidak diketahui';
+            sessionPhone.textContent = sessionDetails.phoneNumber || 'Belum terhubung';
+
+            // Populate API token
+            apiTokenInput.value = sessionDetails.token;
+
+            // Fetch and populate webhook settings
+            const settingsResponse = await fetch(`/api/v1/sessions/${sessionId}/settings`, {
+                headers: { 'Authorization': `Bearer ${sessionDetails.token}` }
+            });
+            if (settingsResponse.ok) {
+                const settings = await settingsResponse.json();
+                webhookUrlInput.value = settings.webhookUrl || '';
             } else {
-                alert('Session not found!');
-                window.location.href = '/admin/dashboard.html';
+                 console.warn('Gagal memuat pengaturan webhook.');
             }
+
         } catch (error) {
-            console.error('Error fetching session data:', error);
-            configLoader.innerHTML = `<div class="alert alert-danger">Could not load session data.</div>`;
+            showAlert(error.message);
         }
-    }
+    };
 
-    function initializeWebSocket() {
-        fetch('/api/v1/ws-auth')
-            .then(res => res.json())
-            .then(data => {
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const ws = new WebSocket(`${protocol}//${window.location.host}?token=${data.wsToken}`);
-                ws.onopen = () => addLog('SYSTEM', 'Log stream connected.');
-                ws.onmessage = (event) => {
-                    const logData = JSON.parse(event.data);
-                    if (logData.type === 'session-update') {
-                        const updatedSession = logData.data.find(s => s.sessionId === sessionId);
-                        if (updatedSession) updatePage(updatedSession);
-                    } else if (logData.type === 'log' && (logData.sessionId === sessionId || !logData.sessionId)) {
-                         addLog(logData.sessionId || 'SYSTEM', logData.message);
-                    }
-                };
-                ws.onclose = () => {
-                    addLog('SYSTEM', 'Log stream disconnected. Reconnecting in 5 seconds...');
-                    setTimeout(initializeWebSocket, 5000);
-                };
-                ws.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                    ws.close();
-                };
-            })
-            .catch(error => console.error('Failed to get WebSocket auth token:', error));
-    }
+    copyTokenBtn.addEventListener('click', () => {
+        apiTokenInput.select();
+        document.execCommand('copy');
+        showAlert('Token API disalin ke clipboard!', 'success');
+    });
 
-    // --- Confirmation Modal Logic ---
-    function setupConfirmationModal(title, body, onConfirm) {
-        confirmationModalTitle.textContent = title;
-        confirmationModalBody.textContent = body;
-
-        // Clone and replace the button to remove old event listeners
-        const newConfirmBtn = confirmationModalConfirmBtn.cloneNode(true);
-        confirmationModalConfirmBtn.parentNode.replaceChild(newConfirmBtn, confirmationModalConfirmBtn);
+    regenerateTokenBtn.addEventListener('click', async () => {
+        if (!confirm('Apakah Anda yakin ingin membuat ulang token API? Token yang lama akan segera tidak valid.')) {
+            return;
+        }
         
-        newConfirmBtn.addEventListener('click', () => {
-            onConfirm();
-            confirmationModal.hide();
-        }, { once: true }); // Ensure the event listener only runs once
+        regenerateTokenBtn.disabled = true;
+        regenerateTokenBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...`;
 
-        confirmationModal.show();
-    }
-
-    // --- Event Listeners ---
-
-    btnScanQr.addEventListener('click', async () => {
-        showQrState('loading');
         try {
-            const response = await fetch(`/api/v1/sessions/${sessionId}/qr`, { credentials: 'same-origin' });
-            if (!response.ok) {
-                const result = await response.json();
-                throw new Error(result.message || 'Failed to get QR code');
-            }
-        } catch (error) {
-            console.error('Error getting QR code:', error);
-            alert('Error getting QR code: ' + error.message);
-            showQrState('error');
-        }
-    });
-
-    btnDelete.addEventListener('click', () => {
-        setupConfirmationModal('Delete Session', `Are you sure you want to delete session ${sessionId}? This action cannot be undone.`, async () => {
-            if (!sessionToken) {
-                alert('Session token not available. Cannot delete.');
-                return;
-            }
-            try {
-                const response = await fetch(`/api/v1/sessions/${sessionId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${sessionToken}` }
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    alert(result.message);
-                    window.location.href = '/admin/dashboard.html';
-                } else {
-                    throw new Error(result.message || 'Failed to delete session');
-                }
-            } catch (error) {
-                alert(`An error occurred while deleting the session: ${error.message}`);
-            }
-        });
-    });
-    
-    saveConfigBtn.addEventListener('click', () => {
-        setupConfirmationModal('Save Configuration', 'Are you sure you want to save these settings?', async () => {
-            if (!sessionToken) {
-                alert('Session token not available. Cannot save settings.');
-                return;
-            }
-            
-            const formData = new FormData(settingsForm);
-            const settings = { webhooks: [] }; // Initialize webhooks as an array
-            for (const [key, value] of formData.entries()) {
-                if (key === 'webhook[]') {
-                    if (value) settings.webhooks.push(value); // Only add non-empty URLs
-                } else {
-                     settings[key] = value;
-                }
-            }
-            
-            Object.keys(settings).forEach(key => {
-                if (settings[key] === '1') settings[key] = true;
-                if (settings[key] === '0') settings[key] = false;
+            // Auth is handled by session cookie, so no explicit token needed here.
+            const response = await fetch(`/api/v1/sessions/${sessionId}/regenerate-token`, {
+                method: 'POST',
             });
 
-            try {
-                const response = await fetch(`/api/v1/sessions/${sessionId}/settings`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${sessionToken}`
-                    },
-                    body: JSON.stringify(settings)
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    alert('Settings saved successfully!');
-                    fetchSessionData();
-                } else {
-                    throw new Error(result.message || 'Failed to save settings');
-                }
-            } catch (error) {
-                alert(`Error saving settings: ${error.message}`);
-            }
-        });
-    });
-    
-    generateApikeyBtn.addEventListener('click', () => {
-        setupConfirmationModal('Generate New API Key', 'Are you sure you want to generate a new API Key for this session? The old key will become invalid.', async () => {
-            try {
-                const response = await fetch(`/api/v1/sessions/${sessionId}/generate-token`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${sessionToken}` }
-                });
-
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    const textError = await response.text();
-                    throw new Error(`Server responded with non-JSON content (Status: ${response.status}): ${textError.substring(0, 100)}...`);
-                }
-
-                const result = await response.json();
-                if (response.ok) {
-                    apikeyInput.value = result.token; // Update the input field with the new token
-                    sessionToken = result.token; // Update the in-memory sessionToken
-                    alert('New API Key generated successfully!');
-                    // Optionally, refresh session data to ensure consistency
-                    fetchSessionData();
-                } else {
-                    throw new Error(result.message || 'Failed to generate new API Key');
-                }
-            } catch (error) {
-                alert(`Error generating API Key: ${error.message}`);
-            }
-        });
-    });
-
-    pairingForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const phone = phoneNumberInput.value;
-        if (!phone) return;
-        pairingCodeDisplay.textContent = 'Requesting code...';
-        try {
-            const response = await fetch(`/api/v1/sessions/${sessionId}/pairing-code?phone=${phone}`, { credentials: 'same-origin' });
             const result = await response.json();
-            if (response.ok) {
-                pairingCodeDisplay.textContent = `Your Code: ${result.code}`;
-            } else {
-                throw new Error(result.message || 'Failed to get pairing code');
+            if (!response.ok) {
+                throw new Error(result.message || 'Gagal membuat ulang token.');
             }
+
+            apiTokenInput.value = result.token;
+            showAlert('Token API berhasil dibuat ulang!', 'success');
+
         } catch (error) {
-            pairingCodeDisplay.textContent = `Error: ${error.message}`;
+            showAlert(error.message);
+        } finally {
+            regenerateTokenBtn.disabled = false;
+            regenerateTokenBtn.innerHTML = `<i class="bi bi-arrow-clockwise"></i> Buat Ulang Token`;
         }
     });
 
-    // --- Initial Load ---
-    fetchSessionData();
-    initializeWebSocket();
+    webhookForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        webhookSpinner.style.display = 'inline-block';
+        
+        const webhookUrl = webhookUrlInput.value.trim();
+        const token = apiTokenInput.value;
+
+        if (!token) {
+            showAlert('Token API tidak tersedia. Tidak dapat menyimpan pengaturan.');
+            webhookSpinner.style.display = 'none';
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/v1/sessions/${sessionId}/settings`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({ webhookUrl: webhookUrl }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Gagal menyimpan pengaturan.');
+            }
+
+            showAlert('Pengaturan webhook berhasil disimpan.', 'success');
+
+        } catch (error) {
+            showAlert(error.message);
+        } finally {
+            webhookSpinner.style.display = 'none';
+        }
+    });
+
+
+    deleteSessionBtn.addEventListener('click', async () => {
+        if (!confirm(`Apakah Anda benar-benar yakin ingin menghapus sesi "${sessionId}"? Tindakan ini tidak dapat dibatalkan.`)) {
+            return;
+        }
+
+        const token = apiTokenInput.value;
+        if (!token) {
+            showAlert('Token API tidak tersedia. Tidak dapat menghapus sesi.');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/v1/sessions/${sessionId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                }
+            });
+
+            const result = await response.json();
+            if (response.ok && result.status === 'success') {
+                alert('Sesi berhasil dihapus.');
+                window.location.href = '/dashboard.html';
+            } else {
+                throw new Error(result.message || 'Gagal menghapus sesi.');
+            }
+        } catch (error) {
+            showAlert(error.message);
+        }
+    });
+
+    logoutLink.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+            const response = await fetch('/api/v1/admin/logout', { method: 'POST' });
+            if (response.ok) {
+                window.location.href = '/login.html';
+            } else {
+                showAlert('Gagal keluar.');
+            }
+        } catch (error) {
+            showAlert('Terjadi kesalahan jaringan.');
+        }
+    });
+
+
+    // Initial fetch and start polling
+    fetchSessionStatus();
+    statusPollInterval = setInterval(fetchSessionStatus, 5000); // Poll every 5 seconds
 });

@@ -38,13 +38,30 @@ const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const session = require('express-session');
 const FileStore = require('session-file-store')(session);
-// User Manager & Activity Logger removed for performance
-// const UserManager = require('./users');
-// const ActivityLogger = require('./activity-logger');
-// ActivityLogger removed
+const redis = require('redis');
 
+// Redis Client Setup
+let redisClient;
+(async () => {
+    if (process.env.REDIS_URL) {
+        redisClient = redis.createClient({ url: process.env.REDIS_URL });
 
-// Encryption functions
+        redisClient.on('error', (err) => console.error('Redis Client Error', err));
+
+        try {
+            await redisClient.connect();
+            console.log('✅ Connected to Redis successfully!');
+        } catch (err) {
+            console.error('❌ Could not connect to Redis:', err);
+            redisClient = null; // Fallback to in-memory if connection fails
+        }
+    } else {
+        console.warn('⚠️ REDIS_URL not found in .env, webhook persistence will be in-memory and lost on restart.');
+        redisClient = null;
+    }
+})();
+
+// Obsolete features (User Manager, Activity Logger, Campaigns) removed for performance and stability
 function encrypt(text) {
     const algorithm = 'aes-256-cbc';
     const key = Buffer.from(ENCRYPTION_KEY.slice(0, 64), 'hex');
@@ -254,41 +271,7 @@ app.get('/api_documentation.md', (req, res) => {
     res.redirect('/api-documentation');
 });
 
-// Admin login endpoint - supports both legacy password and new email/password
-app.post('/admin/login', express.json(), async (req, res) => {
-    const { email, password } = req.body;
-    const ip = req.ip;
-    const userAgent = req.headers['user-agent'];
-    
-    // Legacy support: if only password is provided, try admin password
-    if (!email && password === ADMIN_PASSWORD) {
-        req.session.adminAuthed = true;
-        req.session.userEmail = 'admin@localhost';
-        req.session.userRole = 'admin';
-        // Log removed
-        return res.json({ success: true, role: 'admin' });
-    }
-    
-    // New email/password authentication
-    if (email && password) {
-        const user = await userManager.authenticateUser(email, password);
-        if (user) {
-            req.session.adminAuthed = true;
-            req.session.userEmail = user.email;
-            req.session.userRole = user.role;
-            req.session.userId = user.id;
-            // Log removed
-            return res.json({ 
-                success: true, 
-                role: user.role,
-                email: user.email 
-            });
-        }
-    }
-    
-    // Log removed
-    res.status(401).json({ success: false, message: 'Invalid credentials' });
-});
+// Admin login endpoint is obsolete due to forced admin auth
 
 // Middleware to protect admin dashboard
 function requireAdminAuth(req, res, next) {
@@ -326,7 +309,15 @@ app.get('/admin', requireAdminAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'admin', 'dashboard.html'));
 });
 
-// Admin pages removed (users, activities, campaigns)
+// Serve the session detail page under admin auth
+app.get('/admin/detailsesi.html', requireAdminAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin', 'detailsesi.html'));
+});
+
+// Simple health check endpoint for tests
+app.get('/ping', (req, res) => {
+    res.status(200).send('pong');
+});
 
 // Admin logout endpoint
 app.post('/admin/logout', requireAdminAuth, (req, res) => {
@@ -336,51 +327,7 @@ app.post('/admin/logout', requireAdminAuth, (req, res) => {
     });
 });
 
-// User management endpoints
-// User endpoints removed
-
-// User update/delete endpoints removed
-
-// Get current user info
-app.get('/api/v1/me', (req, res) => {
-    res.json({
-        email: 'admin@localhost',
-        role: 'admin',
-        isActive: true,
-        id: 'system-admin'
-    });
-});
-
-// Generate WebSocket authentication token
-app.get('/api/v1/ws-auth', requireAdminAuth, (req, res) => {
-    const currentUser = getCurrentUser(req);
-    // Create a temporary token for WebSocket authentication
-    const wsToken = crypto.randomBytes(32).toString('hex');
-    
-    // Store the token temporarily (expires in 30 seconds)
-    const tokenData = {
-        email: currentUser.email,
-        role: currentUser.role,
-        expires: Date.now() + 30000 // 30 seconds
-    };
-    
-    // Store in a temporary map (you might want to use Redis in production)
-    if (!global.wsAuthTokens) {
-        global.wsAuthTokens = new Map();
-    }
-    global.wsAuthTokens.set(wsToken, tokenData);
-    
-    // Clean up expired tokens
-    setTimeout(() => {
-        global.wsAuthTokens.delete(wsToken);
-    }, 30000);
-    
-    res.json({ wsToken });
-});
-
-// Activities endpoint removed
-
-// Activities summary endpoint removed
+// Obsolete user and activity endpoints removed for clarity
 
 // Test endpoint to verify log injection
 app.get('/admin/test-logs', requireAdminAuth, (req, res) => {
@@ -495,7 +442,7 @@ function log(message, sessionId = 'SYSTEM', details = {}) {
 
 const phonePairing = new PhonePairing(log);
 
-const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, phonePairing, saveSessionSettings);
+const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, phonePairing, saveSessionSettings, regenerateSessionToken, redisClient);
 const legacyApiRouter = initializeLegacyApi(sessions, sessionTokens);
 app.use('/api/v1', v1ApiRouter);
 app.use('/api', legacyApiRouter); // Mount legacy routes at /api
@@ -542,8 +489,16 @@ function getSettingsFilePath(sessionId) {
 
 async function saveSessionSettings(sessionId, settings) {
     try {
+        // Persist to Redis if available
+        if (redisClient) {
+            const redisKey = `settings:${sessionId}`;
+            await redisClient.set(redisKey, JSON.stringify(settings));
+        }
+
+        // Also save to file as a backup/fallback mechanism
         const filePath = getSettingsFilePath(sessionId);
         await fs.promises.writeFile(filePath, JSON.stringify(settings, null, 2));
+
         // Update in-memory session object
         if (sessions.has(sessionId)) {
             sessions.get(sessionId).settings = settings;
@@ -556,15 +511,36 @@ async function saveSessionSettings(sessionId, settings) {
 }
 
 async function loadSessionSettings(sessionId) {
+    // 1. Try to load from Redis first
+    if (redisClient) {
+        try {
+            const redisKey = `settings:${sessionId}`;
+            const data = await redisClient.get(redisKey);
+            if (data) {
+                return JSON.parse(data);
+            }
+        } catch (error) {
+            log(`Error loading settings from Redis for session ${sessionId}: ${error.message}`, sessionId, { error });
+        }
+    }
+
+    // 2. Fallback to filesystem if not in Redis
     try {
         const filePath = getSettingsFilePath(sessionId);
         if (fs.existsSync(filePath)) {
             const data = await fs.promises.readFile(filePath, 'utf-8');
-            return JSON.parse(data);
+            const settings = JSON.parse(data);
+
+            // 3. Cache it back to Redis for next time
+            if (redisClient) {
+                await redisClient.set(`settings:${sessionId}`, JSON.stringify(settings));
+            }
+            return settings;
         }
     } catch (error) {
-        log(`Error loading settings for session ${sessionId}: ${error.message}`, sessionId, { error });
+        log(`Error loading settings from file for session ${sessionId}: ${error.message}`, sessionId, { error });
     }
+
     return {}; // Return empty object if no settings found or error
 }
 // --- End Webhook Settings Management ---
@@ -596,6 +572,19 @@ function updateSessionState(sessionId, status, detail, qr, reason) {
         reason
     };
     sessions.set(sessionId, newSession);
+
+    // Persist session state to Redis
+    if (redisClient) {
+        try {
+            const redisKey = `session:${sessionId}`;
+            // Store everything except the QR code for efficiency
+            const redisSession = { ...newSession };
+            delete redisSession.qr;
+            redisClient.hSet(redisKey, redisSession);
+        } catch (err) {
+            console.error(`❌ Failed to save session ${sessionId} to Redis:`, err);
+        }
+    }
 
     broadcast({ type: 'session-update', data: getSessionsDetails() });
 
@@ -896,11 +885,6 @@ async function createSession(sessionId, createdBy = null) {
         owner: createdBy // Track who created this session
     });
     
-    // Track session ownership in user manager
-    if (createdBy) {
-        await userManager.addSessionToUser(createdBy, sessionId);
-    }
-    
     // Auto-cleanup inactive sessions after timeout
     // Fix for timeout overflow on 32-bit systems - cap at 24 hours max
     const timeoutMs = Math.min(SESSION_TIMEOUT_HOURS * 60 * 60 * 1000, 24 * 60 * 60 * 1000);
@@ -938,19 +922,18 @@ async function deleteSession(sessionId) {
         }
     }
     
-    // Remove session ownership
-    if (session && session.owner) {
-        try {
-            await userManager.removeSessionFromUser(session.owner, sessionId);
-        } catch (error) {
-            // If user not found, log a warning but continue with session deletion
-            log(`Warning: Could not remove session from user ${session.owner}: ${error.message}`, sessionId);
-        }
-    }
-    
     sessions.delete(sessionId);
     sessionTokens.delete(sessionId);
     saveTokens();
+
+    // Also delete from Redis
+    if (redisClient) {
+        try {
+            redisClient.del(`session:${sessionId}`);
+        } catch (err) {
+            console.error(`❌ Failed to delete session ${sessionId} from Redis:`, err);
+        }
+    }
     const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
     if (fs.existsSync(sessionDir)) {
         fs.rmSync(sessionDir, { recursive: true, force: true });
@@ -988,15 +971,41 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 async function initializeExistingSessions() {
+    // If Redis is available, it's the source of truth
+    if (redisClient) {
+        log('🔄 Initializing existing sessions from Redis...');
+        try {
+            const sessionKeys = await redisClient.keys('session:*');
+            log(`Found ${sessionKeys.length} session(s) in Redis.`);
+
+            for (const key of sessionKeys) {
+                const sessionId = key.replace('session:', '');
+                const sessionData = await redisClient.hGetAll(key);
+
+                // Restore session to in-memory map
+                sessions.set(sessionId, { ...sessionData, sock: null }); // sock will be re-initialized
+
+                // Re-establish connection
+                log(`Re-initializing session: ${sessionId}`);
+                connectToWhatsApp(sessionId);
+            }
+        } catch (err) {
+            console.error('❌ Failed to initialize sessions from Redis:', err);
+        }
+        return; // Don't fall back to filesystem if Redis is configured
+    }
+
+    // Fallback to filesystem if Redis is not used
+    log('🔄 Initializing existing sessions from filesystem...');
     const sessionsDir = path.join(__dirname, 'auth_info_baileys');
     if (fs.existsSync(sessionsDir)) {
         const sessionFolders = fs.readdirSync(sessionsDir);
-        log(`Found ${sessionFolders.length} existing session(s). Initializing...`);
+        log(`Found ${sessionFolders.length} existing session(s).`);
         for (const sessionId of sessionFolders) {
             const sessionPath = path.join(sessionsDir, sessionId);
             if (fs.statSync(sessionPath).isDirectory()) {
                 log(`Re-initializing session: ${sessionId}`);
-                await createSession(sessionId); // Await creation to prevent race conditions
+                createSession(sessionId);
             }
         }
     }
@@ -1008,12 +1017,9 @@ server.listen(PORT, () => {
     log('Admin dashboard available at http://localhost:3000/admin/dashboard.html');
     loadTokens(); // Load tokens at startup
     initializeExistingSessions();
-    
-    // Start campaign scheduler
-    startCampaignScheduler();
 });
 
-// Campaign Scheduler Removed
+// Campaign Scheduler logic and related functions are fully removed.
 
 // Graceful shutdown to clean up
 const gracefulShutdown = (signal) => {
@@ -1029,6 +1035,11 @@ const gracefulShutdown = (signal) => {
     }
   }
   
+  // Close Redis client
+  if (redisClient) {
+    redisClient.quit().then(() => console.log('[SYSTEM] Redis client closed'));
+  }
+
   // Close Express server
   server.close(() => {
     console.log('[SYSTEM] HTTP server closed');
@@ -1044,3 +1055,5 @@ const gracefulShutdown = (signal) => {
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+module.exports = { app, server }; // Export for testing purposes

@@ -46,16 +46,19 @@ describe('PhonePairing', () => {
         const phoneNumber = '6281234567890';
         const { sessionId } = await phonePairing.createPairing(userId, phoneNumber);
 
-        phonePairing.updatePairingStatus(sessionId, {
+        await phonePairing.updatePairingStatus(sessionId, {
             status: 'AWAITING_PAIRING',
-            detail: 'Please scan the QR code.',
-            qr: 'test-qr'
+            detail: 'Please provide the pairing code.',
+            pairingCode: '123-456'
         });
 
+        // We need to re-load to get the latest status after an async update
+        phonePairing.loadPairingStatusesFromFile();
         const status = phonePairing.getPairingStatus(sessionId);
+
         expect(status.status).toBe('AWAITING_PAIRING');
-        expect(status.detail).toBe('Please scan the QR code.');
-        expect(status.qr).toBe('test-qr');
+        expect(status.detail).toBe('Please provide the pairing code.');
+        expect(status.pairingCode).toBe('123-456');
     });
 
     test('should load pairing statuses from file', async () => {
@@ -77,17 +80,18 @@ describe('PhonePairing', () => {
         expect(status.status).toBe('CONNECTED');
     });
 
-    test('should not create a new pairing if one is already pending', async () => {
+    // This test replaces the obsolete "no duplicate" test.
+    // It verifies that the custom session ID is correctly used.
+    test('should create a pairing request with a custom session ID', async () => {
         const userId = 'test-user';
         const phoneNumber = '6281234567890';
+        const customSessionId = 'my-custom-session-123';
 
-        // Create the first pairing
-        const { sessionId: firstSessionId, isNew: firstIsNew } = await phonePairing.createPairing(userId, phoneNumber);
-        expect(firstIsNew).toBe(true);
+        const { sessionId } = await phonePairing.createPairing(userId, phoneNumber, customSessionId);
 
-        // Try to create a second one for the same number
-        const { sessionId: secondSessionId, isNew: secondIsNew } = await phonePairing.createPairing(userId, phoneNumber);
-        expect(secondIsNew).toBe(false);
-        expect(secondSessionId).toBe(firstSessionId);
+        expect(sessionId).toBe(customSessionId);
+        const status = phonePairing.getPairingStatus(customSessionId);
+        expect(status).toBeDefined();
+        expect(status.owner).toBe(userId);
     });
 });

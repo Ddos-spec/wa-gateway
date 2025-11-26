@@ -31,18 +31,12 @@
 </head>
 
 <body>
-    <div id="offcanvas-container"></div>
-    <div class="main-content-wrapper">
-        <header class="py-3 mb-4 border-bottom">
-            <div class="container-fluid d-flex align-items-center">
-                <button class="btn btn-primary me-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
-                    <i class="bi bi-list"></i>
-                </button>
-                <h4 class="mb-0">Dashboard</h4>
-            </div>
-        </header>
+    <header id="navbar-container"></header>
 
-        <main class="container mt-4">
+    <main class="container mt-4">
+        <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+            <h1 class="h2">Dashboard</h1>
+        </div>
         <section id="logging" class="mb-4">
             <div class="card shadow-sm">
                 <div class="card-header">
@@ -74,7 +68,6 @@
     <footer class="text-center text-muted py-4">
         <small>Super-Light-Web-WhatsApp-API-Server by Alucard0x1</small>
     </footer>
-</div> <!-- End of main-content-wrapper -->
 
     <!-- Create Session Modal -->
     <div class="modal fade" id="createSessionModal" tabindex="-1" aria-labelledby="createSessionModalLabel" aria-hidden="true">
@@ -151,7 +144,6 @@
     <!-- Scripts -->
     <script src="/admin/js/bootstrap.bundle.min.js"></script>
     <script src="/admin/js/qrcode.min.js"></script>
-    <script src="/admin/js/auth-check.js"></script>
     <script src="/admin/js/loadNavbar.js"></script>
     <script src="/admin/js/dashboard.js"></script>
 </body>
