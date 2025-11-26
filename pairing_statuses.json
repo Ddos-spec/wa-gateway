@@ -23,14 +23,14 @@
     "reason": "",
     "updatedAt": "2025-11-09T05:55:41.436Z"
   },
-  "pair_6289660152525_1764177768807": {
-    "sessionId": "pair_6289660152525_1764177768807",
+  "pair_6289660152525_1764182138212": {
+    "sessionId": "pair_6289660152525_1764182138212",
     "phoneNumber": "6289660152525",
     "owner": "admin@localhost",
     "status": "PENDING_REQUEST",
     "detail": "Awaiting Baileys connection to request pairing code.",
     "pairingCode": null,
     "qr": null,
-    "createdAt": "2025-11-26T17:22:48.807Z"
+    "createdAt": "2025-11-26T18:35:38.213Z"
   }
 }
