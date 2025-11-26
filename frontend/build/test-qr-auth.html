@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>QR Authentication Test - WhatsApp Gateway</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        #qr-test-container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        input[type="text"] {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 250px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #qr-status {
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #e7f3ff;
+            border-radius: 4px;
+            min-height: 20px;
+        }
+        #qr-display {
+            text-align: center;
+            margin: 20px 0;
+        }
+        #qr-code-placeholder {
+            width: 200px;
+            height: 200px;
+            background-color: #f0f0f0;
+            margin: 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+        }
+        #test-instructions {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+        #test-instructions h4 {
+            margin-top: 0;
+        }
+        #test-instructions ol {
+            padding-left: 20px;
+        }
+        .api-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>QR Authentication Test - WhatsApp Gateway</h1>
+    
+    <div id="qr-test-container">
+        <h3>QR Authentication Test Interface</h3>
+        
+        <div class="api-info">
+            <strong>Backend API Info:</strong> Make sure your backend server is running on http://localhost:5000
+        </div>
+        
+        <div id="qr-status">Ready to start QR authentication</div>
+        
+        <div id="qr-display" style="display:none;">
+            <h4>QR Code for Session:</h4>
+            <div id="qr-code-placeholder">
+                [QR Code will appear here after backend generates it]
+            </div>
+            <p>Scan this code with your WhatsApp mobile app</p>
+        </div>
+        
+        <div style="margin-top: 20px;">
+            <div style="margin-bottom: 10px;">
+                <input type="text" id="session-id-input" placeholder="Enter session ID (optional)" />
+                <p style="font-size: 12px; color: #666; margin: 5px 0 0 0;">If left empty, a random session ID will be generated</p>
+            </div>
+            
+            <button id="start-qr-btn" onclick="startQRAuth()">Start QR Auth</button>
+            <button id="check-status-btn" onclick="checkStatus()">Check Status</button>
+            <button id="reset-btn" onclick="resetTest()">Reset</button>
+        </div>
+        
+        <div id="test-instructions">
+            <h4>Testing Instructions:</h4>
+            <ol>
+                <li>Make sure your backend server is running on port 5000</li>
+                <li>Enter a session ID (or leave empty for auto-generated ID)</li>
+                <li>Click "Start QR Auth" to initiate the authentication process</li>
+                <li>In the backend console, you'll see the QR code generated</li>
+                <li>Scan the QR code with your WhatsApp mobile app</li>
+                <li>Use "Check Status" to see if the connection was established</li>
+            </ol>
+            
+            <p><strong>Backend API Endpoint:</strong> POST /api/auth/qr</p>
+            <p><strong>Request Body:</strong> { "sessionId": "your-session-id" }</p>
+        </div>
+    </div>
+
+    <script>
+        // Mock API class for demonstration (in real implementation, this would communicate with backend)
+        class MockAPI {
+            constructor() {
+                this.qrCode = null;
+                this.sessionId = null;
+                this.connectionStatus = 'disconnected';
+            }
+
+            // Simulate starting QR authentication
+            async startQRAuth(sessionId) {
+                return new Promise((resolve) => {
+                    console.log(`Starting QR auth for session: ${sessionId}`);
+                    
+                    // Simulate API call delay
+                    setTimeout(() => {
+                        // Generate a mock QR code (this would come from the backend in real implementation)
+                        this.qrCode = this.generateMockQRCode();
+                        this.sessionId = sessionId;
+                        
+                        // Simulate connection established after delay
+                        setTimeout(() => {
+                            this.connectionStatus = 'connected';
+                            console.log(`Connection established for session: ${sessionId}`);
+                        }, 5000); // Simulate connection after 5 seconds
+                        
+                        resolve({
+                            success: true,
+                            sessionId: sessionId,
+                            message: 'QR authentication started'
+                        });
+                    }, 1000);
+                });
+            }
+
+            // Generate mock QR code data
+            generateMockQRCode() {
+                // This is a placeholder - in a real implementation, this would come from the backend
+                return `mock-qr-${Date.now()}`;
+            }
+
+            // Simulate getting connection status 
+            getConnectionStatus() {
+                return {
+                    activeSessions: this.connectionStatus === 'connected' ? 1 : 0,
+                    sessions: this.connectionStatus === 'connected' ? [this.sessionId] : [],
+                    timestamp: new Date().toISOString()
+                };
+            }
+        }
+
+        // Real API class for actual backend communication
+        class RealAPI {
+            constructor() {
+                this.backendUrl = 'http://localhost:5000';
+            }
+
+            async startQRAuth(sessionId) {
+                try {
+                    const response = await fetch(`${this.backendUrl}/api/auth/qr`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ sessionId: sessionId })
+                    });
+
+                    const data = await response.json();
+                    return data;
+                } catch (error) {
+                    console.error('Error starting QR auth:', error);
+                    throw error;
+                }
+            }
+
+            async getConnectionStatus() {
+                try {
+                    const response = await fetch(`${this.backendUrl}/api/session/status`);
+                    const data = await response.json();
+                    return data;
+                } catch (error) {
+                    console.error('Error getting status:', error);
+                    throw error;
+                }
+            }
+        }
+
+        // QR Scanner class for managing the test interface
+        class QRScanner {
+            constructor(containerId) {
+                this.api = new MockAPI(); // Use MockAPI for testing without backend
+                // this.api = new RealAPI(); // Use this when backend is available
+                this.isScanning = false;
+            }
+
+            // Start QR authentication process
+            async startQRAuth(sessionId) {
+                if (!sessionId) {
+                    sessionId = `test-session-${Date.now()}`;
+                    document.getElementById('session-id-input').value = sessionId;
+                }
+
+                const statusDiv = document.getElementById('qr-status');
+                statusDiv.textContent = `Starting QR authentication for session: ${sessionId}...`;
+                statusDiv.style.backgroundColor = '#fff3cd';
+                
+                try {
+                    // Try to use real API first, fallback to mock if server is not available
+                    try {
+                        // Switch to real API for actual backend communication
+                        this.api = new RealAPI();
+                        const result = await this.api.startQRAuth(sessionId);
+                        
+                        if (result.success) {
+                            statusDiv.textContent = `✅ QR authentication started for session: ${sessionId}`;
+                            statusDiv.style.backgroundColor = '#d4edda';
+                            this.showQRCode(result.sessionId);
+                        } else {
+                            statusDiv.textContent = `❌ Error: ${result.error || result.message}`;
+                            statusDiv.style.backgroundColor = '#f8d7da';
+                        }
+                    } catch (apiError) {
+                        // If real API fails, switch back to mock and inform user
+                        this.api = new MockAPI();
+                        console.log('Backend not available, using mock API:', apiError);
+                        
+                        const result = await this.api.startQRAuth(sessionId);
+                        
+                        statusDiv.innerHTML = `⚠️ Backend not available. Using mock API.<br>QR auth simulated for session: ${sessionId}`;
+                        statusDiv.style.backgroundColor = '#fff3cd';
+                        this.showQRCode(result.sessionId);
+                    }
+                } catch (error) {
+                    statusDiv.textContent = `❌ Error: ${error.message}`;
+                    statusDiv.style.backgroundColor = '#f8d7da';
+                }
+            }
+
+            // Display QR code in the UI
+            showQRCode(sessionId) {
+                const qrDisplay = document.getElementById('qr-display');
+                const qrPlaceholder = document.getElementById('qr-code-placeholder');
+                
+                qrDisplay.style.display = 'block';
+                qrPlaceholder.textContent = `QR Code for ${sessionId} (Generated by Backend)`;
+                
+                console.log(`QR Code displayed for session: ${sessionId}`);
+            }
+
+            // Check connection status
+            async checkStatus() {
+                const statusDiv = document.getElementById('qr-status');
+                
+                try {
+                    // Try with real API first
+                    try {
+                        this.api = new RealAPI();
+                        const status = await this.api.getConnectionStatus();
+                        
+                        statusDiv.textContent = `Active sessions: ${status.activeSessions}, Sessions: [${status.sessions.join(', ')}]`;
+                        
+                        if (status.activeSessions > 0) {
+                            statusDiv.style.backgroundColor = '#d4edda';
+                        } else {
+                            statusDiv.style.backgroundColor = '#f8d7da';
+                        }
+                    } catch (apiError) {
+                        // If real API fails, use mock API
+                        this.api = new MockAPI();
+                        const status = this.api.getConnectionStatus();
+                        
+                        statusDiv.textContent = `⚠️ Backend not available. Mock status: Active sessions: ${status.activeSessions}`;
+                        statusDiv.style.backgroundColor = '#fff3cd';
+                    }
+                } catch (error) {
+                    statusDiv.textContent = `❌ Error checking status: ${error.message}`;
+                    statusDiv.style.backgroundColor = '#f8d7da';
+                }
+            }
+        }
+
+        // Global QR Scanner instance
+        let qrScanner = new QRScanner();
+
+        // Global functions for the HTML buttons to call
+        async function startQRAuth() {
+            const sessionIdInput = document.getElementById('session-id-input');
+            const sessionId = sessionIdInput.value.trim();
+            
+            await qrScanner.startQRAuth(sessionId);
+        }
+
+        async function checkStatus() {
+            await qrScanner.checkStatus();
+        }
+
+        function resetTest() {
+            document.getElementById('session-id-input').value = '';
+            document.getElementById('qr-status').textContent = 'Ready to start QR authentication';
+            document.getElementById('qr-status').style.backgroundColor = '#e7f3ff';
+            document.getElementById('qr-display').style.display = 'none';
+        }
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('QR Authentication Test Interface Loaded');
+        });
+    </script>
+</body>
+</html>
