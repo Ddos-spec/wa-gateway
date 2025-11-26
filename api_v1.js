@@ -84,7 +84,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, saveSessionSettings, regenerateSessionToken, redisClient) {
+function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, phonePairing, saveSessionSettings, regenerateSessionToken, redisClient) {
     if (redisClient) {
         setRedisClient(redisClient);
     }
@@ -181,15 +181,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             await createSession(sanitizedSessionId, creatorEmail);
             const token = sessionTokens.get(sanitizedSessionId);
             
-            // Log activity
-            if (currentUser && activityLogger) {
-                await activityLogger.logSessionCreate(
-                    currentUser.email, 
-                    sanitizedSessionId, 
-                    req.ip, 
-                    req.headers['user-agent']
-                );
-            }
+            // Log activity removed
             
             log('Session created', sanitizedSessionId, { 
                 event: 'session-created', 
@@ -221,15 +213,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
     });
 
-    // Campaign Management Endpoints (Session-based auth, not token-based)
-    const CampaignManager = require('./campaigns');
-    const CampaignSender = require('./campaign-sender');
-    const RecipientListManager = require('./recipient-lists');
-    
-    // Initialize campaign manager and sender
-    const campaignManager = new CampaignManager(process.env.TOKEN_ENCRYPTION_KEY || 'default-key');
-    const campaignSender = new CampaignSender(campaignManager, sessions, activityLogger);
-    const recipientListManager = new RecipientListManager(process.env.TOKEN_ENCRYPTION_KEY || 'default-key');
+    // Campaign functionality removed per user request
     
     // Middleware to check campaign access (session-based)
     const checkAuth = async (req, res, next) => {
@@ -247,81 +231,9 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     };
     const checkCampaignAccess = checkAuth;
     
-    // Campaign routes - these use session auth, not token auth
-    router.get('/campaigns', checkCampaignAccess, (req, res) => {
-        const campaigns = campaignManager.getAllCampaigns(
-            req.currentUser.email,
-            req.currentUser.role === 'admin'
-        );
-        res.json(campaigns);
-    });
+
     
-    // Function to check and start campaigns (shared with scheduler and API endpoints)
-    async function checkAndStartScheduledCampaigns() {
-        try {
-            if (!campaignManager || !campaignSender) {
-                return { error: 'Campaign services not initialized' };
-            }
-            
-            const now = new Date();
-            const campaigns = campaignManager.getAllCampaigns();
-            
-            // Find campaigns that should be started
-            const campaignsToStart = campaigns.filter(campaign => {
-                return (
-                    campaign.status === 'ready' && 
-                    campaign.scheduledAt && 
-                    new Date(campaign.scheduledAt) <= now
-                );
-            });
-            
-            console.log(`📋 Scheduler check: Found ${campaignsToStart.length} campaigns to start out of ${campaigns.length} total campaigns`);
-            
-            // Start each campaign
-            for (const campaign of campaignsToStart) {
-                try {
-                    console.log(`🚀 Auto-starting scheduled campaign: ${campaign.name} (${campaign.id})`);
-                    
-                    // Find the user who created the campaign
-                    const createdBy = campaign.createdBy || 'scheduler';
-                    
-                    // Start the campaign
-                    await campaignSender.startCampaign(campaign.id, createdBy);
-                    
-                    log(`Scheduled campaign started: ${campaign.name}`, 'SCHEDULER', {
-                        event: 'campaign-auto-start',
-                        campaignId: campaign.id,
-                        campaignName: campaign.name,
-                        scheduledAt: campaign.scheduledAt,
-                        startedAt: now.toISOString()
-                    });
-                    
-                } catch (error) {
-                    console.error(`❌ Error auto-starting campaign ${campaign.id}:`, error);
-                    log(`Failed to auto-start campaign: ${campaign.name} - ${error.message}`, 'SCHEDULER', {
-                        event: 'campaign-auto-start-error',
-                        campaignId: campaign.id,
-                        error: error.message
-                    });
-                }
-            }
-            
-            return {
-                totalCampaigns: campaigns.length,
-                campaignsToStart: campaignsToStart.length,
-                campaigns: campaignsToStart.map(c => ({
-                    id: c.id,
-                    name: c.name,
-                    status: c.status,
-                    scheduledAt: c.scheduledAt
-                }))
-            };
-            
-        } catch (error) {
-            console.error('❌ Campaign scheduler error:', error);
-            return { error: error.message };
-        }
-    }
+// Function checkAndStartScheduledCampaigns Removed
 
     router.get('/campaigns/csv-template', checkCampaignAccess, (req, res) => {
         const csvContent = `WhatsApp Number,Name,Job Title,Company Name
@@ -390,84 +302,13 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
     });
     
-    router.get('/campaigns/:id', checkCampaignAccess, (req, res) => {
-        const campaign = campaignManager.loadCampaign(req.params.id);
-        if (!campaign) {
-            return res.status(404).json({ status: 'error', message: 'Campaign not found' });
-        }
-        
-        // Check access
-        if (req.currentUser.role !== 'admin' && campaign.createdBy !== req.currentUser.email) {
-            return res.status(403).json({ status: 'error', message: 'Access denied' });
-        }
-        
-        res.json(campaign);
-    });
+// Route removed
     
-    router.post('/campaigns', checkCampaignAccess, async (req, res) => {
-        try {
-            const campaignData = {
-                ...req.body,
-                createdBy: req.currentUser.email
-            };
-            
-            const campaign = campaignManager.createCampaign(campaignData);
-            
-            // Log activity
-            await activityLogger.logCampaignCreate(
-                req.currentUser.email,
-                campaign.id,
-                campaign.name,
-                campaign.recipients.length
-            );
-            
-            res.status(201).json(campaign);
-        } catch (error) {
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
+// Route removed
     
-    router.put('/campaigns/:id', checkCampaignAccess, (req, res) => {
-        try {
-            const campaign = campaignManager.loadCampaign(req.params.id);
-            if (!campaign) {
-                return res.status(404).json({ status: 'error', message: 'Campaign not found' });
-            }
-            
-            // Check access
-            if (req.currentUser.role !== 'admin' && campaign.createdBy !== req.currentUser.email) {
-                return res.status(403).json({ status: 'error', message: 'Access denied' });
-            }
-            
-            const updated = campaignManager.updateCampaign(req.params.id, req.body);
-            res.json(updated);
-        } catch (error) {
-            res.status(400).json({ status: 'error', message: error.message });
-        }
-    });
+// Route removed
     
-    router.delete('/campaigns/:id', checkCampaignAccess, async (req, res) => {
-        const campaign = campaignManager.loadCampaign(req.params.id);
-        if (!campaign) {
-            return res.status(404).json({ status: 'error', message: 'Campaign not found' });
-        }
-        
-        // Check access
-        if (req.currentUser.role !== 'admin' && campaign.createdBy !== req.currentUser.email) {
-            return res.status(403).json({ status: 'error', message: 'Access denied' });
-        }
-        
-        campaignManager.deleteCampaign(req.params.id);
-        
-        // Log activity
-        await activityLogger.logCampaignDelete(
-            req.currentUser.email,
-            req.params.id,
-            campaign.name
-        );
-        
-        res.json({ status: 'success', message: 'Campaign deleted' });
-    });
+// Route removed
     
     router.post('/campaigns/:id/clone', checkCampaignAccess, async (req, res) => {
         try {
@@ -487,19 +328,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
     });
     
-    router.post('/campaigns/:id/pause', checkCampaignAccess, async (req, res) => {
-        const result = campaignSender.pauseCampaign(req.params.id);
-        if (result) {
-            await activityLogger.logCampaignPause(
-                req.currentUser.email,
-                req.params.id,
-                'Campaign paused by user'
-            );
-            res.json({ status: 'success', message: 'Campaign paused' });
-        } else {
-            res.status(400).json({ status: 'error', message: 'Campaign not running' });
-        }
-    });
+// Route removed
     
     router.post('/campaigns/:id/resume', checkCampaignAccess, async (req, res) => {
         try {
@@ -929,15 +758,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             await deleteSession(sessionId);
             
             // Log activity
-            if (currentUser && activityLogger) {
-                await activityLogger.logSessionDelete(
-                    currentUser.email, 
-                    sessionId, 
-                    req.ip, 
-                    req.headers['user-agent']
-                );
-            }
-            
+                    // Log session delete removed            
             log('Session deleted', sessionId, { event: 'session-deleted', sessionId });
             res.status(200).json({ status: 'success', message: `Session ${sessionId} deleted.` });
         } catch (error) {
@@ -1155,25 +976,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             }
         }
 
-        // Log activity for each successful message
-        if (activityLogger) {
-            const currentUser = req.session && req.session.adminAuthed ? req.session.userEmail : null;
-            const sessionOwner = userManager ? userManager.getSessionOwner(sessionId) : null;
-            const userEmail = currentUser || (sessionOwner ? sessionOwner.email : 'api-user');
-            
-            for (let i = 0; i < results.length; i++) {
-                if (results[i].status === 'success') {
-                    await activityLogger.logMessageSend(
-                        userEmail,
-                        sessionId,
-                        phoneNumbers[i],
-                        messages[i].type,
-                        req.ip,
-                        req.headers['user-agent']
-                    );
-                }
-            }
-        }
+        // Activity logging removed
         
         log('Messages sent', sessionId, { 
             event: 'messages-sent', 

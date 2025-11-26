@@ -89,49 +89,54 @@
                     <div id="modal-step-1">
                         <div class="mb-3">
                             <label for="newSessionIdInput" class="form-label">Session Name</label>
-                            <input type="text" class="form-control" id="newSessionIdInput" placeholder="Enter a unique session name">
+                            <input type="text" class="form-control" id="newSessionIdInput" placeholder="Enter a unique session name (e.g., user1)">
                             <div class="form-text">Use only letters, numbers, and hyphens.</div>
                         </div>
                     </div>
                     <!-- Step 2: Pairing Method -->
                     <div id="modal-step-2" style="display: none;">
-                        <h5>Choose Pairing Method</h5>
-                        <p>Session: <strong id="modalSessionName"></strong></p>
+                        <h6 class="mb-3">Choose how you want to connect session: <span id="modalSessionName" class="text-primary"></span></h6>
                         <div class="d-grid gap-2">
-                            <button class="btn btn-success" id="modalPairQrBtn"><i class="bi bi-qr-code"></i> Pair with QR Code</button>
-                            <button class="btn btn-info" id="modalPairPhoneBtn"><i class="bi bi-telephone"></i> Pair with Phone Number</button>
+                            <button class="btn btn-outline-success py-3" id="modalPairQrBtn">
+                                <i class="bi bi-qr-code display-6 d-block mb-2"></i>
+                                <strong>Scan QR Code</strong>
+                            </button>
+                            <button class="btn btn-outline-primary py-3" id="modalPairPhoneBtn">
+                                <i class="bi bi-phone display-6 d-block mb-2"></i>
+                                <strong>Use Pairing Code</strong>
+                            </button>
                         </div>
                     </div>
                     <!-- Step 3 QR: QR Code Display -->
                     <div id="modal-step-qr" style="display: none;" class="text-center">
                         <p>Scan this QR code with your WhatsApp.</p>
-                        <div id="modal-qr-code" class="qr-code mx-auto d-flex justify-content-center align-items-center"></div>
-                        <p class="mt-2 text-muted" id="modal-qr-status">Waiting for QR code...</p>
+                        <div id="modal-qr-code" class="qr-code mx-auto d-flex justify-content-center align-items-center mb-2"></div>
+                        <p class="text-muted small" id="modal-qr-status">Initializing...</p>
                     </div>
                     <!-- Step 3 Phone: Enter Phone Number -->
                     <div id="modal-step-phone-number" style="display: none;">
                          <div class="mb-3">
                             <label for="modalPhoneNumber" class="form-label">WhatsApp Number</label>
-                            <input type="tel" class="form-control" id="modalPhoneNumber" placeholder="e.g., +6281234567890" required>
-                            <div class="form-text">Enter in international format.</div>
+                            <input type="tel" class="form-control" id="modalPhoneNumber" placeholder="e.g., 6281234567890" required>
+                            <div class="form-text">Enter number with country code (without +).</div>
                         </div>
                     </div>
                     <!-- Step 4 Phone: Show Pairing Code -->
                     <div id="modal-step-phone-code" style="display: none;">
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle"></i> On your phone, go to WhatsApp Settings > Linked Devices > Link with phone number.
+                        <div class="alert alert-info small">
+                            <i class="bi bi-info-circle"></i> On WhatsApp: Settings > Linked Devices > Link with phone number.
                         </div>
-                        <p>Your pairing code is:</p>
-                        <div class="code-display text-center bg-light p-3 rounded" id="modalPairingCodeDisplay">
+                        <p class="text-center mb-2">Your Pairing Code:</p>
+                        <div class="display-4 text-center bg-light p-3 rounded border border-primary text-primary" id="modalPairingCodeDisplay" style="letter-spacing: 5px; font-weight: bold;">
                             <div class="spinner-border text-primary" role="status"></div>
-                            <span class="ms-2">Waiting for code...</span>
                         </div>
+                        <p class="text-center text-muted mt-2 small">Waiting for code from server...</p>
                     </div>
                      <!-- Step 5: Success -->
-                    <div id="modal-step-success" style="display: none;" class="text-center">
-                        <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
-                        <h4 class="mt-3">Session Paired Successfully!</h4>
-                        <p>Session <strong id="successSessionId"></strong> is now connected.</p>
+                    <div id="modal-step-success" style="display: none;" class="text-center py-4">
+                        <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                        <h4 class="mt-3">Connected!</h4>
+                        <p>Session <strong id="successSessionId"></strong> is ready.</p>
                     </div>
                 </div>
                 <div class="modal-footer">

@@ -23,6 +23,10 @@
             color: #e9ecef !important;
             border-color: var(--bs-border-color);
         }
+        
+        .table-responsive {
+            font-size: 0.9rem;
+        }
     </style>
     <link rel="stylesheet" href="/admin/css/custom.css">
 </head>
@@ -48,10 +52,7 @@
                 <div class="card-body">
                 <ul class="nav nav-tabs mb-3" id="curlExampleTabs" role="tablist">
                     <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="curl-sessions-tab" data-bs-toggle="tab" data-bs-target="#curl-sessions" type="button" role="tab">Session Management</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="curl-text-tab" data-bs-toggle="tab" data-bs-target="#curl-text" type="button" role="tab">Text</button>
+                    <button class="nav-link active" id="curl-text-tab" data-bs-toggle="tab" data-bs-target="#curl-text" type="button" role="tab">Text</button>
                     </li>
                     <li class="nav-item" role="presentation">
                     <button class="nav-link" id="curl-text-image-tab" data-bs-toggle="tab" data-bs-target="#curl-text-image" type="button" role="tab">Text + Image</button>
@@ -63,54 +64,18 @@
                     <button class="nav-link" id="curl-text-doc-tab" data-bs-toggle="tab" data-bs-target="#curl-text-doc" type="button" role="tab">Text + Document</button>
                     </li>
                     <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="curl-formatting-tab" data-bs-toggle="tab" data-bs-target="#curl-formatting" type="button" role="tab">Formatting</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="curl-webhook-tab" data-bs-toggle="tab" data-bs-target="#curl-webhook" type="button" role="tab">Webhook</button>
+                    <button class="nav-link" id="curl-legacy-tab" data-bs-toggle="tab" data-bs-target="#curl-legacy" type="button" role="tab">Alternative API</button>
                     </li>
                 </ul>
                 <div class="tab-content" id="curlExampleTabsContent">
-                    <div class="tab-pane fade show active" id="curl-sessions" role="tabpanel">
-                        <div class="mb-2"><strong>Session Management</strong></div>
-                        <div class="mb-3">
-                            <strong>Create Session (API Access)</strong>
-                            <pre><code id="curl-create-session">curl -X POST "http://localhost:3000/api/v1/sessions" \
--H "X-Master-Key: YOUR_MASTER_API_KEY" \
--H "Content-Type: application/json" \
--d '{
-  "sessionId": "myNewSession"
-}'</code></pre>
-                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-create-session', this)">Copy</button>
-                            <div class="alert alert-info mt-2">
-                            <i class="bi bi-info-circle"></i> <strong>Note:</strong> The Master API Key is required for creating sessions via API. Find it in your <code>.env</code> file. Admin dashboard users don't need the key.
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <strong>List All Sessions</strong>
-                            <pre><code id="curl-list-sessions">curl -X GET "http://localhost:3000/api/v1/sessions"</code></pre>
-                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-list-sessions', this)">Copy</button>
-                        </div>
-                        <div class="mb-3">
-                            <strong>Delete Session</strong>
-                            <pre><code id="curl-delete-session">curl -X DELETE "http://localhost:3000/api/v1/sessions/mySession" \
--H "Authorization: Bearer YOUR_SESSION_TOKEN"</code></pre>
-                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-delete-session', this)">Copy</button>
-                        </div>
-                        <div class="text-muted small mt-2">
-                            <ul>
-                            <li><b>Create Session:</b> Requires Master API Key for API access. Returns a session token.</li>
-                            <li><b>List Sessions:</b> Public endpoint - no authentication required.</li>
-                            <li><b>Delete Session:</b> Requires the session's Bearer token.</li>
-                            <li>Save the token returned from session creation - it's needed for all other operations.</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="tab-pane fade" id="curl-text" role="tabpanel">
+                    
+                    <div class="tab-pane fade show active" id="curl-text" role="tabpanel">
                     <div class="mb-2"><strong>Send Text Message</strong></div>
-                    <pre><code id="curl-send-text">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+                    <pre><code id="curl-send-text">curl -X POST "https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_TOKEN" \
 -H "Content-Type: application/json" \
--d '{
+-d 
+'{ 
   "recipient_type": "individual",
   "to": "6281234567890",
   "type": "text",
@@ -118,12 +83,14 @@
 }'</code></pre>
                     <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-text', this)">Copy</button>
                     </div>
+
                     <div class="tab-pane fade" id="curl-text-image" role="tabpanel">
                     <div class="mb-2"><strong>Send Text + Image</strong></div>
-                    <pre><code id="curl-send-text-image">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+                    <pre><code id="curl-send-text-image">curl -X POST "https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_TOKEN" \
 -H "Content-Type: application/json" \
--d '{
+-d 
+'{ 
   "recipient_type": "individual",
   "to": "6281234567890",
   "type": "image",
@@ -134,12 +101,14 @@
 }'</code></pre>
                     <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-text-image', this)">Copy</button>
                     </div>
+
                     <div class="tab-pane fade" id="curl-text-image-doc" role="tabpanel">
                     <div class="mb-2"><strong>Send Text + Image + Document</strong></div>
-                    <pre><code id="curl-send-text-image-doc">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+                    <pre><code id="curl-send-text-image-doc">curl -X POST "https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_TOKEN" \
 -H "Content-Type: application/json" \
--d '[
+-d 
+'[
   {
     "recipient_type": "individual",
     "to": "6281234567890",
@@ -168,12 +137,14 @@
 ]'</code></pre>
                     <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-text-image-doc', this)">Copy</button>
                     </div>
+
                     <div class="tab-pane fade" id="curl-text-doc" role="tabpanel">
                     <div class="mb-2"><strong>Send Text + Document</strong></div>
-                    <pre><code id="curl-send-text-doc">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+                    <pre><code id="curl-send-text-doc">curl -X POST "https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
 -H "Authorization: Bearer YOUR_TOKEN" \
 -H "Content-Type: application/json" \
--d '[
+-d 
+'[
   {
     "recipient_type": "individual",
     "to": "6281234567890",
@@ -193,65 +164,124 @@
 ]'</code></pre>
                     <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-text-doc', this)">Copy</button>
                     </div>
-                    <div class="tab-pane fade" id="curl-formatting" role="tabpanel">
-                    <div class="mb-2"><strong>Formatting: New Lines, Bold, and Links</strong></div>
-                    <pre><code id="curl-send-formatting">curl -X POST "http://localhost:3000/api/v1/messages?sessionId=YOUR_SESSION_ID" \
--H "Authorization: Bearer YOUR_TOKEN" \
--H "Content-Type: application/json" \
--d '{
-  "recipient_type": "individual",
-  "to": "6281234567890",
-  "type": "text",
-  "text": { "body": "Hello!\nThis is a new line.\n*This is bold text!*\nVisit: https://example.com" }
-}'</code></pre>
-                    <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-formatting', this)">Copy</button>
-                    <div class="text-muted small mt-2">
-                        <ul>
-                        <li>Use <code>\n</code> for new lines.</li>
-                        <li>Use <code>*bold text*</code> for <b>bold</b> (WhatsApp formatting).</li>
-                        <li>Paste a URL directly to make it clickable in WhatsApp.</li>
-                        </ul>
-                    </div>
-                    </div>
-                    <div class="tab-pane fade" id="curl-webhook" role="tabpanel">
-                        <div class="mb-2"><strong>Manage Webhook for a Session</strong></div>
-                        <div class="mb-3">
-                            <strong>Set Webhook</strong>
-                            <pre><code id="curl-set-webhook">curl -X POST "http://localhost:3000/api/v1/webhook" \
--H "Authorization: Bearer YOUR_TOKEN" \
--H "Content-Type: application/json" \
--d '{
-  "sessionId": "YOUR_SESSION_ID",
-  "url": "https://your-webhook-receiver.com/events"
-}'</code></pre>
-                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-set-webhook', this)">Copy</button>
+
+                    <!-- Alternative / Legacy API Tab -->
+                    <div class="tab-pane fade" id="curl-legacy" role="tabpanel">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> This API style uses query parameters and is compatible with other gateway formats.
                         </div>
-                        <div class="mb-3">
-                            <strong>Get Webhook</strong>
-                            <pre><code id="curl-get-webhook">curl -X GET "http://localhost:3000/api/v1/webhook?sessionId=YOUR_SESSION_ID" \
--H "Authorization: Bearer YOUR_TOKEN"</code></pre>
-                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-get-webhook', this)">Copy</button>
+
+                        <!-- Send Message -->
+                        <div class="mb-4">
+                            <h5>Send Text, Media, Document, Sticker</h5>
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="badge bg-success">GET & POST</span>
+                                <code class="text-break">https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/send-message</code>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-sm table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 20%">Parameter</th>
+                                            <th style="width: 15%">Type</th>
+                                            <th>Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><code>apikey</code></td>
+                                            <td>String</td>
+                                            <td><span class="text-danger">Required</span>. Apikey your session.</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>mtype</code></td>
+                                            <td>Enum</td>
+                                            <td><span class="text-danger">Required</span>. Options: <code>text</code>, <code>image</code>, <code>video</code>, <code>audio</code>, <code>audioconvert</code>, <code>document</code>, <code>sticker</code>, <code>stickerconvert</code></td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>receiver</code></td>
+                                            <td>String</td>
+                                            <td><span class="text-danger">Required</span>. Receiver Phone Number with Country Code (e.g: 62812345678) or id group.</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>text</code></td>
+                                            <td>String</td>
+                                            <td>Required if mtype is <code>text</code>. Text Message.</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>url</code></td>
+                                            <td>Url</td>
+                                            <td>Required if mtype is <code>image</code>, <code>video</code>, <code>audio</code>, <code>audioconvert</code>, <code>document</code>, <code>sticker</code>, <code>stickerconvert</code>. url file. example : http://domain.com/example.jpg</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>filename</code></td>
+                                            <td>String</td>
+                                            <td>Optional. if you want a custom name of the document sent.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <strong>Delete Webhook</strong>
-                            <pre><code id="curl-delete-webhook">curl -X DELETE "http://localhost:3000/api/v1/webhook" \
--H "Authorization: Bearer YOUR_TOKEN" \
--H "Content-Type: application/json" \
--d '{
-  "sessionId": "YOUR_SESSION_ID"
-}'</code></pre>
-                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-delete-webhook', this)">Copy</button>
+
+                        <!-- Fetch Group -->
+                        <div class="mb-4">
+                            <h5>Fetch Group</h5>
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="badge bg-success">GET & POST</span>
+                                <code class="text-break">https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/fetch-group</code>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-sm table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 20%">Parameter</th>
+                                            <th style="width: 15%">Type</th>
+                                            <th>Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><code>apikey</code></td>
+                                            <td>String</td>
+                                            <td><span class="text-danger">Required</span>. Apikey your session.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                        <div class="text-muted small mt-2">
-                            <ul>
-                            <li><b>Set Webhook:</b> Assigns a webhook URL for a specific session. All events for that session will be sent to the specified URL.</li>
-                            <li><b>Get Webhook:</b> Retrieves the current webhook URL for a session.</li>
-                            <li><b>Delete Webhook:</b> Removes the webhook for a session. No events will be sent until a new webhook is set.</li>
-                            <li>Each session can have its own webhook URL. To update, call <b>Set Webhook</b> again with the same <code>sessionId</code>.</li>
-                            <li>Events include: new messages, session status changes, and more.</li>
-                            <li>Webhook payloads always include <code>sessionId</code> for context.</li>
-                            </ul>
+
+                        <!-- Fetch Member -->
+                        <div class="mb-4">
+                            <h5>Fetch Group Member</h5>
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="badge bg-success">GET & POST</span>
+                                <code class="text-break">https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/fetch-member</code>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-sm table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 20%">Parameter</th>
+                                            <th style="width: 15%">Type</th>
+                                            <th>Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><code>apikey</code></td>
+                                            <td>String</td>
+                                            <td><span class="text-danger">Required</span>. Apikey your session.</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>idgroup</code></td>
+                                            <td>String</td>
+                                            <td><span class="text-danger">Required</span>. ID group WhatsApp (e.g: 120163044481549146@g.us)</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
+
                     </div>
                 </div>
                 </div>

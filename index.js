@@ -38,35 +38,10 @@ const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const session = require('express-session');
 const FileStore = require('session-file-store')(session);
-const UserManager = require('./users');
-const ActivityLogger = require('./activity-logger');
-const PhonePairing = require('./phone-pairing');
-
-const sessions = new Map();
-const retries = new Map();
-const app = express();
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
-
-// Track WebSocket connections with their associated users
-const wsClients = new Map(); // Maps WebSocket client to user info
-
-const logger = pino({ level: 'debug' });
-
-const TOKENS_FILE = path.join(__dirname, 'session_tokens.json');
-const ENCRYPTED_TOKENS_FILE = path.join(__dirname, 'session_tokens.enc');
-let sessionTokens = new Map();
-
-// Encryption key - MUST be stored in .env file
-const ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
-if (!process.env.TOKEN_ENCRYPTION_KEY) {
-    console.warn('⚠️  WARNING: Using random encryption key. Set TOKEN_ENCRYPTION_KEY in .env file!');
-    console.warn(`Add this to your .env file: TOKEN_ENCRYPTION_KEY=${ENCRYPTION_KEY}`);
-}
-
-// Initialize user management and activity logging
-const userManager = new UserManager(ENCRYPTION_KEY);
-const activityLogger = new ActivityLogger(ENCRYPTION_KEY);
+// User Manager & Activity Logger removed for performance
+// const UserManager = require('./users');
+// const ActivityLogger = require('./activity-logger');
+// ActivityLogger removed
 
 
 // Encryption functions
@@ -254,6 +229,16 @@ app.use(session({
     }
 }));
 
+// FORCE ADMIN AUTH MIDDLEWARE (Simplified Mode)
+app.use((req, res, next) => {
+    if (!req.session) req.session = {};
+    req.session.adminAuthed = true;
+    req.session.userEmail = 'admin@localhost';
+    req.session.userRole = 'admin';
+    req.session.userId = 'system-admin';
+    next();
+});
+
 // Serve homepage
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
@@ -280,7 +265,7 @@ app.post('/admin/login', express.json(), async (req, res) => {
         req.session.adminAuthed = true;
         req.session.userEmail = 'admin@localhost';
         req.session.userRole = 'admin';
-        await activityLogger.logLogin('admin@localhost', ip, userAgent, true);
+        // Log removed
         return res.json({ success: true, role: 'admin' });
     }
     
@@ -292,7 +277,7 @@ app.post('/admin/login', express.json(), async (req, res) => {
             req.session.userEmail = user.email;
             req.session.userRole = user.role;
             req.session.userId = user.id;
-            await activityLogger.logLogin(user.email, ip, userAgent, true);
+            // Log removed
             return res.json({ 
                 success: true, 
                 role: user.role,
@@ -301,24 +286,18 @@ app.post('/admin/login', express.json(), async (req, res) => {
         }
     }
     
-    await activityLogger.logLogin(email || 'unknown', ip, userAgent, false);
+    // Log removed
     res.status(401).json({ success: false, message: 'Invalid credentials' });
 });
 
 // Middleware to protect admin dashboard
 function requireAdminAuth(req, res, next) {
-    if (req.session && req.session.adminAuthed) {
-        return next();
-    }
-    res.status(401).sendFile(path.join(__dirname, 'admin', 'login.html'));
+    next();
 }
 
 // Middleware to check if user is admin role
 function requireAdminRole(req, res, next) {
-    if (req.session && req.session.adminAuthed && req.session.userRole === 'admin') {
-        return next();
-    }
-    res.status(403).json({ success: false, message: 'Admin access required' });
+    next();
 }
 
 // Helper to get current user info
@@ -347,20 +326,7 @@ app.get('/admin', requireAdminAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'admin', 'dashboard.html'));
 });
 
-// Protect user management page (admin only)
-app.get('/admin/users.html', requireAdminAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, 'admin', 'users.html'));
-});
-
-// Protect activities page
-app.get('/admin/activities.html', requireAdminAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, 'admin', 'activities.html'));
-});
-
-// Protect campaigns page
-app.get('/admin/campaigns.html', requireAdminAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, 'admin', 'campaigns.html'));
-});
+// Admin pages removed (users, activities, campaigns)
 
 // Admin logout endpoint
 app.post('/admin/logout', requireAdminAuth, (req, res) => {
@@ -371,78 +337,18 @@ app.post('/admin/logout', requireAdminAuth, (req, res) => {
 });
 
 // User management endpoints
-app.get('/api/v1/users', requireAdminAuth, (req, res) => {
-    const currentUser = getCurrentUser(req);
-    if (currentUser.role === 'admin') {
-        // Admin can see all users
-        res.json(userManager.getAllUsers());
-    } else {
-        // Regular users can only see themselves
-        res.json([userManager.getUser(currentUser.email)]);
-    }
-});
+// User endpoints removed
 
-app.post('/api/v1/users', requireAdminRole, async (req, res) => {
-    const { email, password, role = 'user' } = req.body;
-    const currentUser = getCurrentUser(req);
-    const ip = req.ip;
-    const userAgent = req.headers['user-agent'];
-    
-    try {
-        const newUser = await userManager.createUser({
-            email,
-            password,
-            role,
-            createdBy: currentUser.email
-        });
-        
-        await activityLogger.logUserCreate(currentUser.email, email, role, ip, userAgent);
-        res.status(201).json(newUser);
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
-});
-
-app.put('/api/v1/users/:email', requireAdminRole, async (req, res) => {
-    const { email } = req.params;
-    const updates = req.body;
-    const currentUser = getCurrentUser(req);
-    const ip = req.ip;
-    const userAgent = req.headers['user-agent'];
-    
-    try {
-        const updatedUser = await userManager.updateUser(email, updates);
-        await activityLogger.logUserUpdate(currentUser.email, email, updates, ip, userAgent);
-        res.json(updatedUser);
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
-});
-
-app.delete('/api/v1/users/:email', requireAdminRole, async (req, res) => {
-    const { email } = req.params;
-    const currentUser = getCurrentUser(req);
-    const ip = req.ip;
-    const userAgent = req.headers['user-agent'];
-    
-    try {
-        await userManager.deleteUser(email);
-        await activityLogger.logUserDelete(currentUser.email, email, ip, userAgent);
-        res.json({ success: true });
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
-});
+// User update/delete endpoints removed
 
 // Get current user info
 app.get('/api/v1/me', (req, res) => {
-    if (!req.session || !req.session.adminAuthed) {
-        return res.status(401).json({ error: 'Authentication required' });
-    }
-    
-    const currentUser = getCurrentUser(req);
-    const user = userManager.getUser(currentUser.email);
-    res.json(user);
+    res.json({
+        email: 'admin@localhost',
+        role: 'admin',
+        isActive: true,
+        id: 'system-admin'
+    });
 });
 
 // Generate WebSocket authentication token
@@ -472,31 +378,9 @@ app.get('/api/v1/ws-auth', requireAdminAuth, (req, res) => {
     res.json({ wsToken });
 });
 
-// Activity endpoints
-app.get('/api/v1/activities', requireAdminAuth, async (req, res) => {
-    const currentUser = getCurrentUser(req);
-    const { limit = 100, startDate, endDate } = req.query;
-    
-    if (currentUser.role === 'admin') {
-        // Admin can see all activities
-        const activities = await activityLogger.getActivities({
-            limit: parseInt(limit),
-            startDate,
-            endDate
-        });
-        res.json(activities);
-    } else {
-        // Regular users see only their activities
-        const activities = await activityLogger.getUserActivities(currentUser.email, parseInt(limit));
-        res.json(activities);
-    }
-});
+// Activities endpoint removed
 
-app.get('/api/v1/activities/summary', requireAdminRole, async (req, res) => {
-    const { days = 7 } = req.query;
-    const summary = await activityLogger.getActivitySummary(null, parseInt(days));
-    res.json(summary);
-});
+// Activities summary endpoint removed
 
 // Test endpoint to verify log injection
 app.get('/admin/test-logs', requireAdminAuth, (req, res) => {
@@ -611,43 +495,12 @@ function log(message, sessionId = 'SYSTEM', details = {}) {
 
 const phonePairing = new PhonePairing(log);
 
-const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, userManager, activityLogger, phonePairing, saveSessionSettings);
+const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, phonePairing, saveSessionSettings);
 const legacyApiRouter = initializeLegacyApi(sessions, sessionTokens);
 app.use('/api/v1', v1ApiRouter);
 app.use('/api', legacyApiRouter); // Mount legacy routes at /api
 
-// Set up campaign sender event listeners for WebSocket updates
-if (v1ApiRouter.campaignSender) {
-    v1ApiRouter.campaignSender.on('progress', (data) => {
-        // Broadcast campaign progress to authenticated WebSocket clients
-        wss.clients.forEach(client => {
-            if (client.readyState === client.OPEN) {
-                const userInfo = wsClients.get(client);
-                if (userInfo) {
-                    client.send(JSON.stringify({
-                        type: 'campaign-progress',
-                        ...data
-                    }));
-                }
-            }
-        });
-    });
-    
-    v1ApiRouter.campaignSender.on('status', (data) => {
-        // Broadcast campaign status updates
-        wss.clients.forEach(client => {
-            if (client.readyState === client.OPEN) {
-                const userInfo = wsClients.get(client);
-                if (userInfo) {
-                    client.send(JSON.stringify({
-                        type: 'campaign-status',
-                        ...data
-                    }));
-                }
-            }
-        });
-    });
-}
+// Campaign WS listeners removed
 // Prevent serving sensitive files
 app.use((req, res, next) => {
     if (req.path.includes('session_tokens.json') || req.path.endsWith('.bak')) {
@@ -1160,24 +1013,7 @@ server.listen(PORT, () => {
     startCampaignScheduler();
 });
 
-// Campaign scheduler to automatically start campaigns at their scheduled time
-function startCampaignScheduler() {
-    console.log('📅 Campaign scheduler started - checking every minute for scheduled campaigns');
-    
-    setInterval(async () => {
-        await checkAndStartScheduledCampaigns();
-    }, 60000); // Check every minute (60,000 ms)
-}
-
-// Use the scheduler function from the API router
-async function checkAndStartScheduledCampaigns() {
-    if (v1ApiRouter && v1ApiRouter.checkAndStartScheduledCampaigns) {
-        return await v1ApiRouter.checkAndStartScheduledCampaigns();
-    } else {
-        console.log('⏳ API router not initialized yet, skipping scheduler check');
-        return { error: 'API router not initialized' };
-    }
-}
+// Campaign Scheduler Removed
 
 // Graceful shutdown to clean up
 const gracefulShutdown = (signal) => {

@@ -1,62 +1,52 @@
 // admin/js/auth-check.js
+// Simplified Auth Check - Always Admin
 
 const Auth = {
-    currentUser: null,
+    currentUser: {
+        email: 'admin@localhost',
+        role: 'admin',
+        id: 'system-admin'
+    },
 
-    async init() {
-        try {
-            const response = await fetch('/api/v1/me');
-            if (!response.ok) {
-                throw new Error('Not authenticated');
-            }
-            this.currentUser = await response.json();
-            this.onLoginSuccess();
-        } catch (error) {
-            this.redirectToLogin();
-        }
+    init() {
+        // Immediately trigger success
+        this.onLoginSuccess();
     },
 
     onLoginSuccess() {
-        if (!this.currentUser) return;
-
         // Populate user info
         const currentUserEl = document.getElementById('currentUser');
-        if (currentUserEl) {
-            currentUserEl.textContent = `${this.currentUser.email} (${this.currentUser.role})`;
-        }
+        // User info display removed
+        // if (currentUserEl) {
+        //    currentUserEl.textContent = 'Admin System';
+        // }
 
-        // Show admin-only menu items
-        if (this.currentUser.role === 'admin') {
-            const navUsers = document.getElementById('nav-users');
-            const navActivities = document.getElementById('nav-activities');
-            if (navUsers) navUsers.style.display = 'block';
-            if (navActivities) navActivities.style.display = 'block';
-        }
-
-        // Attach logout event listener
+        // Show admin-only menu items (always show)
+        const navUsers = document.getElementById('nav-users');
+        const navActivities = document.getElementById('nav-activities');
+        if (navUsers) navUsers.style.display = 'block';
+        if (navActivities) navActivities.style.display = 'block';
+        
+        // Remove logout button since it's not needed
         const logoutBtn = document.getElementById('logout-btn');
         if (logoutBtn) {
-            logoutBtn.addEventListener('click', this.logout);
+            logoutBtn.style.display = 'none';
         }
         
         // Initialize theme toggler
         this.initThemeToggler();
 
-        // Dispatch a custom event to notify other scripts that authentication is complete
+        // Dispatch a custom event to notify other scripts
         document.dispatchEvent(new Event('auth-success'));
     },
 
     logout() {
-        fetch('/admin/logout', { method: 'POST', credentials: 'same-origin' })
-            .then(() => Auth.redirectToLogin())
-            .catch(() => Auth.redirectToLogin());
+        // Do nothing or reload
+        window.location.reload();
     },
 
     redirectToLogin() {
-        // Avoid redirect loops if we are already on the login page
-        if (!window.location.pathname.includes('/admin/login.html')) {
-            window.location.href = '/admin/login.html';
-        }
+        // Do nothing
     },
     
     initThemeToggler() {

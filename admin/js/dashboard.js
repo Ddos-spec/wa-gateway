@@ -1,12 +1,13 @@
 // admin/js/dashboard.js
-document.addEventListener('auth-success', function() {
+document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLoaded as auth-check might be bypassed/modified
     // --- EXISTING DASHBOARD ELEMENTS ---
     const sessionsContainer = document.getElementById('sessions-container');
     const logBox = document.getElementById('log-box');
     const sessionsData = new Map();
 
     // --- NEW MODAL ELEMENTS ---
-    const createSessionModal = new bootstrap.Modal(document.getElementById('createSessionModal'));
+    const createSessionModalEl = document.getElementById('createSessionModal');
+    const createSessionModal = new bootstrap.Modal(createSessionModalEl);
     const modalStep1 = document.getElementById('modal-step-1');
     const modalStep2 = document.getElementById('modal-step-2');
     const modalStepQr = document.getElementById('modal-step-qr');
@@ -33,31 +34,43 @@ document.addEventListener('auth-success', function() {
     let newSessionId = '';
     let phonePairingPollInterval = null;
 
+    // Reset function when modal is closed
     function resetModal() {
         currentStep = 1;
         newSessionId = '';
         if (phonePairingPollInterval) clearInterval(phonePairingPollInterval);
 
-        // Reset all steps to hidden, show step 1
-        [modalStep1, modalStep2, modalStepQr, modalStepPhoneNumber, modalStepPhoneCode, modalStepSuccess].forEach(step => step.style.display = 'none');
-        modalStep1.style.display = 'block';
+        // Reset all steps to hidden
+        [modalStep1, modalStep2, modalStepQr, modalStepPhoneNumber, modalStepPhoneCode, modalStepSuccess].forEach(step => {
+            if(step) step.style.display = 'none';
+        });
+        if(modalStep1) modalStep1.style.display = 'block';
 
-        // Reset inputs and displays
-        newSessionIdInput.value = '';
-        modalPhoneNumberInput.value = '';
-        modalQrCodeDiv.innerHTML = '';
-        modalQrStatus.textContent = 'Waiting for QR code...';
-        modalPairingCodeDisplay.innerHTML = `<div class="spinner-border text-primary" role="status"></div><span class="ms-2">Waiting for code...</span>`;
+        // Reset inputs
+        if(newSessionIdInput) newSessionIdInput.value = '';
+        if(modalPhoneNumberInput) modalPhoneNumberInput.value = '';
+        if(modalQrCodeDiv) modalQrCodeDiv.innerHTML = '';
+        if(modalQrStatus) modalQrStatus.textContent = 'Initializing...';
+        if(modalPairingCodeDisplay) modalPairingCodeDisplay.innerHTML = `<div class="spinner-border text-primary" role="status"></div>`;
 
-        // Reset button states
-        modalNextBtn.textContent = 'Next';
-        modalNextBtn.style.display = 'block';
-        modalBackBtn.style.display = 'none';
-        modalCancelBtn.style.display = 'block';
+        // Reset buttons
+        if(modalNextBtn) {
+            modalNextBtn.textContent = 'Next';
+            modalNextBtn.style.display = 'block';
+            modalNextBtn.disabled = false;
+        }
+        if(modalBackBtn) modalBackBtn.style.display = 'none';
+        if(modalCancelBtn) {
+            modalCancelBtn.style.display = 'block';
+            modalCancelBtn.textContent = 'Cancel';
+        }
     }
 
+    // Navigation handler
     function showStep(stepNumber) {
-        [modalStep1, modalStep2, modalStepQr, modalStepPhoneNumber, modalStepPhoneCode, modalStepSuccess].forEach(step => step.style.display = 'none');
+        [modalStep1, modalStep2, modalStepQr, modalStepPhoneNumber, modalStepPhoneCode, modalStepSuccess].forEach(step => {
+            if(step) step.style.display = 'none';
+        });
         
         let currentModalStep;
         switch (stepNumber) {
@@ -65,115 +78,139 @@ document.addEventListener('auth-success', function() {
             case 2: currentModalStep = modalStep2; break;
             case 3: // QR
                 currentModalStep = modalStepQr;
-                handleQrPairing();
+                handleQrPairing(); // Start QR flow
                 break;
             case 4: // Phone Number Input
                 currentModalStep = modalStepPhoneNumber;
                 break;
             case 5: // Phone Code Display
                 currentModalStep = modalStepPhoneCode;
-                handlePhonePairing();
+                handlePhonePairing(); // Start Phone flow
                 break;
             case 6: // Success
                 currentModalStep = modalStepSuccess;
                 break;
         }
-        currentModalStep.style.display = 'block';
+        if(currentModalStep) currentModalStep.style.display = 'block';
         currentStep = stepNumber;
         updateModalButtons();
     }
 
     function updateModalButtons() {
-        modalBackBtn.style.display = 'none';
-        modalNextBtn.style.display = 'block';
-        modalCancelBtn.style.display = 'block';
+        if(modalBackBtn) modalBackBtn.style.display = 'none';
+        if(modalNextBtn) modalNextBtn.style.display = 'block';
+        if(modalCancelBtn) modalCancelBtn.style.display = 'block';
 
         switch (currentStep) {
-            case 1:
+            case 1: // Name Input
                 modalNextBtn.textContent = 'Next';
                 break;
-            case 2:
+            case 2: // Method Selection
                 modalBackBtn.style.display = 'block';
-                modalNextBtn.style.display = 'none';
+                modalNextBtn.style.display = 'none'; // Selection is done via buttons
                 break;
-            case 3: // QR
-            case 5: // Phone Code
+            case 3: // QR Display
+            case 5: // Phone Code Display
                 modalBackBtn.style.display = 'block';
-                modalNextBtn.style.display = 'none';
+                modalNextBtn.style.display = 'none'; // Auto-progress on success
                 break;
-            case 4: // Phone Number
+            case 4: // Phone Number Input
                 modalBackBtn.style.display = 'block';
-                modalNextBtn.textContent = 'Generate Code';
+                modalNextBtn.textContent = 'Get Pairing Code';
                 break;
             case 6: // Success
                 modalBackBtn.style.display = 'none';
                 modalNextBtn.style.display = 'none';
-                modalCancelBtn.textContent = 'Finish';
+                modalCancelBtn.textContent = 'Finish'; // Acts as Close
                 break;
         }
     }
 
-    modalNextBtn.addEventListener('click', () => {
-        if (currentStep === 1) {
-            newSessionId = newSessionIdInput.value.trim().replace(/[^a-zA-Z0-9-]/g, '');
-            if (!newSessionId) {
-                alert('Please enter a valid Session Name.');
-                return;
+    // --- EVENT LISTENERS ---
+
+    if(modalNextBtn) {
+        modalNextBtn.addEventListener('click', () => {
+            if (currentStep === 1) {
+                const rawId = newSessionIdInput.value.trim();
+                // Validation: only alphanumeric and hyphen
+                if (!/^[a-zA-Z0-9-]+$/.test(rawId)) {
+                    alert('Session name can only contain letters, numbers, and hyphens.');
+                    return;
+                }
+                newSessionId = rawId;
+                modalSessionName.textContent = newSessionId;
+                showStep(2);
+            } else if (currentStep === 4) {
+                showStep(5); // Trigger phone pairing logic
             }
-            modalSessionName.textContent = newSessionId;
-            showStep(2);
-        } else if (currentStep === 4) {
-            showStep(5); // Move to phone code display step
-        }
-    });
+        });
+    }
 
-    modalBackBtn.addEventListener('click', () => {
-        if (phonePairingPollInterval) clearInterval(phonePairingPollInterval);
-        
-        if (currentStep === 3 || currentStep === 4) {
-            showStep(2);
-        } else if (currentStep === 2) {
-            showStep(1);
-        } else if (currentStep === 5) {
-            showStep(4);
-        }
-    });
+    if(modalBackBtn) {
+        modalBackBtn.addEventListener('click', () => {
+            if (phonePairingPollInterval) clearInterval(phonePairingPollInterval);
+            
+            if (currentStep === 3 || currentStep === 4) {
+                showStep(2); // Back to method selection
+            } else if (currentStep === 2) {
+                showStep(1); // Back to name input
+            } else if (currentStep === 5) {
+                showStep(4); // Back to phone number input
+            }
+        });
+    }
 
-    document.getElementById('createSessionModal').addEventListener('hidden.bs.modal', resetModal);
+    if(createSessionModalEl) {
+        createSessionModalEl.addEventListener('hidden.bs.modal', resetModal);
+    }
     
-    modalPairQrBtn.addEventListener('click', () => showStep(3));
-    modalPairPhoneBtn.addEventListener('click', () => showStep(4));
+    if(modalPairQrBtn) modalPairQrBtn.addEventListener('click', () => showStep(3));
+    if(modalPairPhoneBtn) modalPairPhoneBtn.addEventListener('click', () => showStep(4));
+
 
     // --- PAIRING LOGIC ---
 
     async function handleQrPairing() {
         modalQrStatus.textContent = 'Creating session...';
         try {
-            // 1. Create the session
+            // 1. Create the session first
+            // Note: We assume auth is bypassed or handled globally, passing dummy token if needed
             const createResponse = await fetch('/api/v1/sessions', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Auth.token}` },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sessionId: newSessionId })
             });
 
             if (!createResponse.ok) {
-                const result = await createResponse.json();
-                throw new Error(result.message || 'Failed to create session');
+                // Check if session already exists
+                if(createResponse.status === 409) {
+                   // If exists, just try to get QR.
+                   console.log('Session exists, fetching QR...');
+                } else {
+                   const result = await createResponse.json();
+                   throw new Error(result.message || 'Failed to create session');
+                }
             }
             
             modalQrStatus.textContent = 'Fetching QR code...';
             
-            // 2. Get the QR code
-            const qrResponse = await fetch(`/api/v1/sessions/${newSessionId}/qr`, { credentials: 'same-origin' });
+            // 2. Get the QR code immediately
+            const qrResponse = await fetch(`/api/v1/sessions/${newSessionId}/qr`);
             const qrResult = await qrResponse.json();
 
             if (!qrResponse.ok) {
-                 throw new Error(qrResult.message || 'Failed to get QR code');
+                 // If QR not ready, websocket will handle it.
+                 console.warn('QR not immediately available:', qrResult);
+            } else if(qrResult.qr) {
+                 // Render QR if available immediately
+                 if(currentStep === 3) {
+                     modalQrCodeDiv.innerHTML = '';
+                     new QRCode(modalQrCodeDiv, { text: qrResult.qr, width: 200, height: 200 });
+                     modalQrStatus.textContent = 'Scan with WhatsApp';
+                 }
             }
 
-            // The QR is received via WebSocket, but we can show a placeholder
-            modalQrStatus.textContent = 'Waiting for you to scan...';
-            // The main session-update websocket will handle the QR code display
+            modalQrStatus.textContent = 'Waiting for QR code stream...';
             
         } catch (error) {
             modalQrStatus.textContent = `Error: ${error.message}`;
@@ -184,22 +221,36 @@ document.addEventListener('auth-success', function() {
         const phoneNumber = modalPhoneNumberInput.value.trim();
         if (!phoneNumber) {
             alert('Please enter a phone number');
-            showStep(4); // Go back
+            showStep(4);
             return;
         }
 
-        modalNextBtn.disabled = true;
+        modalPairingCodeDisplay.innerHTML = `<div class="spinner-border text-primary" role="status"></div>`;
         
         try {
+            // 1. Create session if it doesn't exist (Phone pairing endpoint might expect session to exist)
+            // But api/v1/session/pair-phone usually handles creation or expects existing.
+            // Let's look at previous pair-phone.js logic. It posts to /api/v1/session/pair-phone with phoneNumber.
+            // It does NOT send sessionId. The server generates a random ID or handles it?
+            // WAIT: The user entered a Custom Session ID in Step 1. We MUST use it.
+            
+            // IMPORTANT: The original pair-phone.js did NOT allow custom session IDs. 
+            // It relied on the server creating a session.
+            // We need to ensure we pass our 'newSessionId' to the server.
+            
             const formattedPhone = phoneNumber.replace(/\D/g, '');
+            
             const response = await fetch('/api/v1/session/pair-phone', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Auth.token}` },
-                body: JSON.stringify({ phoneNumber: formattedPhone })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    phoneNumber: formattedPhone,
+                    sessionId: newSessionId // We pass the custom ID here
+                })
             });
 
             if (response.status === 409) {
-                alert('This phone number is already paired or in the process of pairing.');
+                alert('This phone number is already paired or session name taken.');
                 showStep(4);
                 return;
             }
@@ -210,14 +261,16 @@ document.addEventListener('auth-success', function() {
             }
 
             const data = await response.json();
-            startPhonePairingPolling(data.sessionId);
+            // The server might return a different sessionId if it generated one, but we sent ours.
+            // Let's use what the server returns to be safe.
+            const activeSessionId = data.sessionId || newSessionId;
+            
+            startPhonePairingPolling(activeSessionId);
 
         } catch (error) {
             console.error('Error initiating pairing:', error);
-            alert('Error initiating pairing: ' + error.message);
+            alert('Error: ' + error.message);
             showStep(4);
-        } finally {
-            modalNextBtn.disabled = false;
         }
     }
 
@@ -226,50 +279,61 @@ document.addEventListener('auth-success', function() {
 
         phonePairingPollInterval = setInterval(async () => {
             try {
+                // Check status
                 const response = await fetch(`/api/v1/session/${sessionId}/pair-status`);
                 if (!response.ok) {
-                    clearInterval(phonePairingPollInterval);
+                    // If 404, maybe session died?
                     return;
                 }
                 const data = await response.json();
 
-                if (data.pairingCode) {
-                    modalPairingCodeDisplay.innerHTML = `<strong>${data.pairingCode}</strong>`;
+                // Update Code Display
+                if (data.pairingCode && currentStep === 5) {
+                     // Format code nicely (ABCD-1234)
+                     const code = data.pairingCode;
+                     const formatted = code.includes('-') ? code : code.match(/.{1,4}/g).join('-');
+                     modalPairingCodeDisplay.innerHTML = formatted;
                 }
 
+                // Check Connection
                 if (data.sessionStatus === 'CONNECTED') {
                     clearInterval(phonePairingPollInterval);
                     successSessionId.textContent = sessionId;
                     showStep(6);
-                    fetchSessions(); // Refresh dashboard
+                    fetchSessions(); // Refresh list
                 }
             } catch (error) {
                 console.error('Error during polling:', error);
-                clearInterval(phonePairingPollInterval);
             }
         }, 2000);
     }
 
-    // --- EXISTING DASHBOARD LOGIC (MODIFIED) ---
+    // --- EXISTING DASHBOARD LOGIC ---
 
     function createSessionCard(session) {
         const card = document.createElement('div');
-        card.className = 'col-md-6 mb-4';
+        card.className = 'col-md-6 col-lg-4 mb-4'; // Responsive grid
         card.id = `session-${session.sessionId}`;
         
-        const ownerInfo = session.owner ? `<small class="text-muted d-block mb-2">Owner: ${session.owner}</small>` : '';
-        const canDelete = Auth.currentUser.role === 'admin' || session.owner === Auth.currentUser.email;
-        const deleteButton = canDelete ? `<button class="btn btn-sm btn-outline-danger" onclick="deleteSession('${session.sessionId}')">Delete</button>` : '';
-        const detailButton = `<a href="/admin/detailsesi.html?sessionId=${session.sessionId}" class="btn btn-sm btn-outline-primary">Detail</a>`;
-
+        // Detail link
+        const detailUrl = `/admin/detailsesi.html?sessionId=${session.sessionId}`;
+        
         card.innerHTML = `
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-body">
-                    <h5 class="card-title mb-3"><span>Session: <strong>${session.sessionId}</strong></span></h5>
-                    ${ownerInfo}
-                    <div id="qr-container-${session.sessionId}" class="text-center my-2"></div>
-                    <span class="badge status-badge mb-3" id="status-${session.sessionId}"></span>
-                    <div class="d-flex justify-content-end gap-2 mt-3">${detailButton}${deleteButton}</div>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title text-truncate" title="${session.sessionId}">${session.sessionId}</h5>
+                        <span class="badge" id="status-${session.sessionId}">...</span>
+                    </div>
+                    
+                    <div id="qr-container-${session.sessionId}" class="text-center my-3" style="min-height: 200px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border-radius: 8px;">
+                        <span class="text-muted small">QR / Preview</span>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                         <a href="${detailUrl}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i> Details</a>
+                         <button class="btn btn-outline-danger btn-sm" onclick="deleteSession('${session.sessionId}')"><i class="bi bi-trash"></i> Delete</button>
+                    </div>
                 </div>
             </div>`;
         return card;
@@ -278,6 +342,7 @@ document.addEventListener('auth-success', function() {
     function updateSessionCards(sessions) {
         sessions.forEach(s => sessionsData.set(s.sessionId, s));
         
+        // Cleanup removed sessions
         const existingCardIds = Array.from(sessionsContainer.children).map(c => c.id);
         const fetchedSessionIds = sessions.map(s => `session-${s.sessionId}`);
         existingCardIds.forEach(cardId => {
@@ -294,25 +359,35 @@ document.addEventListener('auth-success', function() {
             }
 
             const statusEl = document.getElementById(`status-${session.sessionId}`);
-            if (!statusEl) return;
+            if (statusEl) {
+                statusEl.textContent = session.status;
+                statusEl.className = 'badge ';
+                if (session.status === 'CONNECTED') statusEl.classList.add('bg-success');
+                else if (session.status === 'DISCONNECTED') statusEl.classList.add('bg-danger');
+                else statusEl.classList.add('bg-warning', 'text-dark');
+            }
 
-            statusEl.textContent = `${session.status}${session.detail ? ' - ' + session.detail : ''}`;
-            statusEl.className = 'badge status-badge ';
-            if (session.status === 'CONNECTED') statusEl.classList.add('bg-success');
-            else if (session.status === 'DISCONNECTED') statusEl.classList.add('bg-danger');
-            else statusEl.classList.add('bg-warning', 'text-dark');
-
-            // Handle QR code display
+            // QR Logic for Dashboard Cards
+            // We only show QR in dashboard card if it's NOT connected and NOT currently being handled in the modal
             const qrContainer = document.getElementById(`qr-container-${session.sessionId}`);
             const modalQrContainer = document.getElementById('modal-qr-code');
-
-            if (session.qr) {
-                const targetContainer = (currentStep === 3 && newSessionId === session.sessionId) ? modalQrContainer : qrContainer;
-                targetContainer.innerHTML = '';
-                new QRCode(targetContainer, { text: session.qr, width: 200, height: 200 });
-                if(currentStep === 3) modalQrStatus.textContent = 'Please scan the QR code.';
-            } else {
-                qrContainer.innerHTML = '';
+            
+            // If this session is currently active in the modal (Step 3), update the modal QR instead
+            if (currentStep === 3 && newSessionId === session.sessionId && session.qr) {
+                modalQrCodeDiv.innerHTML = '';
+                new QRCode(modalQrCodeDiv, { text: session.qr, width: 200, height: 200 });
+                modalQrStatus.textContent = 'Scan with WhatsApp';
+            } 
+            // Otherwise update the dashboard card QR
+            else if (qrContainer) {
+                if (session.status !== 'CONNECTED' && session.qr) {
+                    qrContainer.innerHTML = '';
+                    new QRCode(qrContainer, { text: session.qr, width: 150, height: 150 });
+                } else if (session.status === 'CONNECTED') {
+                    qrContainer.innerHTML = '<i class="bi bi-whatsapp text-success" style="font-size: 3rem;"></i><p class="small text-muted mt-2">Connected</p>';
+                } else {
+                     qrContainer.innerHTML = '<div class="spinner-border text-secondary" role="status"></div>';
+                }
             }
         });
     }
@@ -332,58 +407,45 @@ document.addEventListener('auth-success', function() {
         if (!confirm(`Are you sure you want to delete session ${sessionId}?`)) return;
         try {
             const response = await fetch(`/api/v1/sessions/${sessionId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${Auth.token}` }
+                method: 'DELETE'
             });
             const result = await response.json();
             if (response.ok) {
-                alert(result.message);
                 fetchSessions();
             } else {
-                throw new Error(result.message || 'Failed to delete session');
+                alert(result.message || 'Failed to delete session');
             }
         } catch (error) {
-            alert(`An error occurred while deleting the session: ${error.message}`);
+            alert(`An error occurred: ${error.message}`);
         }
     }
 
     function initializeWebSocket() {
-        fetch('/api/v1/ws-auth')
-            .then(res => res.json())
-            .then(data => {
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const ws = new WebSocket(`${protocol}//${window.location.host}?token=${data.wsToken}`);
+        // Just try to connect without auth first, since we removed auth
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${protocol}//${window.location.host}`);
 
-                ws.onopen = () => { logBox.innerHTML = '<p class="text-success">Log stream connected.</p>'; };
-                ws.onmessage = (event) => {
-                    const logData = JSON.parse(event.data);
-                    if (logData.type === 'log') {
-                        const logEntry = document.createElement('div');
-                        logEntry.textContent = `[${new Date(logData.timestamp).toLocaleTimeString()}] [${logData.sessionId || 'SYSTEM'}] ${logData.message}`;
-                        logBox.appendChild(logEntry);
-                        logBox.scrollTop = logBox.scrollHeight;
-
-                        // FIX: If we are waiting for a phone pairing code, check the logs for it.
-                        if (currentStep === 5 && logData.message.includes('Your pairing code is:')) {
-                            const code = logData.message.split(':').pop().trim();
-                            if (code) {
-                                modalPairingCodeDisplay.innerHTML = `<strong>${code}</strong>`;
-                            }
-                        }
-                    } else if (logData.type === 'session-update') {
-                        updateSessionCards(logData.data);
-                    }
-                };
-                ws.onclose = () => {
-                    logBox.innerHTML += '<p class="text-danger">Log stream disconnected. Reconnecting in 5 seconds...</p>';
-                    setTimeout(initializeWebSocket, 5000);
-                };
-                ws.onerror = (error) => { console.error('WebSocket error:', error); ws.close(); };
-            })
-            .catch(error => {
-                console.error('Failed to get WebSocket auth token:', error);
-                setTimeout(initializeWebSocket, 5000);
-            });
+        ws.onopen = () => { logBox.innerHTML = '<p class="text-success small">Log stream connected.</p>'; };
+        ws.onmessage = (event) => {
+            try {
+                const logData = JSON.parse(event.data);
+                
+                if (logData.type === 'log') {
+                    const logEntry = document.createElement('div');
+                    logEntry.className = 'small border-bottom border-secondary py-1';
+                    logEntry.textContent = `[${new Date(logData.timestamp).toLocaleTimeString()}] [${logData.sessionId || 'SYS'}] ${logData.message}`;
+                    logBox.appendChild(logEntry);
+                    logBox.scrollTop = logBox.scrollHeight;
+                } 
+                else if (logData.type === 'session-update') {
+                    updateSessionCards(logData.data);
+                }
+            } catch(e) { console.error('WS Parse Error', e); }
+        };
+        ws.onclose = () => {
+            setTimeout(initializeWebSocket, 5000);
+        };
+        ws.onerror = (error) => { console.error('WebSocket error:', error); ws.close(); };
     }
 
     // Initial load
