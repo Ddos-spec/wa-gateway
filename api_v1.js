@@ -767,6 +767,33 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     // All routes below this are protected by token
     router.use(validateToken);
 
+    router.post('/sessions/:sessionId/generate-token', async (req, res) => {
+        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
+        const { sessionId } = req.params;
+
+        // Get current user from session
+        const currentUser = req.session && req.session.adminAuthed ? {
+            email: req.session.userEmail,
+            role: req.session.userRole
+        } : null;
+
+        try {
+             // Check ownership if user is authenticated
+            if (currentUser && currentUser.role !== 'admin') {
+                const session = sessions.get(sessionId);
+                if (session && session.owner && session.owner !== currentUser.email) {
+                    return res.status(403).json({ status: 'error', message: 'Access denied' });
+                }
+            }
+
+            const newToken = await regenerateSessionToken(sessionId);
+            res.status(200).json({ status: 'success', message: 'Token regenerated successfully.', token: newToken });
+        } catch (error) {
+            log('API error', 'SYSTEM', { event: 'api-error', error: error.message, endpoint: req.originalUrl });
+            res.status(500).json({ status: 'error', message: `Failed to regenerate token: ${error.message}` });
+        }
+    });
+
     router.post('/sessions/:sessionId/settings', async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
         const { sessionId } = req.params;
