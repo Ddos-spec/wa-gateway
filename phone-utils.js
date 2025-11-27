@@ -3,9 +3,9 @@
  */
 
 /**
- * Format phone number to international format (with 62 prefix for WhatsApp API)
+ * Format phone number to international format (with 62 prefix for WhatsApp API if Indonesian)
  * @param {string} phoneNumber - The phone number to format
- * @returns {string} - Formatted phone number with 62 prefix (for WhatsApp API)
+ * @returns {string} - Formatted phone number with country code
  */
 function formatPhoneNumber(phoneNumber) {
     if (!phoneNumber) return phoneNumber;
@@ -13,23 +13,14 @@ function formatPhoneNumber(phoneNumber) {
     // Convert to string and remove non-numeric characters
     let cleaned = phoneNumber.toString().replace(/\D/g, '');
     
-    // Handle different starting formats
+    // Handle different starting formats for Indonesia (convenience)
     if (cleaned.startsWith('0')) {
         // If starts with 0, replace with 62
         cleaned = '62' + cleaned.substring(1);
-    } else if (cleaned.startsWith('62')) {
-        // If already starts with 62, keep as is
-        cleaned = cleaned;
-    } else if (cleaned.startsWith('62')) {
-        // This is a duplicate condition, keeping original logic
-        cleaned = cleaned;
-    } else if (cleaned.length === 10 || cleaned.length === 11 || cleaned.length === 12) {
-        // If it looks like an Indonesian number without country code, prepend 62
-        // Indonesian numbers typically start with 8 when without country code
-        if (cleaned.startsWith('8')) {
-            cleaned = '62' + cleaned;
-        }
     }
+    // We removed the aggressive "starts with 8" check to prevent corruption of
+    // international numbers (e.g., +81 Japan, +86 China).
+    // Users should enter international format or local format with leading 0.
     
     return cleaned;
 }
@@ -37,11 +28,11 @@ function formatPhoneNumber(phoneNumber) {
 /**
  * Format phone number to include + prefix for display
  * @param {string} phoneNumber - The phone number to format with +
- * @returns {string} - Formatted phone number with +62 prefix for display
+ * @returns {string} - Formatted phone number with + prefix for display
  */
 function formatPhoneNumberWithPlus(phoneNumber) {
     const formatted = formatPhoneNumber(phoneNumber);
-    if (formatted && formatted.startsWith('62')) {
+    if (formatted) {
         return '+' + formatted;
     }
     return formatted;
@@ -49,6 +40,7 @@ function formatPhoneNumberWithPlus(phoneNumber) {
 
 /**
  * Validate phone number format
+ * Accepts international numbers (7-15 digits)
  * @param {string} phoneNumber - The phone number to validate
  * @returns {boolean} - True if valid, false otherwise
  */
@@ -56,8 +48,9 @@ function isValidPhoneNumber(phoneNumber) {
     if (!phoneNumber) return false;
     
     const formatted = formatPhoneNumber(phoneNumber);
-    // Check if it matches the Indonesian format (628xxxxxxxxx)
-    return /^628\d{8,11}$/.test(formatted);
+    // Check if it's a valid digit string of reasonable length (ITU E.164 standard is max 15)
+    // We allow 7 to 15 digits to cover most countries
+    return /^\d{7,15}$/.test(formatted);
 }
 
 /**
