@@ -258,21 +258,18 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.0/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="/admin/js/auth-check.js"></script>
     <script src="/admin/js/loadNavbar.js"></script>
     <script>
-        // Placeholder for the new detailsesi.js logic
+        // Basic initialization to show Session ID immediately
         document.addEventListener('DOMContentLoaded', () => {
             const urlParams = new URLSearchParams(window.location.search);
             const sessionId = urlParams.get('sessionId');
-            if (!sessionId) {
-                alert('No session ID provided!');
-                window.location.href = '/admin/dashboard.html';
-                return;
+            if (sessionId) {
+                const display = document.getElementById('session-id-display');
+                if (display) display.textContent = sessionId;
             }
-
-            document.getElementById('session-id-display').textContent = sessionId;
-            // Further logic will be in a separate detailsesi.js file
         });
 
         // Webhook Management
