@@ -85,6 +85,36 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, phonePairing, saveSessionSettings, regenerateSessionToken, redisClient) {
+    // Mocks for removed functionality
+    const checkAndStartScheduledCampaigns = async () => ({ status: 'success', message: 'Campaigns disabled' });
+    const campaignManager = {
+        getAllCampaigns: () => [],
+        loadCampaign: () => null,
+        cloneCampaign: () => ({}),
+        exportResults: () => '',
+        parseCSV: () => []
+    };
+    const campaignSender = {
+        startCampaign: async () => ({}),
+        resumeCampaign: async () => ({}),
+        retryFailed: async () => ({}),
+        getCampaignStatus: () => null
+    };
+    const recipientListManager = {
+        getAllLists: () => [],
+        loadList: () => null,
+        createList: () => ({}),
+        updateList: () => ({}),
+        deleteList: () => true,
+        cloneList: () => ({}),
+        addRecipient: () => ({}),
+        updateRecipient: () => ({}),
+        removeRecipient: () => ({}),
+        searchRecipients: () => [],
+        getStatistics: () => ({}),
+        markAsUsed: () => {}
+    };
+
     if (redisClient) {
         setRedisClient(redisClient);
     }
@@ -604,7 +634,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     // Official WhatsApp Phone Pairing Endpoint
     router.post('/session/pair-phone', checkAuth, async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });
-        const { phoneNumber } = req.body;
+        const { phoneNumber, sessionId: customSessionId } = req.body;
         const currentUser = req.currentUser;
 
         if (!phoneNumber) {
@@ -623,16 +653,38 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
 
         try {
-            // Find and delete any stale pairing sessions for this number to ensure a fresh start
-            const stalePairing = phonePairing.findStalePairing(phoneNumber);
-            if (stalePairing && stalePairing.sessionId) {
-                const staleSessionId = stalePairing.sessionId;
-                log(`Deleting stale pairing session ${staleSessionId} for number ${phoneNumber}.`, 'SYSTEM');
-                await deleteSession(staleSessionId); // Deletes auth folder & main session
-                phonePairing.deletePairing(staleSessionId); // Deletes from pairing_statuses.json
+            // If customSessionId is provided, we prioritize checking that specific session
+            if (customSessionId) {
+                 // Check if session already exists in main sessions
+                 if (sessions.has(customSessionId)) {
+                     // If it exists but is not connected, maybe we can reuse?
+                     // But simpler to ask user to delete or use different name.
+                     // However, for retry logic, we might want to allow overwrite if it's the SAME number.
+                     // For now, let's keep it strict to avoid confusion.
+                     const existing = sessions.get(customSessionId);
+                     if (existing.status === 'CONNECTED') {
+                         return res.status(409).json({
+                            status: 'error',
+                            message: `Session ${customSessionId} is already connected.`
+                         });
+                     }
+                     // If exists but not connected, we clean it up to start fresh pairing
+                     log(`Cleaning up existing session ${customSessionId} for new pairing request.`, customSessionId);
+                     await deleteSession(customSessionId);
+                     phonePairing.deletePairing(customSessionId);
+                 }
+            } else {
+                // Only if no custom ID, we look for stale auto-generated sessions
+                const stalePairing = phonePairing.findStalePairing(phoneNumber);
+                if (stalePairing && stalePairing.sessionId) {
+                    const staleSessionId = stalePairing.sessionId;
+                    log(`Deleting stale pairing session ${staleSessionId} for number ${phoneNumber}.`, 'SYSTEM');
+                    await deleteSession(staleSessionId); // Deletes auth folder & main session
+                    phonePairing.deletePairing(staleSessionId); // Deletes from pairing_statuses.json
+                }
             }
 
-            const { sessionId } = await phonePairing.createPairing(currentUser.email, phoneNumber);
+            const { sessionId } = await phonePairing.createPairing(currentUser.email, phoneNumber, customSessionId);
 
             // This will create a session and start the connection process
             // The connectToWhatsApp function will see the PENDING_REQUEST and handle pairing

@@ -59,13 +59,14 @@ class PhonePairing {
     }
 
     // Create a new pairing request (Atomic Operation)
-    async createPairing(userId, phoneNumber) {
+    async createPairing(userId, phoneNumber, customSessionId = null) {
         await this.acquireLock();
         try {
             this.loadPairingStatusesFromFile(); // Load latest data
 
             const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
-            const sessionId = `pair_${formattedPhoneNumber.replace(/\D/g, '')}_${Date.now()}`;
+            // Use custom ID if provided, otherwise generate
+            const sessionId = customSessionId || `pair_${formattedPhoneNumber.replace(/\D/g, '')}_${Date.now()}`;
 
             const newPairing = {
                 sessionId: sessionId,

@@ -37,11 +37,38 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const session = require('express-session');
+const PhonePairing = require('./phone-pairing'); // Add PhonePairing import
 const FileStore = require('session-file-store')(session);
 // User Manager & Activity Logger removed for performance
 // const UserManager = require('./users');
 // const ActivityLogger = require('./activity-logger');
 // ActivityLogger removed
+
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
+
+const sessions = new Map();
+const sessionTokens = new Map();
+const wsClients = new Map();
+const logger = pino({ level: 'info' });
+
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '0000000000000000000000000000000000000000000000000000000000000000';
+const TOKENS_FILE = path.join(__dirname, 'session_tokens.json');
+const ENCRYPTED_TOKENS_FILE = path.join(__dirname, 'session_tokens.enc');
+
+const userManager = {
+    authenticateUser: async (email, password) => {
+        // Simple mock authentication
+        if (email === 'admin@localhost' && password === process.env.ADMIN_DASHBOARD_PASSWORD) {
+            return { email: 'admin@localhost', role: 'admin', id: 'system-admin' };
+        }
+        return null;
+    },
+    addSessionToUser: async () => {},
+    removeSessionFromUser: async () => {},
+    getSessionOwner: () => ({ email: 'admin@localhost' })
+};
 
 
 // Encryption functions
@@ -1010,7 +1037,7 @@ server.listen(PORT, () => {
     initializeExistingSessions();
     
     // Start campaign scheduler
-    startCampaignScheduler();
+    // startCampaignScheduler();
 });
 
 // Campaign Scheduler Removed

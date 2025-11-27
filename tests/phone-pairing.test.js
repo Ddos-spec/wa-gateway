@@ -46,7 +46,7 @@ describe('PhonePairing', () => {
         const phoneNumber = '6281234567890';
         const { sessionId } = await phonePairing.createPairing(userId, phoneNumber);
 
-        phonePairing.updatePairingStatus(sessionId, {
+        await phonePairing.updatePairingStatus(sessionId, {
             status: 'AWAITING_PAIRING',
             detail: 'Please scan the QR code.',
             qr: 'test-qr'
@@ -77,7 +77,7 @@ describe('PhonePairing', () => {
         expect(status.status).toBe('CONNECTED');
     });
 
-    test('should not create a new pairing if one is already pending', async () => {
+    test('should create a new pairing even if one exists (deduplication handled by API)', async () => {
         const userId = 'test-user';
         const phoneNumber = '6281234567890';
 
@@ -85,9 +85,25 @@ describe('PhonePairing', () => {
         const { sessionId: firstSessionId, isNew: firstIsNew } = await phonePairing.createPairing(userId, phoneNumber);
         expect(firstIsNew).toBe(true);
 
-        // Try to create a second one for the same number
+        // Wait 1ms to ensure unique timestamp
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Create a second one for the same number
         const { sessionId: secondSessionId, isNew: secondIsNew } = await phonePairing.createPairing(userId, phoneNumber);
-        expect(secondIsNew).toBe(false);
-        expect(secondSessionId).toBe(firstSessionId);
+        expect(secondIsNew).toBe(true);
+        expect(secondSessionId).not.toBe(firstSessionId);
+    });
+
+    test('should use custom session ID if provided', async () => {
+        const userId = 'test-user';
+        const phoneNumber = '6281234567890';
+        const customId = 'my-custom-session';
+
+        const { sessionId, isNew } = await phonePairing.createPairing(userId, phoneNumber, customId);
+        expect(sessionId).toBe(customId);
+
+        const status = phonePairing.getPairingStatus(customId);
+        expect(status).toBeDefined();
+        expect(status.sessionId).toBe(customId);
     });
 });
