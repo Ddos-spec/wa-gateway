@@ -457,56 +457,74 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
     }
 
     function initializeWebSocket() {
-        // Just try to connect without auth first, since we removed auth
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(`${protocol}//${window.location.host}`);
+        // Get WebSocket auth token first
+        fetch('/api/v1/ws-auth')
+            .then(res => res.json())
+            .then(data => {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const ws = new WebSocket(`${protocol}//${window.location.host}?token=${data.wsToken}`);
 
-        ws.onopen = () => { logBox.innerHTML = '<p class="text-success small">Log stream connected.</p>'; };
-        ws.onmessage = (event) => {
-            try {
-                const logData = JSON.parse(event.data);
+                ws.onopen = () => {
+                    logBox.innerHTML = '<p class="text-success small">Log stream connected.</p>';
+                    console.log('✅ WebSocket connected with authentication');
+                };
 
-                if (logData.type === 'log') {
-                    const logEntry = document.createElement('div');
-                    logEntry.className = 'small border-bottom border-secondary py-1';
-                    logEntry.textContent = `[${new Date(logData.timestamp).toLocaleTimeString()}] [${logData.sessionId || 'SYS'}] ${logData.message}`;
-                    logBox.appendChild(logEntry);
-                    logBox.scrollTop = logBox.scrollHeight;
-                }
-                else if (logData.type === 'session-update') {
-                    console.log('📡 WebSocket session-update received:', logData.data);
+                ws.onmessage = (event) => {
+                    try {
+                        const logData = JSON.parse(event.data);
 
-                    // Debug: Check if our session has QR
-                    if (currentStep === 3 && newSessionId) {
-                        const ourSession = logData.data.find(s => s.sessionId === newSessionId);
-                        if (ourSession) {
-                            console.log('🔍 Our session data:', {
-                                sessionId: ourSession.sessionId,
-                                status: ourSession.status,
-                                hasQR: !!ourSession.qr,
-                                qrLength: ourSession.qr ? ourSession.qr.length : 0,
-                                currentStep: currentStep,
-                                newSessionId: newSessionId
-                            });
-
-                            // FORCE render QR in modal if we're in step 3 and QR exists
-                            if (ourSession.qr && ourSession.qr.length > 0) {
-                                console.log('✅ FORCE rendering QR in modal NOW');
-                                modalQrCodeDiv.innerHTML = '';
-                                new QRCode(modalQrCodeDiv, { text: ourSession.qr, width: 200, height: 200 });
-                                modalQrStatus.textContent = 'Scan with WhatsApp';
-                            }
+                        if (logData.type === 'log') {
+                            const logEntry = document.createElement('div');
+                            logEntry.className = 'small border-bottom border-secondary py-1';
+                            logEntry.textContent = `[${new Date(logData.timestamp).toLocaleTimeString()}] [${logData.sessionId || 'SYS'}] ${logData.message}`;
+                            logBox.appendChild(logEntry);
+                            logBox.scrollTop = logBox.scrollHeight;
                         }
-                    }
+                        else if (logData.type === 'session-update') {
+                            console.log('📡 WebSocket session-update received:', logData.data);
 
-                    updateSessionCards(logData.data);
-                }
-            } catch(e) { console.error('WS Parse Error', e); }
-        };
-        ws.onclose = () => {
-            setTimeout(initializeWebSocket, 5000);
-        };
-        ws.onerror = (error) => { console.error('WebSocket error:', error); ws.close(); };
+                            // Debug: Check if our session has QR
+                            if (currentStep === 3 && newSessionId) {
+                                const ourSession = logData.data.find(s => s.sessionId === newSessionId);
+                                if (ourSession) {
+                                    console.log('🔍 Our session data:', {
+                                        sessionId: ourSession.sessionId,
+                                        status: ourSession.status,
+                                        hasQR: !!ourSession.qr,
+                                        qrLength: ourSession.qr ? ourSession.qr.length : 0,
+                                        currentStep: currentStep,
+                                        newSessionId: newSessionId
+                                    });
+
+                                    // FORCE render QR in modal if we're in step 3 and QR exists
+                                    if (ourSession.qr && ourSession.qr.length > 0) {
+                                        console.log('✅ FORCE rendering QR in modal NOW');
+                                        modalQrCodeDiv.innerHTML = '';
+                                        new QRCode(modalQrCodeDiv, { text: ourSession.qr, width: 200, height: 200 });
+                                        modalQrStatus.textContent = 'Scan with WhatsApp';
+                                    }
+                                }
+                            }
+
+                            updateSessionCards(logData.data);
+                        }
+                    } catch(e) { console.error('WS Parse Error', e); }
+                };
+
+                ws.onclose = () => {
+                    console.log('⚠️ WebSocket disconnected. Reconnecting in 5 seconds...');
+                    setTimeout(initializeWebSocket, 5000);
+                };
+
+                ws.onerror = (error) => {
+                    console.error('❌ WebSocket error:', error);
+                    ws.close();
+                };
+            })
+            .catch(error => {
+                console.error('❌ Failed to get WebSocket auth token:', error);
+                setTimeout(initializeWebSocket, 5000);
+            });
     }
 
     // Initial load

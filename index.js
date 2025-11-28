@@ -624,7 +624,22 @@ function updateSessionState(sessionId, status, detail, qr, reason) {
     };
     sessions.set(sessionId, newSession);
 
-    broadcast({ type: 'session-update', data: getSessionsDetails() });
+    // Debug logging for QR updates
+    if (qr && qr.length > 0) {
+        console.log(`[${sessionId}] 🔄 updateSessionState called with QR:`, {
+            status,
+            qrLength: qr.length,
+            qrPreview: qr.substring(0, 50) + '...'
+        });
+    }
+
+    const sessionDetails = getSessionsDetails();
+    const ourSession = sessionDetails.find(s => s.sessionId === sessionId);
+    if (ourSession && ourSession.qr) {
+        console.log(`[${sessionId}] ✅ Session has QR in broadcast data (length: ${ourSession.qr.length})`);
+    }
+
+    broadcast({ type: 'session-update', data: sessionDetails });
 
     postToWebhook({
         event: 'session-status',
@@ -808,7 +823,10 @@ async function connectToWhatsApp(sessionId) {
             } else {
                 // This is a regular session, so use the QR code.
                 log('QR code generated.', sessionId);
+                console.log(`[${sessionId}] 📱 QR CODE STRING LENGTH:`, qr ? qr.length : 0);
+                console.log(`[${sessionId}] 📡 Broadcasting QR to frontend via WebSocket...`);
                 updateStatus('GENERATING_QR', 'QR code available.', qr);
+                console.log(`[${sessionId}] ✅ QR broadcast complete. Check frontend!`);
             }
         }
 
