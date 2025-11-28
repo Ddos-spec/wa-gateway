@@ -1,2 +1,136 @@
 /* All custom styles related to the old offcanvas sidebar have been removed. */
 /* This file can be used for future custom navbar styling if needed. */
+
+/* Modern UI/UX Enhancements */
+.card {
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+.btn {
+    transition: all 0.2s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.log-box {
+    background-color: #212529 !important;
+    color: #f8f9fa !important;
+    font-family: 'Menlo', 'Courier New', Courier, monospace !important;
+    padding: 1.25rem !important;
+    overflow-y: auto;
+    border-radius: 0.5rem !important;
+    font-size: 0.9em;
+    position: relative;
+}
+
+/* Progress bar enhancements */
+.progress {
+    height: 8px;
+    border-radius: 4px;
+}
+
+.progress-bar {
+    transition: width 0.6s ease;
+}
+
+/* QR Code styling */
+.qr-code {
+    max-width: 300px;
+    max-height: 300px;
+    margin: 0 auto;
+    border: 2px solid #dee2e6 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    background: white !important;
+}
+
+/* Toast enhancements */
+.toast {
+    backdrop-filter: blur(10px);
+    background-color: rgba(255, 255, 255, 0.95);
+}
+
+/* Modal enhancements */
+.modal-content {
+    border: none;
+    border-radius: 1rem;
+}
+
+/* Button group enhancements */
+.d-grid > .btn, .d-grid > .btn-group {
+    margin-bottom: 0.5rem;
+}
+
+.d-grid > .btn:last-child, .d-grid > .btn-group:last-child {
+    margin-bottom: 0;
+}
+
+/* Badge enhancements */
+.badge {
+    padding: 0.5em 0.75em;
+    font-size: 0.75em;
+}
+
+/* Session card enhancements */
+.session-card .card-body {
+    padding: 1.25rem;
+}
+
+/* Form input enhancements */
+.form-control:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Input group enhancements */
+.input-group-text {
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .modal-dialog {
+        margin: 0.5rem;
+    }
+
+    .modal-content {
+        height: auto;
+    }
+
+    .qr-code {
+        width: 250px !important;
+        height: 250px !important;
+    }
+}
+
+/* Custom styles for pairing method cards */
+.card.h-100.text-center.border-primary.border-2,
+.card.h-100.text-center.border-success.border-2 {
+    transition: all 0.3s ease;
+}
+
+.card.h-100.text-center.border-primary.border-2:hover,
+.card.h-100.text-center.border-success.border-2:hover {
+    transform: scale(1.03);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Animation for success state */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.text-success.pulse-animation {
+    animation: pulse 1s ease-in-out;
+}

@@ -23,6 +23,11 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
     const modalPairingCodeDisplay = document.getElementById('modalPairingCodeDisplay');
     const successSessionId = document.getElementById('successSessionId');
 
+    // New modal elements
+    const modalProgress = document.getElementById('createSessionProgress');
+    const qrMethodCard = document.getElementById('qrMethodCard');
+    const phoneMethodCard = document.getElementById('phoneMethodCard');
+
     const modalNextBtn = document.getElementById('modalNextBtn');
     const modalBackBtn = document.getElementById('modalBackBtn');
     const modalCancelBtn = document.getElementById('modalCancelBtn');
@@ -55,15 +60,38 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
 
         // Reset buttons
         if(modalNextBtn) {
-            modalNextBtn.textContent = 'Next';
+            modalNextBtn.innerHTML = '<span class="btn-label">Next</span> <i class="bi bi-arrow-right ms-1"></i>';
             modalNextBtn.style.display = 'block';
             modalNextBtn.disabled = false;
         }
         if(modalBackBtn) modalBackBtn.style.display = 'none';
         if(modalCancelBtn) {
-            modalCancelBtn.style.display = 'block';
-            modalCancelBtn.textContent = 'Cancel';
+            modalCancelBtn.innerHTML = '<i class="bi bi-x me-1"></i>Cancel';
         }
+
+        // Reset progress bar
+        if(modalProgress) {
+            modalProgress.style.width = '20%';
+            modalProgress.textContent = '20%';
+        }
+    }
+
+    // Update progress bar based on current step
+    function updateProgress() {
+        if(!modalProgress) return;
+
+        let width = 0;
+        switch(currentStep) {
+            case 1: width = 20; break; // Name input
+            case 2: width = 40; break; // Method selection
+            case 3: width = 70; break; // QR code
+            case 4: width = 60; break; // Phone number
+            case 5: width = 80; break; // Phone code
+            case 6: width = 100; break; // Success
+        }
+
+        modalProgress.style.width = width + '%';
+        modalProgress.textContent = width + '%';
     }
 
     // Navigation handler
@@ -71,7 +99,7 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
         [modalStep1, modalStep2, modalStepQr, modalStepPhoneNumber, modalStepPhoneCode, modalStepSuccess].forEach(step => {
             if(step) step.style.display = 'none';
         });
-        
+
         let currentModalStep;
         switch (stepNumber) {
             case 1: currentModalStep = modalStep1; break;
@@ -93,6 +121,7 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
         }
         if(currentModalStep) currentModalStep.style.display = 'block';
         currentStep = stepNumber;
+        updateProgress();
         updateModalButtons();
     }
 
@@ -103,25 +132,28 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
 
         switch (currentStep) {
             case 1: // Name Input
-                modalNextBtn.textContent = 'Next';
+                modalNextBtn.innerHTML = '<span class="btn-label">Next</span> <i class="bi bi-arrow-right ms-1"></i>';
                 break;
             case 2: // Method Selection
                 modalBackBtn.style.display = 'block';
+                modalBackBtn.innerHTML = '<i class="bi bi-arrow-left me-1"></i> Back';
                 modalNextBtn.style.display = 'none'; // Selection is done via buttons
                 break;
             case 3: // QR Display
             case 5: // Phone Code Display
                 modalBackBtn.style.display = 'block';
+                modalBackBtn.innerHTML = '<i class="bi bi-arrow-left me-1"></i> Back';
                 modalNextBtn.style.display = 'none'; // Auto-progress on success
                 break;
             case 4: // Phone Number Input
                 modalBackBtn.style.display = 'block';
-                modalNextBtn.textContent = 'Get Pairing Code';
+                modalBackBtn.innerHTML = '<i class="bi bi-arrow-left me-1"></i> Back';
+                modalNextBtn.innerHTML = '<i class="bi bi-key me-1"></i> Get Pairing Code';
                 break;
             case 6: // Success
                 modalBackBtn.style.display = 'none';
                 modalNextBtn.style.display = 'none';
-                modalCancelBtn.textContent = 'Finish'; // Acts as Close
+                modalCancelBtn.innerHTML = '<i class="bi bi-check2 me-1"></i> Close';
                 break;
         }
     }
@@ -167,11 +199,15 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
     if(modalPairQrBtn) modalPairQrBtn.addEventListener('click', () => showStep(3));
     if(modalPairPhoneBtn) modalPairPhoneBtn.addEventListener('click', () => showStep(4));
 
+    // Add click events for the cards as well
+    if(qrMethodCard) qrMethodCard.addEventListener('click', () => showStep(3));
+    if(phoneMethodCard) phoneMethodCard.addEventListener('click', () => showStep(4));
+
 
     // --- PAIRING LOGIC ---
 
     async function handleQrPairing() {
-        modalQrStatus.textContent = 'Creating session...';
+        modalQrStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Creating session...';
         console.log('🚀 Starting QR pairing for session:', newSessionId);
 
         try {
@@ -199,7 +235,7 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
                 }
             }
 
-            modalQrStatus.textContent = 'Requesting QR code...';
+            modalQrStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Requesting QR code...';
 
             // 2. Request QR code regeneration
             console.log('📞 Requesting QR for session:', newSessionId);
@@ -210,10 +246,10 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
 
             if (!qrResponse.ok) {
                  console.warn('⚠️ QR request failed:', qrResult);
-                 modalQrStatus.textContent = 'Waiting for QR code...';
+                 modalQrStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Waiting for QR code...';
             } else {
                  console.log('✅ QR request successful, waiting for WebSocket update...');
-                 modalQrStatus.textContent = 'Waiting for QR code...';
+                 modalQrStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Waiting for QR code...';
             }
 
             // 3. Set timeout to check if QR appeared
@@ -240,43 +276,46 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
         } catch (error) {
             console.error('❌ Error in handleQrPairing:', error);
             modalQrStatus.textContent = `Error: ${error.message}`;
+            showNotification('Error creating session: ' + error.message, 'error');
         }
     }
 
     async function handlePhonePairing() {
         const phoneNumber = modalPhoneNumberInput.value.trim();
         if (!phoneNumber) {
-            alert('Please enter a phone number');
+            showNotification('Please enter a phone number', 'warning');
             showStep(4);
             return;
         }
 
         modalPairingCodeDisplay.innerHTML = `<div class="spinner-border text-primary" role="status"></div>`;
-        
+        modalNextBtn.disabled = true;
+        modalNextBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Processing...';
+
         try {
             // 1. Create session if it doesn't exist (Phone pairing endpoint might expect session to exist)
             // But api/v1/session/pair-phone usually handles creation or expects existing.
             // Let's look at previous pair-phone.js logic. It posts to /api/v1/session/pair-phone with phoneNumber.
             // It does NOT send sessionId. The server generates a random ID or handles it?
             // WAIT: The user entered a Custom Session ID in Step 1. We MUST use it.
-            
-            // IMPORTANT: The original pair-phone.js did NOT allow custom session IDs. 
+
+            // IMPORTANT: The original pair-phone.js did NOT allow custom session IDs.
             // It relied on the server creating a session.
             // We need to ensure we pass our 'newSessionId' to the server.
-            
+
             const formattedPhone = phoneNumber.replace(/\D/g, '');
-            
+
             const response = await fetch('/api/v1/session/pair-phone', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     phoneNumber: formattedPhone,
                     sessionId: newSessionId // We pass the custom ID here
                 })
             });
 
             if (response.status === 409) {
-                alert('This phone number is already paired or session name taken.');
+                showNotification('This phone number is already paired or session name taken.', 'error');
                 showStep(4);
                 return;
             }
@@ -290,13 +329,20 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
             // The server might return a different sessionId if it generated one, but we sent ours.
             // Let's use what the server returns to be safe.
             const activeSessionId = data.sessionId || newSessionId;
-            
+
+            // Update UI with loading state
+            modalPairingCodeDisplay.innerHTML = `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>`;
+            modalQrStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Waiting for pairing code...';
+
             startPhonePairingPolling(activeSessionId);
 
         } catch (error) {
             console.error('Error initiating pairing:', error);
-            alert('Error: ' + error.message);
+            showNotification('Error: ' + error.message, 'error');
             showStep(4);
+        } finally {
+            modalNextBtn.disabled = false;
+            modalNextBtn.innerHTML = 'Get Pairing Code';
         }
     }
 
@@ -345,20 +391,20 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
         const detailUrl = `/admin/detailsesi.html?sessionId=${session.sessionId}`;
         
         card.innerHTML = `
-            <div class="card h-100">
+            <div class="card h-100 session-card">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <h5 class="card-title text-truncate" title="${session.sessionId}">${session.sessionId}</h5>
                         <span class="badge" id="status-${session.sessionId}">...</span>
                     </div>
-                    
+
                     <div id="qr-container-${session.sessionId}" class="text-center my-3" style="min-height: 200px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border-radius: 8px;">
                         <span class="text-muted small">QR / Preview</span>
                     </div>
 
                     <div class="d-grid gap-2">
-                         <a href="${detailUrl}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i> Details</a>
-                         <button class="btn btn-outline-danger btn-sm" onclick="deleteSession('${session.sessionId}')"><i class="bi bi-trash"></i> Delete</button>
+                         <a href="${detailUrl}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye me-1"></i> Details</a>
+                         <button class="btn btn-outline-danger btn-sm" onclick="deleteSession('${session.sessionId}')"><i class="bi bi-trash me-1"></i> Delete</button>
                     </div>
                 </div>
             </div>`;
@@ -367,7 +413,7 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
 
     function updateSessionCards(sessions) {
         sessions.forEach(s => sessionsData.set(s.sessionId, s));
-        
+
         // Cleanup removed sessions
         const existingCardIds = Array.from(sessionsContainer.children).map(c => c.id);
         const fetchedSessionIds = sessions.map(s => `session-${s.sessionId}`);
@@ -386,6 +432,18 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
 
             const statusEl = document.getElementById(`status-${session.sessionId}`);
             if (statusEl) {
+                // Check if status has changed to show notification
+                const oldStatus = sessionsData.get(session.sessionId)?.status;
+                if (oldStatus && oldStatus !== session.status) {
+                    if (session.status === 'CONNECTED') {
+                        showNotification(`Session ${session.sessionId} is now connected`, 'success');
+                    } else if (session.status === 'DISCONNECTED') {
+                        showNotification(`Session ${session.sessionId} is disconnected`, 'warning');
+                    } else if (oldStatus !== 'CONNECTING' && oldStatus !== 'GENERATING_QR') {
+                        showNotification(`Session ${session.sessionId} status changed to ${session.status}`, 'info');
+                    }
+                }
+
                 statusEl.textContent = session.status;
                 statusEl.className = 'badge ';
                 if (session.status === 'CONNECTED') statusEl.classList.add('bg-success');
@@ -408,7 +466,7 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
                 modalQrCodeDiv.innerHTML = '';
                 new QRCode(modalQrCodeDiv, { text: session.qr, width: 200, height: 200 });
                 modalQrStatus.textContent = 'Scan with WhatsApp';
-            } 
+            }
             // Otherwise update the dashboard card QR
             else if (qrContainer) {
                 if (session.status !== 'CONNECTED' && session.qr) {
@@ -430,30 +488,132 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
 
     async function fetchSessions() {
         try {
+            // Show loading indicator
+            const sessionCards = document.querySelectorAll('[id^="session-"]');
+            sessionCards.forEach(card => {
+                const statusEl = card.querySelector('[id^="status-"]');
+                if (statusEl) {
+                    const originalContent = statusEl.textContent;
+                    statusEl.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Loading...';
+                    statusEl.className = 'badge bg-info';
+                }
+            });
+
             const response = await fetch('/api/v1/sessions');
             if (!response.ok) throw new Error('Failed to fetch sessions');
             const sessions = await response.json();
             updateSessionCards(sessions);
         } catch (error) {
             console.error('Error fetching sessions:', error);
+            showNotification('Error fetching sessions: ' + error.message, 'error');
         }
     }
 
-    window.deleteSession = async function(sessionId) {
-        if (!confirm(`Are you sure you want to delete session ${sessionId}?`)) return;
-        try {
-            const response = await fetch(`/api/v1/sessions/${sessionId}`, {
-                method: 'DELETE'
+    // Delete Confirmation Modal Elements
+    const deleteConfirmationModalEl = document.getElementById('deleteConfirmationModal');
+    const deleteConfirmationModal = new bootstrap.Modal(deleteConfirmationModalEl);
+    const sessionToDeleteName = document.getElementById('sessionToDeleteName');
+    const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+
+    let sessionToDelete = null;
+
+    // Initialize delete confirmation modal
+    function initDeleteConfirmation() {
+        if(confirmDeleteBtn) {
+            confirmDeleteBtn.addEventListener('click', async function() {
+                if (!sessionToDelete) return;
+
+                // Disable button and show loading state
+                confirmDeleteBtn.disabled = true;
+                const originalText = confirmDeleteBtn.innerHTML;
+                confirmDeleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Deleting...';
+
+                try {
+                    const response = await fetch(`/api/v1/sessions/${sessionToDelete}`, {
+                        method: 'DELETE'
+                    });
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        showNotification('Session deleted successfully', 'success');
+                        fetchSessions();
+                        deleteConfirmationModal.hide();
+                    } else {
+                        showNotification(result.message || 'Failed to delete session', 'error');
+                    }
+                } catch (error) {
+                    showNotification(`An error occurred: ${error.message}`, 'error');
+                } finally {
+                    // Restore button
+                    confirmDeleteBtn.disabled = false;
+                    confirmDeleteBtn.innerHTML = originalText;
+                    sessionToDelete = null;
+                }
             });
-            const result = await response.json();
-            if (response.ok) {
-                fetchSessions();
-            } else {
-                alert(result.message || 'Failed to delete session');
-            }
-        } catch (error) {
-            alert(`An error occurred: ${error.message}`);
         }
+    }
+
+    window.deleteSession = function(sessionId) {
+        sessionToDelete = sessionId;
+        sessionToDeleteName.textContent = sessionId;
+        deleteConfirmationModal.show();
+    }
+
+    // Initialize delete confirmation when DOM is loaded
+    initDeleteConfirmation();
+
+    // Function to show toast notifications
+    function showNotification(message, type = 'info') {
+        const toastContainer = document.querySelector('.toast-container');
+        const toastId = 'toast-' + Date.now();
+
+        // Determine icon and color based on type
+        let icon, bgColor, textColor;
+        switch(type) {
+            case 'success':
+                icon = 'bi-check-circle-fill';
+                bgColor = 'bg-success';
+                textColor = 'text-white';
+                break;
+            case 'error':
+                icon = 'bi-exclamation-circle-fill';
+                bgColor = 'bg-danger';
+                textColor = 'text-white';
+                break;
+            case 'warning':
+                icon = 'bi-exclamation-triangle-fill';
+                bgColor = 'bg-warning';
+                textColor = 'text-dark';
+                break;
+            default:
+                icon = 'bi-info-circle-fill';
+                bgColor = 'bg-info';
+                textColor = 'text-white';
+        }
+
+        const toastHTML = `
+            <div id="${toastId}" class="toast fade hide" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+                <div class="toast-header ${bgColor} ${textColor}">
+                    <i class="bi ${icon} me-2"></i>
+                    <strong class="me-auto">Notification</strong>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body ${textColor}">
+                    ${message}
+                </div>
+            </div>
+        `;
+
+        toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+
+        const toastEl = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastEl);
+        toast.show();
+
+        // Remove toast element after it's hidden
+        toastEl.addEventListener('hidden.bs.toast', function() {
+            this.remove();
+        });
     }
 
     function initializeWebSocket() {
@@ -479,6 +639,23 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
                             logEntry.textContent = `[${new Date(logData.timestamp).toLocaleTimeString()}] [${logData.sessionId || 'SYS'}] ${logData.message}`;
                             logBox.appendChild(logEntry);
                             logBox.scrollTop = logBox.scrollHeight;
+
+                            // Show toast notifications for important log messages
+                            if (logData.details && logData.details.event) {
+                                if (logData.details.event === 'messages-sent') {
+                                    showNotification(`Messages sent to ${logData.details.phoneNumbers?.length || 1} contacts`, 'success');
+                                } else if (logData.details.event === 'session-created') {
+                                    showNotification(`Session ${logData.details.sessionId} created successfully`, 'success');
+                                } else if (logData.details.event === 'session-deleted') {
+                                    showNotification(`Session ${logData.details.sessionId} deleted`, 'info');
+                                } else if (logData.details.event === 'webhook-updated') {
+                                    showNotification(`Webhook updated for session ${logData.details.sessionId}`, 'success');
+                                } else if (logData.details.event === 'webhook-deleted') {
+                                    showNotification(`Webhook deleted for session ${logData.details.sessionId}`, 'info');
+                                } else if (logData.details.event === 'file-uploaded') {
+                                    showNotification(`File uploaded: ${logData.details.mediaId}`, 'success');
+                                }
+                            }
                         }
                         else if (logData.type === 'session-update') {
                             console.log('📡 WebSocket session-update received:', logData.data);
@@ -503,8 +680,8 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
 
                                         setTimeout(() => {
                                             createSessionModal.hide();
-                                            // Show success message
-                                            alert(`✅ Session "${ourSession.sessionId}" successfully connected!`);
+                                            // Show success toast instead of alert
+                                            showNotification(`✅ Session "${ourSession.sessionId}" successfully connected!`, 'success');
                                             // Refresh dashboard to show connected session
                                             fetchSessions();
                                         }, 1500);
@@ -521,7 +698,9 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
 
                             updateSessionCards(logData.data);
                         }
-                    } catch(e) { console.error('WS Parse Error', e); }
+                    } catch(e) {
+                        console.error('WS Parse Error', e);
+                    }
                 };
 
                 ws.onclose = () => {
