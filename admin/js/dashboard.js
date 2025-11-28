@@ -172,9 +172,10 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
 
     async function handleQrPairing() {
         modalQrStatus.textContent = 'Creating session...';
+        console.log('🚀 Starting QR pairing for session:', newSessionId);
+
         try {
             // 1. Create the session first
-            // Note: We assume auth is bypassed or handled globally, passing dummy token if needed
             const createResponse = await fetch('/api/v1/sessions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -184,8 +185,7 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
             if (!createResponse.ok) {
                 // Check if session already exists
                 if(createResponse.status === 409) {
-                   // If exists, just try to get QR.
-                   console.log('Session exists, fetching QR...');
+                   console.log('⚠️ Session already exists, fetching QR...');
                 } else {
                    const result = await createResponse.json();
                    throw new Error(result.message || 'Failed to create session');
@@ -195,31 +195,50 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
                 const createResult = await createResponse.json();
                 if (createResult.sessionId) {
                     newSessionId = createResult.sessionId;
-                    console.log('Session created with ID:', newSessionId);
+                    console.log('✅ Session created with ID:', newSessionId);
                 }
             }
 
-            modalQrStatus.textContent = 'Fetching QR code...';
+            modalQrStatus.textContent = 'Requesting QR code...';
 
-            // 2. Get the QR code immediately
+            // 2. Request QR code regeneration
+            console.log('📞 Requesting QR for session:', newSessionId);
             const qrResponse = await fetch(`/api/v1/sessions/${newSessionId}/qr`);
             const qrResult = await qrResponse.json();
 
+            console.log('📡 QR Response:', qrResult);
+
             if (!qrResponse.ok) {
-                 // If QR not ready, websocket will handle it.
-                 console.warn('QR not immediately available:', qrResult);
-            } else if(qrResult.qr) {
-                 // Render QR if available immediately
-                 if(currentStep === 3) {
-                     modalQrCodeDiv.innerHTML = '';
-                     new QRCode(modalQrCodeDiv, { text: qrResult.qr, width: 200, height: 200 });
-                     modalQrStatus.textContent = 'Scan with WhatsApp';
-                 }
+                 console.warn('⚠️ QR request failed:', qrResult);
+                 modalQrStatus.textContent = 'Waiting for QR code...';
+            } else {
+                 console.log('✅ QR request successful, waiting for WebSocket update...');
+                 modalQrStatus.textContent = 'Waiting for QR code...';
             }
 
-            modalQrStatus.textContent = 'Waiting for QR code stream...';
-            
+            // 3. Set timeout to check if QR appeared
+            let qrCheckAttempts = 0;
+            const maxAttempts = 15; // 15 seconds max wait
+            const qrCheckInterval = setInterval(() => {
+                qrCheckAttempts++;
+                console.log(`⏱️ Checking for QR... (${qrCheckAttempts}/${maxAttempts})`);
+
+                // Check if QR already rendered
+                if (modalQrCodeDiv.innerHTML.trim() !== '') {
+                    console.log('✅ QR code already rendered!');
+                    clearInterval(qrCheckInterval);
+                    return;
+                }
+
+                if (qrCheckAttempts >= maxAttempts) {
+                    console.error('❌ QR code timeout - no QR received after', maxAttempts, 'seconds');
+                    modalQrStatus.textContent = 'QR code timeout. Please try again.';
+                    clearInterval(qrCheckInterval);
+                }
+            }, 1000);
+
         } catch (error) {
+            console.error('❌ Error in handleQrPairing:', error);
             modalQrStatus.textContent = `Error: ${error.message}`;
         }
     }
@@ -438,31 +457,74 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
     }
 
     function initializeWebSocket() {
-        // Just try to connect without auth first, since we removed auth
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(`${protocol}//${window.location.host}`);
+        // Get WebSocket auth token first
+        fetch('/api/v1/ws-auth')
+            .then(res => res.json())
+            .then(data => {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const ws = new WebSocket(`${protocol}//${window.location.host}?token=${data.wsToken}`);
 
-        ws.onopen = () => { logBox.innerHTML = '<p class="text-success small">Log stream connected.</p>'; };
-        ws.onmessage = (event) => {
-            try {
-                const logData = JSON.parse(event.data);
-                
-                if (logData.type === 'log') {
-                    const logEntry = document.createElement('div');
-                    logEntry.className = 'small border-bottom border-secondary py-1';
-                    logEntry.textContent = `[${new Date(logData.timestamp).toLocaleTimeString()}] [${logData.sessionId || 'SYS'}] ${logData.message}`;
-                    logBox.appendChild(logEntry);
-                    logBox.scrollTop = logBox.scrollHeight;
-                } 
-                else if (logData.type === 'session-update') {
-                    updateSessionCards(logData.data);
-                }
-            } catch(e) { console.error('WS Parse Error', e); }
-        };
-        ws.onclose = () => {
-            setTimeout(initializeWebSocket, 5000);
-        };
-        ws.onerror = (error) => { console.error('WebSocket error:', error); ws.close(); };
+                ws.onopen = () => {
+                    logBox.innerHTML = '<p class="text-success small">Log stream connected.</p>';
+                    console.log('✅ WebSocket connected with authentication');
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const logData = JSON.parse(event.data);
+
+                        if (logData.type === 'log') {
+                            const logEntry = document.createElement('div');
+                            logEntry.className = 'small border-bottom border-secondary py-1';
+                            logEntry.textContent = `[${new Date(logData.timestamp).toLocaleTimeString()}] [${logData.sessionId || 'SYS'}] ${logData.message}`;
+                            logBox.appendChild(logEntry);
+                            logBox.scrollTop = logBox.scrollHeight;
+                        }
+                        else if (logData.type === 'session-update') {
+                            console.log('📡 WebSocket session-update received:', logData.data);
+
+                            // Debug: Check if our session has QR
+                            if (currentStep === 3 && newSessionId) {
+                                const ourSession = logData.data.find(s => s.sessionId === newSessionId);
+                                if (ourSession) {
+                                    console.log('🔍 Our session data:', {
+                                        sessionId: ourSession.sessionId,
+                                        status: ourSession.status,
+                                        hasQR: !!ourSession.qr,
+                                        qrLength: ourSession.qr ? ourSession.qr.length : 0,
+                                        currentStep: currentStep,
+                                        newSessionId: newSessionId
+                                    });
+
+                                    // FORCE render QR in modal if we're in step 3 and QR exists
+                                    if (ourSession.qr && ourSession.qr.length > 0) {
+                                        console.log('✅ FORCE rendering QR in modal NOW');
+                                        modalQrCodeDiv.innerHTML = '';
+                                        new QRCode(modalQrCodeDiv, { text: ourSession.qr, width: 200, height: 200 });
+                                        modalQrStatus.textContent = 'Scan with WhatsApp';
+                                    }
+                                }
+                            }
+
+                            updateSessionCards(logData.data);
+                        }
+                    } catch(e) { console.error('WS Parse Error', e); }
+                };
+
+                ws.onclose = () => {
+                    console.log('⚠️ WebSocket disconnected. Reconnecting in 5 seconds...');
+                    setTimeout(initializeWebSocket, 5000);
+                };
+
+                ws.onerror = (error) => {
+                    console.error('❌ WebSocket error:', error);
+                    ws.close();
+                };
+            })
+            .catch(error => {
+                console.error('❌ Failed to get WebSocket auth token:', error);
+                setTimeout(initializeWebSocket, 5000);
+            });
     }
 
     // Initial load
