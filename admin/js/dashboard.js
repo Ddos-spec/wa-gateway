@@ -496,8 +496,21 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
                                         newSessionId: newSessionId
                                     });
 
+                                    // Check if session is CONNECTED - auto close modal
+                                    if (ourSession.status === 'CONNECTED') {
+                                        console.log('🎉 Session CONNECTED! Auto-closing modal...');
+                                        modalQrStatus.textContent = 'Connected! Redirecting...';
+
+                                        setTimeout(() => {
+                                            createSessionModal.hide();
+                                            // Show success message
+                                            alert(`✅ Session "${ourSession.sessionId}" successfully connected!`);
+                                            // Refresh dashboard to show connected session
+                                            fetchSessions();
+                                        }, 1500);
+                                    }
                                     // FORCE render QR in modal if we're in step 3 and QR exists
-                                    if (ourSession.qr && ourSession.qr.length > 0) {
+                                    else if (ourSession.qr && ourSession.qr.length > 0) {
                                         console.log('✅ FORCE rendering QR in modal NOW');
                                         modalQrCodeDiv.innerHTML = '';
                                         new QRCode(modalQrCodeDiv, { text: ourSession.qr, width: 200, height: 200 });
