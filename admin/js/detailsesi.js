@@ -1,6 +1,6 @@
 // admin/js/detailsesi.js
 
-document.addEventListener('auth-success', function() {
+document.addEventListener('DOMContentLoaded', function() {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionId = urlParams.get('sessionId');
 
