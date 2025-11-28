@@ -1,302 +1,424 @@
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="light">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API Docs - WhatsApp Gateway</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
-        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <title>API Documentation - WhatsApp Gateway</title>
+    <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/admin/css/custom.css">
     <style>
-        :root {
-            --bs-body-bg-rgb: 248, 249, 250;
-        }
+        body { font-family: 'Inter', sans-serif; }
 
-        body {
-            background-color: rgb(var(--bs-body-bg-rgb));
-            transition: background-color 0.3s ease;
+        /* Sidebar Styling */
+        .sidebar {
+            position: fixed;
+            top: 56px; /* Approx navbar height */
+            bottom: 0;
+            left: 0;
+            z-index: 100;
+            padding: 48px 0 0;
+            box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+            overflow-y: auto;
+            background-color: #f8f9fa;
+        }
+        .sidebar-heading { font-size: .75rem; font-weight: 700; color: #6c757d; }
+        .sidebar .nav-link {
+            color: #333;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            margin-bottom: 0.2rem;
+            border-radius: 0.25rem;
+        }
+        .sidebar .nav-link.active {
+            color: #25D366; /* WhatsApp Green */
+            background-color: rgba(37, 211, 102, 0.1);
+        }
+        .sidebar .nav-link:hover { color: #128C7E; background-color: rgba(0,0,0,0.05); }
+
+        /* Main Content */
+        main {
+            margin-top: 56px;
+            padding-top: 2rem;
+            padding-bottom: 4rem;
         }
         
-        [data-bs-theme="dark"] pre code {
-            background-color: #212529 !important;
-            color: #e9ecef !important;
-            border-color: var(--bs-border-color);
+        h2 { margin-top: 2rem; margin-bottom: 1rem; font-weight: 600; }
+        h3 { margin-top: 1.5rem; margin-bottom: 0.75rem; font-weight: 500; font-size: 1.25rem; }
+        p { color: #555; line-height: 1.6; }
+
+        /* Code Blocks */
+        pre {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            position: relative;
+            margin-bottom: 1.5rem;
+            overflow-x: auto;
         }
+        code { color: #e83e8c; }
+        pre code { color: inherit; background: none; }
         
-        .table-responsive {
-            font-size: 0.9rem;
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .copy-btn:hover { background: rgba(255,255,255,0.2); }
+
+        /* Tables */
+        .table-responsive { border-radius: 0.5rem; overflow: hidden; border: 1px solid #dee2e6; margin-bottom: 2rem; }
+        thead { background-color: #f8f9fa; }
+
+        /* Nav Pills for Examples */
+        .nav-pills .nav-link { color: #495057; border-radius: 0.25rem; }
+        .nav-pills .nav-link.active { background-color: #25D366; color: #fff; }
+
+        /* Mobile adjustment */
+        @media (max-width: 767.98px) {
+            .sidebar { position: static; height: auto; padding-top: 1rem; }
+            main { margin-top: 0; }
         }
     </style>
-    <link rel="stylesheet" href="/admin/css/custom.css">
 </head>
-
 <body>
-    <div id="offcanvas-container"></div>
-    <div class="main-content-wrapper">
-        <header class="py-3 mb-4 border-bottom">
-            <div class="container-fluid d-flex align-items-center">
-                <button class="btn btn-primary me-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
-                    <i class="bi bi-list"></i>
-                </button>
-                <h4 class="mb-0">API Documentation</h4>
-            </div>
-        </header>
+    <header id="navbar-container" class="sticky-top"></header>
 
-    <main class="container mt-4">
-        <section id="api-reference" class="mb-5">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light">
-                <h5 class="mb-0">API Reference & Example cURL Commands</h5>
-                </div>
-                <div class="card-body">
-                <ul class="nav nav-tabs mb-3" id="curlExampleTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="curl-text-tab" data-bs-toggle="tab" data-bs-target="#curl-text" type="button" role="tab">Text</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="curl-text-image-tab" data-bs-toggle="tab" data-bs-target="#curl-text-image" type="button" role="tab">Text + Image</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="curl-text-image-doc-tab" data-bs-toggle="tab" data-bs-target="#curl-text-image-doc" type="button" role="tab">Text + Image + Document</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="curl-text-doc-tab" data-bs-toggle="tab" data-bs-target="#curl-text-doc" type="button" role="tab">Text + Document</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="curl-legacy-tab" data-bs-toggle="tab" data-bs-target="#curl-legacy" type="button" role="tab">Alternative API</button>
-                    </li>
-                </ul>
-                <div class="tab-content" id="curlExampleTabsContent">
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar Navigation -->
+            <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block sidebar collapse">
+                <div class="position-sticky pt-3">
+                    <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-uppercase">
+                        <span>Getting Started</span>
+                    </h6>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item"><a class="nav-link active" href="#introduction">Introduction</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#authentication">Authentication</a></li>
+                    </ul>
+
+                    <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-uppercase">
+                        <span>Core API</span>
+                    </h6>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item"><a class="nav-link" href="#send-message">Send Message</a></li>
+                    </ul>
                     
-                    <div class="tab-pane fade show active" id="curl-text" role="tabpanel">
-                    <div class="mb-2"><strong>Send Text Message</strong></div>
-                    <pre><code id="curl-send-text">curl -X POST "https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
--H "Authorization: Bearer YOUR_TOKEN" \
--H "Content-Type: application/json" \
--d 
-'{ 
-  "recipient_type": "individual",
-  "to": "6281234567890",
-  "type": "text",
-  "text": { "body": "Hello from the API!" }
-}'</code></pre>
-                    <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-text', this)">Copy</button>
-                    </div>
+                    <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-uppercase">
+                        <span>Legacy / Alternative</span>
+                    </h6>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item"><a class="nav-link" href="#legacy-api">Query Param API</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#legacy-group">Group API</a></li>
+                    </ul>
+                </div>
+            </nav>
 
-                    <div class="tab-pane fade" id="curl-text-image" role="tabpanel">
-                    <div class="mb-2"><strong>Send Text + Image</strong></div>
-                    <pre><code id="curl-send-text-image">curl -X POST "https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
--H "Authorization: Bearer YOUR_TOKEN" \
--H "Content-Type: application/json" \
--d 
-'{ 
-  "recipient_type": "individual",
-  "to": "6281234567890",
-  "type": "image",
-  "image": {
-    "link": "https://picsum.photos/200",
-    "caption": "This is a test image.\nWith a new line!"
-  }
-}'</code></pre>
-                    <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-text-image', this)">Copy</button>
-                    </div>
+            <!-- Main Documentation Content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
 
-                    <div class="tab-pane fade" id="curl-text-image-doc" role="tabpanel">
-                    <div class="mb-2"><strong>Send Text + Image + Document</strong></div>
-                    <pre><code id="curl-send-text-image-doc">curl -X POST "https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
+                <!-- Introduction -->
+                <section id="introduction">
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">API Documentation</h1>
+                    </div>
+                    <p>Welcome to the WhatsApp Gateway API. This API allows you to programmatically send messages, images, documents, and manage groups via your connected WhatsApp session.</p>
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle-fill me-2"></i> Ensure your session is <strong>Connected</strong> in the Dashboard before making API calls.
+                    </div>
+                </section>
+
+                <!-- Authentication -->
+                <section id="authentication" class="mt-5">
+                    <h2>Authentication</h2>
+                    <p>All API requests must be authenticated using your unique <strong>API Key</strong> or a <strong>Bearer Token</strong>. You can generate this key in the Session Detail page.</p>
+
+                    <h5>Option 1: Bearer Token (Header)</h5>
+                    <pre><code class="language-bash">Authorization: Bearer YOUR_TOKEN</code></pre>
+
+                    <h5>Option 2: Query Parameter</h5>
+                    <pre><code class="language-bash">?apikey=YOUR_API_KEY</code></pre>
+                </section>
+
+                <!-- Send Message -->
+                <section id="send-message" class="mt-5">
+                    <h2>Send Message</h2>
+                    <p>The primary endpoint to send messages of various types (Text, Image, Document).</p>
+
+                    <div class="card mb-4">
+                        <div class="card-header bg-light">
+                            <ul class="nav nav-pills card-header-pills" id="sendMsgTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="tab-text" data-bs-toggle="pill" data-bs-target="#content-text" type="button">Text</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="tab-image" data-bs-toggle="pill" data-bs-target="#content-image" type="button">Image</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="tab-doc" data-bs-toggle="pill" data-bs-target="#content-doc" type="button">Document</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="tab-bulk" data-bs-toggle="pill" data-bs-target="#content-bulk" type="button">Bulk / Mixed</button>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="card-body">
+                            <div class="tab-content" id="sendMsgTabsContent">
+                                <!-- TEXT -->
+                                <div class="tab-pane fade show active" id="content-text" role="tabpanel">
+                                    <h6>Endpoint</h6>
+                                    <code class="d-block mb-3 p-2 bg-light rounded">POST /api/v1/messages?sessionId={sessionId}</code>
+
+                                    <h6>cURL Example</h6>
+                                    <pre><button class="copy-btn" onclick="copyCurl('code-text', this)">Copy</button><code id="code-text">curl -X POST "https://your-domain.com/api/v1/messages?sessionId=session1" \
 -H "Authorization: Bearer YOUR_TOKEN" \
 -H "Content-Type: application/json" \
--d 
-'[
+-d '{
+    "recipient_type": "individual",
+    "to": "6281234567890",
+    "type": "text",
+    "text": {
+        "body": "Hello World!"
+    }
+}'</code></pre>
+                                </div>
+
+                                <!-- IMAGE -->
+                                <div class="tab-pane fade" id="content-image" role="tabpanel">
+                                    <h6>Endpoint</h6>
+                                    <code class="d-block mb-3 p-2 bg-light rounded">POST /api/v1/messages?sessionId={sessionId}</code>
+
+                                    <h6>cURL Example</h6>
+                                    <pre><button class="copy-btn" onclick="copyCurl('code-image', this)">Copy</button><code id="code-image">curl -X POST "https://your-domain.com/api/v1/messages?sessionId=session1" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{
+    "recipient_type": "individual",
+    "to": "6281234567890",
+    "type": "image",
+    "image": {
+        "link": "https://picsum.photos/200",
+        "caption": "Check this out!"
+    }
+}'</code></pre>
+                                </div>
+
+                                <!-- DOCUMENT -->
+                                <div class="tab-pane fade" id="content-doc" role="tabpanel">
+                                    <h6>Endpoint</h6>
+                                    <code class="d-block mb-3 p-2 bg-light rounded">POST /api/v1/messages?sessionId={sessionId}</code>
+
+                                    <h6>cURL Example</h6>
+                                    <pre><button class="copy-btn" onclick="copyCurl('code-doc', this)">Copy</button><code id="code-doc">curl -X POST "https://your-domain.com/api/v1/messages?sessionId=session1" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{
+    "recipient_type": "individual",
+    "to": "6281234567890",
+    "type": "document",
+    "document": {
+        "link": "https://example.com/file.pdf",
+        "mimetype": "application/pdf",
+        "filename": "invoice.pdf"
+    }
+}'</code></pre>
+                                </div>
+
+                                <!-- BULK -->
+                                <div class="tab-pane fade" id="content-bulk" role="tabpanel">
+                                    <p>You can send multiple messages (array of objects) in a single request.</p>
+                                    <pre><button class="copy-btn" onclick="copyCurl('code-bulk', this)">Copy</button><code id="code-bulk">curl -X POST "https://your-domain.com/api/v1/messages?sessionId=session1" \
+-H "Authorization: Bearer YOUR_TOKEN" \
+-H "Content-Type: application/json" \
+-d '[
   {
     "recipient_type": "individual",
     "to": "6281234567890",
     "type": "text",
-    "text": { "body": "Here is an image and a document!" }
+    "text": { "body": "First message" }
   },
   {
     "recipient_type": "individual",
     "to": "6281234567890",
     "type": "image",
-    "image": {
-      "link": "https://picsum.photos/200",
-      "caption": "Image caption."
-    }
-  },
-  {
-    "recipient_type": "individual",
-    "to": "6281234567890",
-    "type": "document",
-    "document": {
-      "link": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-      "mimetype": "application/pdf",
-      "filename": "dummy.pdf"
-    }
+    "image": { "link": "https://picsum.photos/200" }
   }
 ]'</code></pre>
-                    <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-text-image-doc', this)">Copy</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Legacy API -->
+                <section id="legacy-api" class="mt-5 pt-4 border-top">
+                    <h3><span class="badge bg-secondary">Legacy</span> Query Param API</h3>
+                    <p class="text-muted">This API style is compatible with older gateway formats. It supports both GET and POST.</p>
+
+                    <!-- Send Message -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <span class="badge bg-success me-2">GET/POST</span>
+                            <code>/api/v1/send-message</code>
+                        </div>
+                        <div class="table-responsive mb-0">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 20%">Parameter</th>
+                                        <th style="width: 15%">Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>apikey</code></td>
+                                        <td>String</td>
+                                        <td><span class="text-danger">*Required</span>. Apikey your session.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>mtype</code></td>
+                                        <td>Enum</td>
+                                        <td><span class="text-danger">*Required</span>. Options: <code>text</code>, <code>image</code>, <code>video</code>, <code>audio</code>, <code>audioconvert</code>, <code>document</code>, <code>sticker</code>, <code>stickerconvert</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>receiver</code></td>
+                                        <td>String</td>
+                                        <td><span class="text-danger">*Required</span>. Receiver Phone Number with Country Code (e.g: 62812345678) or id group.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>text</code></td>
+                                        <td>String</td>
+                                        <td>Required if mtype is <code>text</code>. Text Message.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>url</code></td>
+                                        <td>Url</td>
+                                        <td>Required if mtype is <code>image</code>, <code>video</code>, <code>audio</code>, <code>audioconvert</code>, <code>document</code>, <code>sticker</code>, <code>stickerconvert</code>. url file. example : http://domain.com/example.jpg</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>filename</code></td>
+                                        <td>String</td>
+                                        <td>Optional. if you want a custom name of the document sent.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
-                    <div class="tab-pane fade" id="curl-text-doc" role="tabpanel">
-                    <div class="mb-2"><strong>Send Text + Document</strong></div>
-                    <pre><code id="curl-send-text-doc">curl -X POST "https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/messages?sessionId=YOUR_SESSION_ID" \
--H "Authorization: Bearer YOUR_TOKEN" \
--H "Content-Type: application/json" \
--d 
-'[
-  {
-    "recipient_type": "individual",
-    "to": "6281234567890",
-    "type": "text",
-    "text": { "body": "Here is a document!" }
-  },
-  {
-    "recipient_type": "individual",
-    "to": "6281234567890",
-    "type": "document",
-    "document": {
-      "link": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-      "mimetype": "application/pdf",
-      "filename": "dummy.pdf"
-    }
-  }
-]'</code></pre>
-                    <button class="btn btn-sm btn-outline-secondary mb-2" onclick="copyCurl('curl-send-text-doc', this)">Copy</button>
+                    <!-- Fetch Group -->
+                    <div class="card mb-4" id="legacy-group">
+                        <div class="card-header">
+                            <span class="badge bg-success me-2">GET/POST</span>
+                            <code>/api/v1/fetch-group</code>
+                        </div>
+                        <div class="table-responsive mb-0">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 20%">Parameter</th>
+                                        <th style="width: 15%">Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>apikey</code></td>
+                                        <td>String</td>
+                                        <td><span class="text-danger">*Required</span>. Apikey your session.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
-                    <!-- Alternative / Legacy API Tab -->
-                    <div class="tab-pane fade" id="curl-legacy" role="tabpanel">
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle"></i> This API style uses query parameters and is compatible with other gateway formats.
+                    <!-- Fetch Member -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <span class="badge bg-success me-2">GET/POST</span>
+                            <code>/api/v1/fetch-member</code>
                         </div>
-
-                        <!-- Send Message -->
-                        <div class="mb-4">
-                            <h5>Send Text, Media, Document, Sticker</h5>
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <span class="badge bg-success">GET & POST</span>
-                                <code class="text-break">https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/send-message</code>
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-bordered table-sm table-hover">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th style="width: 20%">Parameter</th>
-                                            <th style="width: 15%">Type</th>
-                                            <th>Description</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr>
-                                            <td><code>apikey</code></td>
-                                            <td>String</td>
-                                            <td><span class="text-danger">Required</span>. Apikey your session.</td>
-                                        </tr>
-                                        <tr>
-                                            <td><code>mtype</code></td>
-                                            <td>Enum</td>
-                                            <td><span class="text-danger">Required</span>. Options: <code>text</code>, <code>image</code>, <code>video</code>, <code>audio</code>, <code>audioconvert</code>, <code>document</code>, <code>sticker</code>, <code>stickerconvert</code></td>
-                                        </tr>
-                                        <tr>
-                                            <td><code>receiver</code></td>
-                                            <td>String</td>
-                                            <td><span class="text-danger">Required</span>. Receiver Phone Number with Country Code (e.g: 62812345678) or id group.</td>
-                                        </tr>
-                                        <tr>
-                                            <td><code>text</code></td>
-                                            <td>String</td>
-                                            <td>Required if mtype is <code>text</code>. Text Message.</td>
-                                        </tr>
-                                        <tr>
-                                            <td><code>url</code></td>
-                                            <td>Url</td>
-                                            <td>Required if mtype is <code>image</code>, <code>video</code>, <code>audio</code>, <code>audioconvert</code>, <code>document</code>, <code>sticker</code>, <code>stickerconvert</code>. url file. example : http://domain.com/example.jpg</td>
-                                        </tr>
-                                        <tr>
-                                            <td><code>filename</code></td>
-                                            <td>String</td>
-                                            <td>Optional. if you want a custom name of the document sent.</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
+                        <div class="table-responsive mb-0">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 20%">Parameter</th>
+                                        <th style="width: 15%">Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>apikey</code></td>
+                                        <td>String</td>
+                                        <td><span class="text-danger">*Required</span>. Apikey your session.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>idgroup</code></td>
+                                        <td>String</td>
+                                        <td><span class="text-danger">*Required</span>. ID group WhatsApp (e.g: 120163044481549146@g.us)</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
-
-                        <!-- Fetch Group -->
-                        <div class="mb-4">
-                            <h5>Fetch Group</h5>
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <span class="badge bg-success">GET & POST</span>
-                                <code class="text-break">https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/fetch-group</code>
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-bordered table-sm table-hover">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th style="width: 20%">Parameter</th>
-                                            <th style="width: 15%">Type</th>
-                                            <th>Description</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr>
-                                            <td><code>apikey</code></td>
-                                            <td>String</td>
-                                            <td><span class="text-danger">Required</span>. Apikey your session.</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <!-- Fetch Member -->
-                        <div class="mb-4">
-                            <h5>Fetch Group Member</h5>
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <span class="badge bg-success">GET & POST</span>
-                                <code class="text-break">https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1/fetch-member</code>
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-bordered table-sm table-hover">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th style="width: 20%">Parameter</th>
-                                            <th style="width: 15%">Type</th>
-                                            <th>Description</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr>
-                                            <td><code>apikey</code></td>
-                                            <td>String</td>
-                                            <td><span class="text-danger">Required</span>. Apikey your session.</td>
-                                        </tr>
-                                        <tr>
-                                            <td><code>idgroup</code></td>
-                                            <td>String</td>
-                                            <td><span class="text-danger">Required</span>. ID group WhatsApp (e.g: 120163044481549146@g.us)</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
                     </div>
-                </div>
-                </div>
-            </div>
-        </section>
-    </main>
+                </section>
 
-    <footer class="text-center text-muted py-4">
-        <small>Super-Light-Web-WhatsApp-API-Server by Alucard0x1</small>
-    </footer>
-</div> <!-- End of main-content-wrapper -->
+                <!-- Group API -->
+                <section id="legacy-group" class="mt-5 mb-5">
+                     <h3>Group Management API</h3>
 
+                     <div class="mb-3">
+                         <h5>Fetch Groups</h5>
+                         <code>/api/v1/fetch-group</code>
+                         <p class="small text-muted mt-1">Requires <code>apikey</code>.</p>
+                     </div>
+
+                     <div>
+                         <h5>Fetch Members</h5>
+                         <code>/api/v1/fetch-member</code>
+                         <p class="small text-muted mt-1">Requires <code>apikey</code> and <code>idgroup</code>.</p>
+                     </div>
+                </section>
+
+                <footer class="pt-3 mt-4 text-muted border-top">
+                    <small>&copy; 2024 WhatsApp Gateway. Designed for Developers.</small>
+                </footer>
+            </main>
+        </div>
+    </div>
+
+    <!-- Scripts -->
     <script src="/admin/js/bootstrap.bundle.min.js"></script>
     <script src="/admin/js/utils.js"></script>
     <script src="/admin/js/auth-check.js"></script>
     <script src="/admin/js/loadNavbar.js"></script>
+
+    <script>
+        // Smooth scrolling for sidebar links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+                // Update active state
+                document.querySelectorAll('.sidebar .nav-link').forEach(l => l.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+    </script>
 </body>
 </html>
