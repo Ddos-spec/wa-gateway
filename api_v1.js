@@ -213,12 +213,17 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             
             // Log activity removed
             
-            log('Session created', sanitizedSessionId, { 
-                event: 'session-created', 
+            log('Session created', sanitizedSessionId, {
+                event: 'session-created',
                 sessionId: sanitizedSessionId,
                 createdBy: currentUser ? currentUser.email : 'api-key'
             });
-            res.status(201).json({ status: 'success', message: `Session ${sanitizedSessionId} created.`, token: token });
+            res.status(201).json({
+                status: 'success',
+                message: `Session ${sanitizedSessionId} created.`,
+                sessionId: sanitizedSessionId,
+                token: token
+            });
         } catch (error) {
             log('API error', 'SYSTEM', { event: 'api-error', error: error.message, endpoint: req.originalUrl });
             res.status(500).json({ status: 'error', message: `Failed to create session: ${error.message}` });
