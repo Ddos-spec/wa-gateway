@@ -764,6 +764,62 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         }
     });
 
+    // QR Code regeneration endpoint (must be before validateToken middleware)
+    router.get('/sessions/:sessionId/qr', async (req, res) => {
+        log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl });
+
+        const { sessionId } = req.params;
+        const session = sessions.get(sessionId);
+
+        if (!session) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Session not found'
+            });
+        }
+
+        // Check if this is a phone pairing session - if so, don't allow QR regeneration
+        const pairingInfo = phonePairing.getPairingStatus(sessionId);
+        if (pairingInfo && pairingInfo.phoneNumber) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'This session is configured for phone pairing. Please use pairing code instead.'
+            });
+        }
+
+        log(`QR code regeneration requested for ${sessionId}`, sessionId);
+
+        try {
+            // 1. Get session owner info before deletion
+            const sessionOwner = session.owner;
+
+            // 2. Delete auth folder to force fresh QR generation
+            const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
+            if (fs.existsSync(sessionDir)) {
+                fs.rmSync(sessionDir, { recursive: true, force: true });
+                log(`Cleared auth data for ${sessionId} to force QR regeneration`, sessionId);
+            }
+
+            // 3. Delete the current session
+            await deleteSession(sessionId);
+
+            // 4. Recreate the session (this will trigger fresh connection and QR generation)
+            await createSession(sessionId, sessionOwner);
+
+            log(`QR code regeneration initiated for ${sessionId}`, sessionId);
+            res.status(200).json({
+                status: 'success',
+                message: 'QR code regeneration initiated. Please wait for the QR code to appear.'
+            });
+        } catch (error) {
+            log(`Error regenerating QR for ${sessionId}: ${error.message}`, sessionId, { error });
+            res.status(500).json({
+                status: 'error',
+                message: 'Failed to regenerate QR code. Please try again.'
+            });
+        }
+    });
+
     // All routes below this are protected by token
     router.use(validateToken);
 

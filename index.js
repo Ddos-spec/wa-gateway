@@ -943,54 +943,6 @@ async function createSession(sessionId, createdBy = null) {
     return { status: 'success', message: `Session ${sessionId} created.`, token };
 }
 
-app.get('/api/v1/sessions/:sessionId/qr', async (req, res) => {
-    const { sessionId } = req.params;
-    const session = sessions.get(sessionId);
-    if (!session) {
-        return res.status(404).json({ error: 'Session not found' });
-    }
-
-    // Check if this is a phone pairing session - if so, don't allow QR regeneration
-    const pairingInfo = phonePairing.getPairingStatus(sessionId);
-    if (pairingInfo && pairingInfo.phoneNumber) {
-        return res.status(400).json({ error: 'This session is configured for phone pairing. Please use pairing code instead.' });
-    }
-
-    log(`QR code regeneration requested for ${sessionId}`, sessionId);
-
-    try {
-        // 1. Logout the current socket if it exists
-        if (session.sock) {
-            try {
-                await session.sock.logout();
-                log(`Logged out existing session ${sessionId}`, sessionId);
-            } catch (err) {
-                log(`Error during logout for ${sessionId}: ${err.message}`, sessionId);
-            }
-        }
-
-        // 2. Delete the auth folder to force fresh QR generation
-        const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
-        if (fs.existsSync(sessionDir)) {
-            fs.rmSync(sessionDir, { recursive: true, force: true });
-            log(`Cleared auth data for ${sessionId} to force QR regeneration`, sessionId);
-        }
-
-        // 3. Update status and reconnect
-        updateSessionState(sessionId, 'GENERATING_QR', 'Requesting fresh QR code...', '', '');
-
-        // 4. Reconnect to WhatsApp (this will generate a new QR)
-        setTimeout(() => {
-            connectToWhatsApp(sessionId);
-        }, 1000); // Small delay to ensure cleanup is complete
-
-        res.status(200).json({ message: 'QR code regeneration initiated. Please wait for the QR code to appear.' });
-    } catch (error) {
-        log(`Error regenerating QR for ${sessionId}: ${error.message}`, sessionId, { error });
-        res.status(500).json({ error: 'Failed to regenerate QR code. Please try again.' });
-    }
-});
-
 async function deleteSession(sessionId) {
     const session = sessions.get(sessionId);
     if (session && session.sock) {
