@@ -190,10 +190,17 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
                    const result = await createResponse.json();
                    throw new Error(result.message || 'Failed to create session');
                 }
+            } else {
+                // Update newSessionId with the sanitized sessionId from server
+                const createResult = await createResponse.json();
+                if (createResult.sessionId) {
+                    newSessionId = createResult.sessionId;
+                    console.log('Session created with ID:', newSessionId);
+                }
             }
-            
+
             modalQrStatus.textContent = 'Fetching QR code...';
-            
+
             // 2. Get the QR code immediately
             const qrResponse = await fetch(`/api/v1/sessions/${newSessionId}/qr`);
             const qrResult = await qrResponse.json();
@@ -371,9 +378,14 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
             // We only show QR in dashboard card if it's NOT connected and NOT currently being handled in the modal
             const qrContainer = document.getElementById(`qr-container-${session.sessionId}`);
             const modalQrContainer = document.getElementById('modal-qr-code');
-            
+
             // If this session is currently active in the modal (Step 3), update the modal QR instead
             if (currentStep === 3 && newSessionId === session.sessionId && session.qr) {
+                console.log('✅ Rendering QR in MODAL for session:', session.sessionId);
+                console.log('   - currentStep:', currentStep);
+                console.log('   - newSessionId:', newSessionId);
+                console.log('   - session.sessionId:', session.sessionId);
+                console.log('   - QR length:', session.qr.length);
                 modalQrCodeDiv.innerHTML = '';
                 new QRCode(modalQrCodeDiv, { text: session.qr, width: 200, height: 200 });
                 modalQrStatus.textContent = 'Scan with WhatsApp';
@@ -381,6 +393,11 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
             // Otherwise update the dashboard card QR
             else if (qrContainer) {
                 if (session.status !== 'CONNECTED' && session.qr) {
+                    console.log('⚠️ Rendering QR in DASHBOARD CARD (not modal) for session:', session.sessionId);
+                    console.log('   - currentStep:', currentStep, '(expected: 3)');
+                    console.log('   - newSessionId:', newSessionId);
+                    console.log('   - session.sessionId:', session.sessionId);
+                    console.log('   - Match?', newSessionId === session.sessionId);
                     qrContainer.innerHTML = '';
                     new QRCode(qrContainer, { text: session.qr, width: 150, height: 150 });
                 } else if (session.status === 'CONNECTED') {
