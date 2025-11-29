@@ -14,7 +14,7 @@ if (process.env.NODE_ENV === 'production') {
 
 const {
     default: makeWASocket,
-    useMultiFileAuthState,
+    // useMultiFileAuthState, // Removed in favor of Redis
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
     isJidBroadcast,
@@ -30,6 +30,8 @@ const { WebSocketServer } = require('ws');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
+const { createClient } = require('redis'); // Redis Import
+const useRedisAuthState = require('./redis-auth'); // Redis Auth Strategy
 const { initializeApi, apiToken, getWebhookUrl } = require('./api_v1');
 const { initializeLegacyApi } = require('./legacy_api');
 const { randomUUID } = require('crypto');
@@ -39,7 +41,8 @@ const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const session = require('express-session');
 const PhonePairing = require('./phone-pairing'); // Add PhonePairing import
-const FileStore = require('session-file-store')(session);
+const FileStore = require('session-file-store')(session); // Keep for express-session for now (or move to RedisStore later if requested)
+
 // User Manager & Activity Logger removed for performance
 // const UserManager = require('./users');
 // const ActivityLogger = require('./activity-logger');
@@ -48,6 +51,19 @@ const FileStore = require('session-file-store')(session);
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
+
+// --- REDIS SETUP ---
+const REDIS_URL = process.env.REDIS_URL || 'redis://default:b5cf82712e2201393c9e@postgres_redis:6379'; // Default to Internal
+const redisClient = createClient({ url: REDIS_URL });
+
+redisClient.on('error', (err) => console.error('❌ Redis Client Error', err));
+redisClient.on('connect', () => console.log('✅ Connected to Redis'));
+
+// Connect to Redis immediately
+(async () => {
+    await redisClient.connect();
+})();
+// -------------------
 
 const sessions = new Map();
 const sessionTokens = new Map();
@@ -258,14 +274,14 @@ app.use(session({
 }));
 
 // FORCE ADMIN AUTH MIDDLEWARE (Simplified Mode)
-app.use((req, res, next) => {
-    if (!req.session) req.session = {};
-    req.session.adminAuthed = true;
-    req.session.userEmail = 'admin@localhost';
-    req.session.userRole = 'admin';
-    req.session.userId = 'system-admin';
-    next();
-});
+// app.use((req, res, next) => {
+//     if (!req.session) req.session = {};
+//     req.session.adminAuthed = true;
+//     req.session.userEmail = 'admin@localhost';
+//     req.session.userRole = 'admin';
+//     req.session.userId = 'system-admin';
+//     next();
+// });
 
 // Serve homepage
 app.get('/', (req, res) => {
@@ -320,7 +336,10 @@ app.post('/admin/login', express.json(), async (req, res) => {
 
 // Middleware to protect admin dashboard
 function requireAdminAuth(req, res, next) {
-    next();
+    if (req.session && req.session.adminAuthed) {
+        return next();
+    }
+    res.redirect('/admin/login.html');
 }
 
 // Middleware to check if user is admin role
@@ -523,7 +542,7 @@ function log(message, sessionId = 'SYSTEM', details = {}) {
 
 const phonePairing = new PhonePairing(log);
 
-const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, phonePairing, saveSessionSettings);
+const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, phonePairing, saveSessionSettings, regenerateSessionToken, redisClient);
 const legacyApiRouter = initializeLegacyApi(sessions, sessionTokens);
 app.use('/api/v1', v1ApiRouter);
 app.use('/api', legacyApiRouter); // Mount legacy routes at /api
@@ -563,15 +582,10 @@ function broadcast(data) {
     });
 }
 
-// --- Start Webhook Settings Management ---
-function getSettingsFilePath(sessionId) {
-    return path.join(__dirname, 'auth_info_baileys', sessionId, 'settings.json');
-}
-
+// --- Start Webhook Settings Management (Redis Version) ---
 async function saveSessionSettings(sessionId, settings) {
     try {
-        const filePath = getSettingsFilePath(sessionId);
-        await fs.promises.writeFile(filePath, JSON.stringify(settings, null, 2));
+        await redisClient.set(`wa:settings:${sessionId}`, JSON.stringify(settings));
         // Update in-memory session object
         if (sessions.has(sessionId)) {
             sessions.get(sessionId).settings = settings;
@@ -585,17 +599,16 @@ async function saveSessionSettings(sessionId, settings) {
 
 async function loadSessionSettings(sessionId) {
     try {
-        const filePath = getSettingsFilePath(sessionId);
-        if (fs.existsSync(filePath)) {
-            const data = await fs.promises.readFile(filePath, 'utf-8');
-            return JSON.parse(data);
-        }
+        const data = await redisClient.get(`wa:settings:${sessionId}`);
+        return data ? JSON.parse(data) : {};
     } catch (error) {
         log(`Error loading settings for session ${sessionId}: ${error.message}`, sessionId, { error });
     }
     return {}; // Return empty object if no settings found or error
 }
 // --- End Webhook Settings Management ---
+
+// ... (postToWebhook and updateSessionState remain same) ...
 
 // Update postToWebhook to accept sessionId and use getWebhookUrl(sessionId)
 async function postToWebhook(data) {
@@ -671,7 +684,9 @@ async function connectToWhatsApp(sessionId) {
         sessions.get(sessionId).settings = settings;
     }
 
-    const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, 'auth_info_baileys', sessionId));
+    // Use Redis Auth Strategy instead of MultiFile
+    const { state, saveCreds } = await useRedisAuthState(redisClient, sessionId);
+    
     const { version, isLatest } = await fetchLatestBaileysVersion();
     log(`Using WA version: ${version.join('.')}, isLatest: ${isLatest}`, sessionId);
 
@@ -1019,10 +1034,24 @@ async function deleteSession(sessionId) {
     sessions.delete(sessionId);
     sessionTokens.delete(sessionId);
     saveTokens();
-    const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
-    if (fs.existsSync(sessionDir)) {
-        fs.rmSync(sessionDir, { recursive: true, force: true });
+    
+    // Clean up Redis session data
+    try {
+        const keys = await redisClient.keys(`wa:sess:${sessionId}:*`);
+        if (keys.length > 0) {
+            await redisClient.del(keys);
+        }
+        // Also delete settings
+        await redisClient.del(`wa:settings:${sessionId}`);
+        log(`Cleared Redis session data for ${sessionId}`, 'SYSTEM');
+    } catch (error) {
+        log(`Error clearing Redis data for ${sessionId}: ${error.message}`, 'SYSTEM');
     }
+
+    // const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
+    // if (fs.existsSync(sessionDir)) {
+    //     fs.rmSync(sessionDir, { recursive: true, force: true });
+    // }
     log(`Session ${sessionId} deleted and data cleared.`, 'SYSTEM');
     broadcast({ type: 'session-update', data: getSessionsDetails() });
 }
