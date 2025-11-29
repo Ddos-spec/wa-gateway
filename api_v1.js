@@ -226,6 +226,9 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             });
         } catch (error) {
             log('API error', 'SYSTEM', { event: 'api-error', error: error.message, endpoint: req.originalUrl });
+            if (error.message === 'Session already exists') {
+                return res.status(409).json({ status: 'error', message: 'Session already exists' });
+            }
             res.status(500).json({ status: 'error', message: `Failed to create session: ${error.message}` });
         }
     });
@@ -776,27 +779,20 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         const { sessionId } = req.params;
         const session = sessions.get(sessionId);
 
-        if (!session) {
-            return res.status(404).json({
-                status: 'error',
-                message: 'Session not found'
-            });
-        }
-
-        // Check if this is a phone pairing session - if so, don't allow QR regeneration
-        const pairingInfo = phonePairing.getPairingStatus(sessionId);
-        if (pairingInfo && pairingInfo.phoneNumber) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'This session is configured for phone pairing. Please use pairing code instead.'
-            });
-        }
+        // If session doesn't exist in memory, we still might want to clean up file system/pairing to be safe
+        // But standard logic requires session to exist to get owner? 
+        // Let's proceed even if session missing, defaulting owner to null (or current user if we had auth)
 
         log(`QR code regeneration requested for ${sessionId}`, sessionId);
 
         try {
+            // 0. Force clear any phone pairing status to allow switching modes
+            if (phonePairing) {
+                await phonePairing.deletePairing(sessionId);
+            }
+
             // 1. Get session owner info before deletion
-            const sessionOwner = session.owner;
+            const sessionOwner = session ? session.owner : null;
 
             // 2. Delete auth folder to force fresh QR generation
             const sessionDir = path.join(__dirname, 'auth_info_baileys', sessionId);
@@ -805,8 +801,10 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
                 log(`Cleared auth data for ${sessionId} to force QR regeneration`, sessionId);
             }
 
-            // 3. Delete the current session
-            await deleteSession(sessionId);
+            // 3. Delete the current session (if it exists)
+            if (sessions.has(sessionId)) {
+                await deleteSession(sessionId);
+            }
 
             // 4. Recreate the session (this will trigger fresh connection and QR generation)
             await createSession(sessionId, sessionOwner);

@@ -102,26 +102,11 @@
             <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block sidebar collapse">
                 <div class="position-sticky pt-3">
                     <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-uppercase">
-                        <span>Getting Started</span>
+                        <span>Documentation</span>
                     </h6>
                     <ul class="nav flex-column mb-2">
-                        <li class="nav-item"><a class="nav-link active" href="#introduction">Introduction</a></li>
-                        <li class="nav-item"><a class="nav-link" href="#authentication">Authentication</a></li>
-                    </ul>
-
-                    <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-uppercase">
-                        <span>Core API</span>
-                    </h6>
-                    <ul class="nav flex-column mb-2">
-                        <li class="nav-item"><a class="nav-link" href="#send-message">Send Message</a></li>
-                    </ul>
-                    
-                    <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-uppercase">
-                        <span>Legacy / Alternative</span>
-                    </h6>
-                    <ul class="nav flex-column mb-2">
-                        <li class="nav-item"><a class="nav-link" href="#legacy-api">Query Param API</a></li>
-                        <li class="nav-item"><a class="nav-link" href="#legacy-group">Group API</a></li>
+                        <li class="nav-item"><a class="nav-link active" href="#send-message">Send Message</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#fetch-group">Group Management</a></li>
                     </ul>
                 </div>
             </nav>
@@ -134,213 +119,127 @@
                     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                         <h1 class="h2">API Documentation</h1>
                     </div>
-                    <p>Welcome to the WhatsApp Gateway API. This API allows you to programmatically send messages, images, documents, and manage groups via your connected WhatsApp session.</p>
+                    <p>Welcome to the WhatsApp Gateway API. This simplified API allows you to send messages and manage groups using simple <strong>Query Parameters</strong> or JSON payloads.</p>
                     <div class="alert alert-info">
                         <i class="bi bi-info-circle-fill me-2"></i> Ensure your session is <strong>Connected</strong> in the Dashboard before making API calls.
                     </div>
                 </section>
 
-                <!-- Authentication -->
-                <section id="authentication" class="mt-5">
-                    <h2>Authentication</h2>
-                    <p>All API requests must be authenticated using your unique <strong>API Key</strong> or a <strong>Bearer Token</strong>. You can generate this key in the Session Detail page.</p>
-
-                    <h5>Option 1: Bearer Token (Header)</h5>
-                    <pre><code class="language-bash">Authorization: Bearer YOUR_TOKEN</code></pre>
-
-                    <h5>Option 2: Query Parameter</h5>
-                    <pre><code class="language-bash">?apikey=YOUR_API_KEY</code></pre>
-                </section>
-
-                <!-- Send Message -->
+                <!-- Main API Section (Previously Legacy) -->
                 <section id="send-message" class="mt-5">
-                    <h2>Send Message</h2>
-                    <p>The primary endpoint to send messages of various types (Text, Image, Document).</p>
+                    <h2>Send Message API</h2>
+                    <p>The primary endpoint for sending WhatsApp messages. Supports GET and POST methods.</p>
 
-                    <div class="card mb-4">
-                        <div class="card-header bg-light">
-                            <ul class="nav nav-pills card-header-pills" id="sendMsgTabs" role="tablist">
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link active" id="tab-text" data-bs-toggle="pill" data-bs-target="#content-text" type="button">Text</button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="tab-image" data-bs-toggle="pill" data-bs-target="#content-image" type="button">Image</button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="tab-doc" data-bs-toggle="pill" data-bs-target="#content-doc" type="button">Document</button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="tab-bulk" data-bs-toggle="pill" data-bs-target="#content-bulk" type="button">Bulk / Mixed</button>
-                                </li>
-                            </ul>
-                        </div>
-                        <div class="card-body">
-                            <div class="tab-content" id="sendMsgTabsContent">
-                                <!-- TEXT -->
-                                <div class="tab-pane fade show active" id="content-text" role="tabpanel">
-                                    <h6>Endpoint</h6>
-                                    <code class="d-block mb-3 p-2 bg-light rounded">POST /api/v1/messages?sessionId={sessionId}</code>
-
-                                    <h6>cURL Example</h6>
-                                    <pre><button class="copy-btn" onclick="copyCurl('code-text', this)">Copy</button><code id="code-text">curl -X POST "https://your-domain.com/api/v1/messages?sessionId=session1" \
--H "Authorization: Bearer YOUR_TOKEN" \
--H "Content-Type: application/json" \
--d '{
-    "recipient_type": "individual",
-    "to": "6281234567890",
-    "type": "text",
-    "text": {
-        "body": "Hello World!"
-    }
-}'</code></pre>
-                                </div>
-
-                                <!-- IMAGE -->
-                                <div class="tab-pane fade" id="content-image" role="tabpanel">
-                                    <h6>Endpoint</h6>
-                                    <code class="d-block mb-3 p-2 bg-light rounded">POST /api/v1/messages?sessionId={sessionId}</code>
-
-                                    <h6>cURL Example</h6>
-                                    <pre><button class="copy-btn" onclick="copyCurl('code-image', this)">Copy</button><code id="code-image">curl -X POST "https://your-domain.com/api/v1/messages?sessionId=session1" \
--H "Authorization: Bearer YOUR_TOKEN" \
--H "Content-Type: application/json" \
--d '{
-    "recipient_type": "individual",
-    "to": "6281234567890",
-    "type": "image",
-    "image": {
-        "link": "https://picsum.photos/200",
-        "caption": "Check this out!"
-    }
-}'</code></pre>
-                                </div>
-
-                                <!-- DOCUMENT -->
-                                <div class="tab-pane fade" id="content-doc" role="tabpanel">
-                                    <h6>Endpoint</h6>
-                                    <code class="d-block mb-3 p-2 bg-light rounded">POST /api/v1/messages?sessionId={sessionId}</code>
-
-                                    <h6>cURL Example</h6>
-                                    <pre><button class="copy-btn" onclick="copyCurl('code-doc', this)">Copy</button><code id="code-doc">curl -X POST "https://your-domain.com/api/v1/messages?sessionId=session1" \
--H "Authorization: Bearer YOUR_TOKEN" \
--H "Content-Type: application/json" \
--d '{
-    "recipient_type": "individual",
-    "to": "6281234567890",
-    "type": "document",
-    "document": {
-        "link": "https://example.com/file.pdf",
-        "mimetype": "application/pdf",
-        "filename": "invoice.pdf"
-    }
-}'</code></pre>
-                                </div>
-
-                                <!-- BULK -->
-                                <div class="tab-pane fade" id="content-bulk" role="tabpanel">
-                                    <p>You can send multiple messages (array of objects) in a single request.</p>
-                                    <pre><button class="copy-btn" onclick="copyCurl('code-bulk', this)">Copy</button><code id="code-bulk">curl -X POST "https://your-domain.com/api/v1/messages?sessionId=session1" \
--H "Authorization: Bearer YOUR_TOKEN" \
--H "Content-Type: application/json" \
--d '[
-  {
-    "recipient_type": "individual",
-    "to": "6281234567890",
-    "type": "text",
-    "text": { "body": "First message" }
-  },
-  {
-    "recipient_type": "individual",
-    "to": "6281234567890",
-    "type": "image",
-    "image": { "link": "https://picsum.photos/200" }
-  }
-]'</code></pre>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Legacy API -->
-                <section id="legacy-api" class="mt-5 pt-4 border-top">
-                    <h3><span class="badge bg-secondary">Legacy</span> Query Param API</h3>
-                    <p class="text-muted">This API style is compatible with older gateway formats. It supports both GET and POST.</p>
-
-                    <!-- Send Message -->
                     <div class="card mb-4">
                         <div class="card-header">
                             <span class="badge bg-success me-2">GET/POST</span>
                             <code>/api/v1/send-message</code>
                         </div>
-                        <div class="table-responsive mb-0">
-                            <table class="table table-hover mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width: 20%">Parameter</th>
-                                        <th style="width: 15%">Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td><code>apikey</code></td>
-                                        <td>String</td>
-                                        <td><span class="text-danger">*Required</span>. Apikey your session.</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>mtype</code></td>
-                                        <td>Enum</td>
-                                        <td><span class="text-danger">*Required</span>. Options: <code>text</code>, <code>image</code>, <code>video</code>, <code>audio</code>, <code>audioconvert</code>, <code>document</code>, <code>sticker</code>, <code>stickerconvert</code></td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>receiver</code></td>
-                                        <td>String</td>
-                                        <td><span class="text-danger">*Required</span>. Receiver Phone Number with Country Code (e.g: 62812345678) or id group.</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>text</code></td>
-                                        <td>String</td>
-                                        <td>Required if mtype is <code>text</code>. Text Message.</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>url</code></td>
-                                        <td>Url</td>
-                                        <td>Required if mtype is <code>image</code>, <code>video</code>, <code>audio</code>, <code>audioconvert</code>, <code>document</code>, <code>sticker</code>, <code>stickerconvert</code>. url file. example : http://domain.com/example.jpg</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>filename</code></td>
-                                        <td>String</td>
-                                        <td>Optional. if you want a custom name of the document sent.</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <div class="card-body">
+                            <p><strong>Base URL:</strong> <code>http://your-domain.com/api/v1/send-message</code></p>
+                            
+                            <h5 class="mt-4">Parameters</h5>
+                            <div class="table-responsive mb-0">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 20%">Parameter</th>
+                                            <th style="width: 15%">Type</th>
+                                            <th>Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><code>apikey</code></td>
+                                            <td>String</td>
+                                            <td><span class="text-danger">*Required</span>. Your session API Token.</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>mtype</code></td>
+                                            <td>Enum</td>
+                                            <td><span class="text-danger">*Required</span>. Type of message. Options: 
+                                                <br><code>text</code>, <code>image</code>, <code>video</code>, <code>audio</code>, 
+                                                <br><code>document</code>, <code>sticker</code>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>receiver</code></td>
+                                            <td>String</td>
+                                            <td><span class="text-danger">*Required</span>. Receiver Phone Number (e.g. <code>62812...</code>) or Group ID (e.g. <code>...g.us</code>).</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>text</code></td>
+                                            <td>String</td>
+                                            <td>Required if mtype is <code>text</code>. The content of your message.</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>url</code></td>
+                                            <td>Url</td>
+                                            <td>Required for media types. Direct link to file (e.g. <code>http://example.com/image.jpg</code>).</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>filename</code></td>
+                                            <td>String</td>
+                                            <td>Optional. Custom filename for document messages.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <h5 class="mt-4">Example Usage (n8n / cURL)</h5>
+                            <div class="bg-light p-3 rounded border">
+                                <p class="small text-muted mb-3">Recommended format for <strong>n8n HTTP Request</strong> nodes (Body Content Type: <code>Form-URL-Encoded</code>).</p>
+
+                                <h6>1. Send Text Message</h6>
+                                <pre><code class="language-bash">curl -X POST "http://localhost:3000/api/v1/send-message" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "apikey=YOUR_API_KEY" \
+  -d "mtype=text" \
+  -d "receiver=628123456789" \
+  -d "text=Hello World From API"</code></pre>
+
+                                <h6 class="mt-3">2. Send Image Media</h6>
+                                <pre><code class="language-bash">curl -X POST "http://localhost:3000/api/v1/send-message" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "apikey=YOUR_API_KEY" \
+  -d "mtype=image" \
+  -d "receiver=628123456789" \
+  -d "url=https://example.com/image.jpg" \
+  -d "text=Optional Caption Here"</code></pre>
+                            </div>
                         </div>
                     </div>
+                </section>
+
+                <!-- Group API Section -->
+                <section id="fetch-group" class="mt-5 mb-5">
+                    <h2>Group Management API</h2>
+                    <p>Endpoints to retrieve group information.</p>
 
                     <!-- Fetch Group -->
-                    <div class="card mb-4" id="legacy-group">
+                    <div class="card mb-4">
                         <div class="card-header">
                             <span class="badge bg-success me-2">GET/POST</span>
                             <code>/api/v1/fetch-group</code>
                         </div>
-                        <div class="table-responsive mb-0">
-                            <table class="table table-hover mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width: 20%">Parameter</th>
-                                        <th style="width: 15%">Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td><code>apikey</code></td>
-                                        <td>String</td>
-                                        <td><span class="text-danger">*Required</span>. Apikey your session.</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <div class="card-body">
+                            <p>Get a list of all groups joined by the session.</p>
+                            <div class="table-responsive mb-0">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Parameter</th>
+                                            <th>Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><code>apikey</code></td>
+                                            <td><span class="text-danger">*Required</span>. Your session API Token.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 
@@ -350,48 +249,32 @@
                             <span class="badge bg-success me-2">GET/POST</span>
                             <code>/api/v1/fetch-member</code>
                         </div>
-                        <div class="table-responsive mb-0">
-                            <table class="table table-hover mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width: 20%">Parameter</th>
-                                        <th style="width: 15%">Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td><code>apikey</code></td>
-                                        <td>String</td>
-                                        <td><span class="text-danger">*Required</span>. Apikey your session.</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>idgroup</code></td>
-                                        <td>String</td>
-                                        <td><span class="text-danger">*Required</span>. ID group WhatsApp (e.g: 120163044481549146@g.us)</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <div class="card-body">
+                            <p>Get list of members in a specific group.</p>
+                            <div class="table-responsive mb-0">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Parameter</th>
+                                            <th>Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><code>apikey</code></td>
+                                            <td><span class="text-danger">*Required</span>. Your session API Token.</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>idgroup</code></td>
+                                            <td><span class="text-danger">*Required</span>. The Group ID (e.g. <code>12345@g.us</code>).</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </section>
 
-                <!-- Group API -->
-                <section id="legacy-group" class="mt-5 mb-5">
-                     <h3>Group Management API</h3>
-
-                     <div class="mb-3">
-                         <h5>Fetch Groups</h5>
-                         <code>/api/v1/fetch-group</code>
-                         <p class="small text-muted mt-1">Requires <code>apikey</code>.</p>
-                     </div>
-
-                     <div>
-                         <h5>Fetch Members</h5>
-                         <code>/api/v1/fetch-member</code>
-                         <p class="small text-muted mt-1">Requires <code>apikey</code> and <code>idgroup</code>.</p>
-                     </div>
-                </section>
 
                 <footer class="pt-3 mt-4 text-muted border-top">
                     <small>&copy; 2024 WhatsApp Gateway. Designed for Developers.</small>

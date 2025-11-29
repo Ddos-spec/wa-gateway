@@ -33,32 +33,93 @@ const legacyLimiter = rateLimit({
 });
 
 function initializeLegacyApi(sessions, sessionTokens) {
-    // Apply rate limiting and authentication to all legacy endpoints
+    // Enable parsing of URL-encoded bodies (for x-www-form-urlencoded)
+    router.use(express.urlencoded({ extended: true }));
+    router.use(express.json());
+
+    // Apply rate limiting
     router.use(legacyLimiter);
+
+    // Compatibility Middleware: Map 'apikey' from query/body to Authorization header
+    router.use((req, res, next) => {
+        const apiKey = req.query.apikey || req.body.apikey;
+        if (apiKey && !req.headers['authorization']) {
+            req.headers['authorization'] = `Bearer ${apiKey}`;
+        }
+        next();
+    });
+
+    // Apply token validation
     router.use((req, res, next) => validateToken(req, res, next, sessionTokens));
 
-    // Legacy JSON endpoint
-    router.post('/send-message', express.json(), async (req, res) => {
-        const { sessionId, number, message } = req.body;
-        if (!sessionId || !number || !message) {
-            return res.status(400).json({ status: 'error', message: 'sessionId, number, and message are required.' });
+    // Legacy JSON/Form endpoint
+    router.post('/send-message', async (req, res) => {
+        // Extract params from body (POST) or query (GET - though this is POST route)
+        // Support both JSON and UrlEncoded
+        const { 
+            sessionId, // Optional, if not provided we can try to find session by token? No, token map is sessionId -> token.
+            // Wait, validateToken validates the token. 
+            // If we don't have sessionId in body, we need to find which session this token belongs to.
+            // But validateToken doesn't attach sessionId to req.
+            
+            number, // Old param name
+            receiver, // New param name
+            message, // Old param name
+            text, // New param name
+            mtype,
+            url
+        } = req.body;
+
+        // Resolve effective parameters
+        const targetNumber = number || receiver;
+        const targetMessage = message || text;
+        
+        // If sessionId is not provided, we need to find it from the token
+        let targetSessionId = sessionId;
+        if (!targetSessionId) {
+            const authHeader = req.headers['authorization'];
+            const token = authHeader && authHeader.split(' ')[1];
+            // Find session by token
+            for (const [sessId, sessToken] of sessionTokens.entries()) {
+                if (sessToken === token) {
+                    targetSessionId = sessId;
+                    break;
+                }
+            }
         }
+
+        if (!targetSessionId || !targetNumber) {
+            return res.status(400).json({ status: 'error', message: 'Session ID (or valid ApiKey) and receiver/number are required.' });
+        }
+
+        const session = sessions.get(targetSessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${targetSessionId} not found or not connected.` });
+        }
+
         // Input validation
-        const formattedNumber = formatPhoneNumber(number);
+        const formattedNumber = formatPhoneNumber(targetNumber);
         if (!/^\d+$/.test(formattedNumber)) {
             return res.status(400).json({ status: 'error', message: 'Invalid phone number format.' });
         }
-        if (typeof message !== 'string' || message.length === 0 || message.length > 4096) {
-            return res.status(400).json({ status: 'error', message: 'Invalid message content.' });
-        }
-
-        const session = sessions.get(sessionId);
-        if (!session || !session.sock || session.status !== 'CONNECTED') {
-            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
-        }
 
         const destination = toWhatsAppFormat(formattedNumber);
-        const result = await sendLegacyMessage(session.sock, destination, { text: message });
+        let result;
+
+        // Handle Media Types
+        if (mtype === 'image' && url) {
+             result = await sendLegacyMessage(session.sock, destination, { 
+                 image: { url: url },
+                 caption: targetMessage || ''
+             });
+        } else {
+            // Default to text
+            if (!targetMessage) {
+                 return res.status(400).json({ status: 'error', message: 'Message content is required for text type.' });
+            }
+            result = await sendLegacyMessage(session.sock, destination, { text: targetMessage });
+        }
+
         res.status(200).json(result);
     });
 

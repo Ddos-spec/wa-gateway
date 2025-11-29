@@ -212,6 +212,8 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
 
         try {
             // 1. Create the session first
+            let shouldRegenerateQr = false;
+
             const createResponse = await fetch('/api/v1/sessions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -221,7 +223,8 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
             if (!createResponse.ok) {
                 // Check if session already exists
                 if(createResponse.status === 409) {
-                   console.log('⚠️ Session already exists, fetching QR...');
+                   console.log('⚠️ Session already exists. Triggering QR regeneration...');
+                   shouldRegenerateQr = true;
                 } else {
                    const result = await createResponse.json();
                    throw new Error(result.message || 'Failed to create session');
@@ -235,23 +238,25 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
                 }
             }
 
-            modalQrStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Requesting QR code...';
+            modalQrStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Waiting for QR code...';
+            console.log('⏳ Waiting for QR code via WebSocket...');
 
-            // 2. Request QR code regeneration
-            console.log('📞 Requesting QR for session:', newSessionId);
-            const qrResponse = await fetch(`/api/v1/sessions/${newSessionId}/qr`);
-            const qrResult = await qrResponse.json();
-
-            console.log('📡 QR Response:', qrResult);
-
-            if (!qrResponse.ok) {
-                 console.warn('⚠️ QR request failed:', qrResult);
-                 modalQrStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Waiting for QR code...';
-            } else {
-                 console.log('✅ QR request successful, waiting for WebSocket update...');
-                 modalQrStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Waiting for QR code...';
+            // 2. If session existed (409), we MUST force regenerate QR.
+            // If session was just created (201), we skip this to avoid race condition.
+            if (shouldRegenerateQr) {
+                modalQrStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Session exists. Regenerating QR...';
+                console.log('📞 Requesting QR for EXISTING session:', newSessionId);
+                const qrResponse = await fetch(`/api/v1/sessions/${newSessionId}/qr`);
+                if (!qrResponse.ok) {
+                     const errData = await qrResponse.json();
+                     console.warn('⚠️ QR request failed:', errData);
+                     modalQrStatus.textContent = 'Error regenerating QR: ' + (errData.message || 'Unknown error');
+                } else {
+                     console.log('✅ QR regeneration requested successfully.');
+                     modalQrStatus.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Waiting for new QR code...';
+                }
             }
-
+            
             // 3. Set timeout to check if QR appeared
             let qrCheckAttempts = 0;
             const maxAttempts = 15; // 15 seconds max wait
@@ -523,6 +528,14 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
             confirmDeleteBtn.addEventListener('click', async function() {
                 if (!sessionToDelete) return;
 
+                const sessionData = sessionsData.get(sessionToDelete);
+                const token = sessionData ? sessionData.token : null;
+
+                if (!token) {
+                    showNotification('Error: Session token not found. Cannot delete.', 'error');
+                    return;
+                }
+
                 // Disable button and show loading state
                 confirmDeleteBtn.disabled = true;
                 const originalText = confirmDeleteBtn.innerHTML;
@@ -530,7 +543,10 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
 
                 try {
                     const response = await fetch(`/api/v1/sessions/${sessionToDelete}`, {
-                        method: 'DELETE'
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
                     });
                     const result = await response.json();
 

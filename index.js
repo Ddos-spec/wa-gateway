@@ -18,7 +18,8 @@ const {
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
     isJidBroadcast,
-    Browsers
+    Browsers,
+    DisconnectReason
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const { Boom } = require('@hapi/boom');
@@ -686,8 +687,9 @@ async function connectToWhatsApp(sessionId) {
         virtualLinkPreviewEnabled: false,  // More aggressive optimization
         shouldIgnoreJid: (jid) => isJidBroadcast(jid),
         qrTimeout: 30000,
-        connectTimeoutMs: 30000,
-        keepAliveIntervalMs: 45000,  // Increased from 30000 to reduce connection overhead
+        connectTimeoutMs: 60000, // Increased to 60s
+        defaultQueryTimeoutMs: 0, // No timeout for queries
+        keepAliveIntervalMs: 60000,  // Increased from 30000 to reduce connection overhead
         fireInitQueries: false,
         emitOwnEvents: false,
         markOnlineOnConnect: false,
@@ -795,10 +797,18 @@ async function connectToWhatsApp(sessionId) {
         await handleWebhookForMessage(m, sessionId);
     });
 
+    let lastQr = '';
+
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
+            if (qr === lastQr) {
+                // Skip broadcasting duplicate QR to prevent frontend flicker/confusion
+                return;
+            }
+            lastQr = qr;
+
             if (pairingInfo) {
                 // This is a pairing session. Request a phone code instead of using the QR.
                 try {
@@ -823,15 +833,16 @@ async function connectToWhatsApp(sessionId) {
             } else {
                 // This is a regular session, so use the QR code.
                 log('QR code generated.', sessionId);
-                console.log(`[${sessionId}] 📱 QR CODE STRING LENGTH:`, qr ? qr.length : 0);
-                console.log(`[${sessionId}] 📡 Broadcasting QR to frontend via WebSocket...`);
+                // console.log(`[${sessionId}] 📱 QR CODE STRING LENGTH:`, qr ? qr.length : 0);
+                // console.log(`[${sessionId}] 📡 Broadcasting QR to frontend via WebSocket...`);
                 updateStatus('GENERATING_QR', 'QR code available.', qr);
-                console.log(`[${sessionId}] ✅ QR broadcast complete. Check frontend!`);
+                // console.log(`[${sessionId}] ✅ QR broadcast complete. Check frontend!`);
             }
         }
 
         if (connection === 'open') {
             log(`Connection is now open for ${sessionId}.`);
+            lastQr = ''; // Reset last QR on success
             
             let detailMessage = `Connected as ${sock.user?.name || 'Unknown'}`;
             if (pairingInfo && pairingInfo.status.includes('AWAITING')) {
@@ -856,9 +867,28 @@ async function connectToWhatsApp(sessionId) {
         if (connection === 'close') {
             const statusCode = (lastDisconnect?.error instanceof Boom) ? lastDisconnect.error.output.statusCode : 0;
             const reason = new Boom(lastDisconnect?.error)?.output?.payload?.error || 'Unknown';
-            const shouldReconnect = statusCode !== 401 && statusCode !== 403 && statusCode !== 428;
+
+            // Allow 428 (Precondition Required) to reconnect. Only stop on 401 (Unauthorized) and 403 (Forbidden).
+            const shouldReconnect = statusCode !== 401 && statusCode !== 403;
 
             log(`Connection closed. Reason: ${reason}, statusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`, sessionId);
+
+            // Special handling for restartRequired (515)
+            if (statusCode === DisconnectReason.restartRequired) {
+                log(`Session ${sessionId} requires restart (normal during sync). Reconnecting immediately...`, sessionId);
+                // Don't update status to DISCONNECTED to prevent UI flicker/panic
+                // updateStatus('RECONNECTING', 'Restarting session for sync...'); 
+                setTimeout(() => connectToWhatsApp(sessionId), 1000); // Reconnect faster
+                return;
+            }
+            
+            // Special handling for 428 (Precondition Required)
+            if (statusCode === 428) {
+                 log(`Session ${sessionId} encountered 428 (Precondition Required). This is often temporary. Reconnecting...`, sessionId);
+                 setTimeout(() => connectToWhatsApp(sessionId), 1000); // Reconnect faster
+                 return;
+            }
+
             updateStatus('DISCONNECTED', 'Connection closed.', '', reason);
 
             if (shouldReconnect) {
@@ -981,6 +1011,11 @@ async function deleteSession(sessionId) {
         }
     }
     
+    // Clear pairing status if it exists
+    if (phonePairing) {
+        await phonePairing.deletePairing(sessionId);
+    }
+
     sessions.delete(sessionId);
     sessionTokens.delete(sessionId);
     saveTokens();
