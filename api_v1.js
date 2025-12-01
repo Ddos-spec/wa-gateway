@@ -146,8 +146,11 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         let token = req.headers['apikey'] || req.headers['authorization'];
         
         // Support "Bearer <token>" and raw "<token>"
-        if (token && token.startsWith('Bearer ')) {
-            token = token.slice(7).trim();
+        if (token) {
+            if (token.startsWith('Bearer ')) {
+                token = token.slice(7);
+            }
+            token = token.trim();
         }
 
         if (!token) {
@@ -161,7 +164,8 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             for (const [id, t] of sessionTokens.entries()) {
                 if (t === token) {
                     sessionId = id;
-                    req.query.sessionId = id; // Inject for downstream use
+                    req.sessionId = id; // Secure injection
+                    req.query.sessionId = id; // Legacy injection
                     break;
                 }
             }
@@ -173,6 +177,7 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         if (sessionId) {
             const expectedToken = sessionTokens.get(sessionId);
             if (expectedToken && token === expectedToken) {
+                req.sessionId = sessionId; // Ensure set
                 return next();
             }
              return res.status(403).json({ status: 'error', message: `Invalid token for session ${sessionId}` });
@@ -1006,7 +1011,9 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     // Main message sending endpoint handler
     const handleSendMessage = async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, query: req.query });
-        const { sessionId } = req.query; // Now securely injected by validateToken if missing
+        
+        // Check injected sessionId first
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
         
         if (!sessionId) {
             log('API error', 'SYSTEM', { event: 'api-error', error: 'sessionId could not be determined', endpoint: req.originalUrl });
