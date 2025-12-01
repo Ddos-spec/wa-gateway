@@ -53,7 +53,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 // --- REDIS SETUP ---
-const REDIS_URL = process.env.REDIS_URL || 'redis://default:b5cf82712e2201393c9e@postgres_redis:6379'; // Default to Internal
+const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379'; // Default to localhost if not set
 const redisClient = createClient({ url: REDIS_URL });
 
 redisClient.on('error', (err) => console.error('❌ Redis Client Error', err));

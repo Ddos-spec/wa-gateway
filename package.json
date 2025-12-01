@@ -4,7 +4,7 @@
   "description": "A super lightweight web server for WhatsApp API using whiskeysockets/baileys",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "node --expose-gc index.js",
     "dev": "nodemon index.js",
     "test": "jest",
     "install:smart": "node install-dependencies.js",

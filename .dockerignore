@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+Dockerfile
+.git
+.env
+.DS_Store
+sessions/
+auth_info_baileys/
+media/
+tests/
+.qwen/
+scripts/
+*.bat
+*.sh
