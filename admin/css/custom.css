@@ -1,138 +1,198 @@
-/* All custom styles related to the old offcanvas sidebar have been removed. */
-/* This file can be used for future custom navbar styling if needed. */
+/* =========================================
+   🎨 WA Gateway - Modern UI/UX Theme (2025)
+   ========================================= */
 
-/* Modern UI/UX Enhancements */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+    /* Modern Color Palette */
+    --primary-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    --danger-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    
+    /* Glassmorphism Variables */
+    --glass-bg: rgba(255, 255, 255, 0.8);
+    --glass-border: 1px solid rgba(255, 255, 255, 0.5);
+    --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+    --card-radius: 1rem;
+}
+
+[data-bs-theme="dark"] {
+    --glass-bg: rgba(33, 37, 41, 0.85);
+    --glass-border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #f3f4f6;
+    background-image: 
+        radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+        radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
+        radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    transition: background-color 0.3s ease;
+}
+
+[data-bs-theme="light"] body {
+    background-image: 
+        radial-gradient(at 40% 20%, hsla(28,100%,74%,1) 0px, transparent 50%),
+        radial-gradient(at 80% 0%, hsla(189,100%,56%,1) 0px, transparent 50%),
+        radial-gradient(at 0% 50%, hsla(340,100%,76%,1) 0px, transparent 50%);
+    background-color: #ffffff;
+}
+
+/* --- Modern Cards --- */
 .card {
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    border-radius: var(--card-radius);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+    overflow: hidden;
 }
 
 .card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+    transform: translateY(-5px) scale(1.01);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
 }
 
-.btn {
-    transition: all 0.2s ease;
+.card-header {
+    background: transparent;
+    border-bottom: 1px solid rgba(160, 160, 160, 0.1);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 1.25rem 1.5rem;
 }
+
+/* --- Buttons --- */
+.btn {
+    border-radius: 0.5rem;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    padding: 0.6rem 1.2rem;
+    transition: all 0.2s ease;
+    border: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-primary { background: var(--primary-gradient); color: white; }
+.btn-success { background: var(--success-gradient); color: white; }
+.btn-danger { background: var(--danger-gradient); color: white; }
+.btn-warning { background: var(--warning-gradient); color: white; }
 
 .btn:hover {
-    transform: translateY(-1px);
+    filter: brightness(110%);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
+.btn:active {
+    transform: translateY(0);
+}
+
+/* --- Log Box (Terminal Style) --- */
 .log-box {
-    background-color: #212529 !important;
-    color: #f8f9fa !important;
-    font-family: 'Menlo', 'Courier New', Courier, monospace !important;
-    padding: 1.25rem !important;
-    overflow-y: auto;
-    border-radius: 0.5rem !important;
-    font-size: 0.9em;
-    position: relative;
+    background-color: #1e1e2e !important; /* Catppuccin Base */
+    color: #a6accd !important;
+    font-family: 'JetBrains Mono', 'Menlo', monospace !important;
+    padding: 1.5rem !important;
+    border-radius: 0.75rem !important;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
 }
 
-/* Progress bar enhancements */
-.progress {
-    height: 8px;
+/* Scrollbar for logs */
+.log-box::-webkit-scrollbar {
+    width: 8px;
+}
+.log-box::-webkit-scrollbar-track {
+    background: #1e1e2e;
+}
+.log-box::-webkit-scrollbar-thumb {
+    background: #4f46e5;
     border-radius: 4px;
 }
 
-.progress-bar {
-    transition: width 0.6s ease;
-}
-
-/* QR Code styling */
-.qr-code {
-    max-width: 300px;
-    max-height: 300px;
-    margin: 0 auto;
-    border: 2px solid #dee2e6 !important;
-    display: flex !important;
-    justify-content: center !important;
-    align-items: center !important;
-    background: white !important;
-}
-
-/* Toast enhancements */
-.toast {
-    backdrop-filter: blur(10px);
-    background-color: rgba(var(--bs-body-bg-rgb), 0.95);
-    color: var(--bs-body-color);
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-}
-
-/* Modal enhancements */
-.modal-content {
-    border: none;
-    border-radius: 1rem;
-}
-
-/* Button group enhancements */
-.d-grid > .btn, .d-grid > .btn-group {
-    margin-bottom: 0.5rem;
-}
-
-.d-grid > .btn:last-child, .d-grid > .btn-group:last-child {
-    margin-bottom: 0;
-}
-
-/* Badge enhancements */
+/* --- Status Badges --- */
 .badge {
-    padding: 0.5em 0.75em;
-    font-size: 0.75em;
+    padding: 0.6em 1em;
+    font-weight: 600;
+    border-radius: 2rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
-/* Session card enhancements */
-.session-card .card-body {
-    padding: 1.25rem;
-}
-
-/* Form input enhancements */
-.form-control:focus {
-    border-color: #86b7fe;
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-}
-
-/* Input group enhancements */
-.input-group-text {
-    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-}
-
-/* Responsive improvements */
-@media (max-width: 768px) {
-    .modal-dialog {
-        margin: 0.5rem;
-    }
-
-    .modal-content {
-        height: auto;
-    }
-
-    .qr-code {
-        width: 250px !important;
-        height: 250px !important;
-    }
-}
-
-/* Custom styles for pairing method cards */
-.card.h-100.text-center.border-primary.border-2,
-.card.h-100.text-center.border-success.border-2 {
+/* --- QR Code Area --- */
+.qr-code {
+    background: white !important;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
     transition: all 0.3s ease;
+    margin: 0 auto;
 }
 
-.card.h-100.text-center.border-primary.border-2:hover,
-.card.h-100.text-center.border-success.border-2:hover {
-    transform: scale(1.03);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+/* --- Animations --- */
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-/* Animation for success state */
-@keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
+.container > * {
+    animation: fadeInUp 0.6s ease-out forwards;
 }
 
-.text-success.pulse-animation {
-    animation: pulse 1s ease-in-out;
+.table-responsive {
+    border-radius: var(--card-radius);
+    overflow: hidden;
+}
+
+.table thead th {
+    background-color: rgba(0,0,0,0.02);
+    border-bottom-width: 1px;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    font-weight: 700;
+    color: var(--bs-body-color);
+    opacity: 0.7;
+    padding: 1rem;
+}
+
+/* --- Toast Notifications (Adaptive) --- */
+.toast {
+    border-radius: 1rem;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    background-color: rgba(var(--bs-body-bg-rgb), 0.9); /* Adaptive Background */
+    color: var(--bs-body-color); /* Adaptive Text */
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255,255,255,0.1);
+    overflow: hidden;
+}
+
+.toast-header {
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    background: rgba(255,255,255,0.05);
+}
+
+/* --- Custom Navbar --- */
+/* If you decide to add a custom navbar class */
+.navbar-glass {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255,255,255,0.3);
+}
+
+/* --- Loader --- */
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+    border-width: 0.25em;
 }
