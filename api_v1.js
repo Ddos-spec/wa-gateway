@@ -1161,7 +1161,20 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
                         throw new Error(`Unsupported message type: ${type}`);
                 }
 
+                // --- HUMANIZATION: Simulate Typing ---
+                // 1. Send "Typing..." status
+                await session.sock.sendPresenceUpdate('composing', destination);
+                
+                // 2. Wait for "typing time" (Random 0.5s - 1.5s)
+                const typingDelay = Math.floor(Math.random() * 1000) + 500;
+                await new Promise(resolve => setTimeout(resolve, typingDelay));
+                
+                // 3. Send Message
                 const result = await sendMessage(session.sock, destination, messagePayload);
+                
+                // 4. Stop Typing status
+                await session.sock.sendPresenceUpdate('paused', destination);
+                
                 results.push(result);
 
                 // --- HUMAN DELAY (Anti-Ban Protection) ---
