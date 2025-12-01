@@ -612,9 +612,9 @@ document.addEventListener('DOMContentLoaded', function() { // Using DOMContentLo
                 <div class="toast-header ${bgColor} ${textColor}">
                     <i class="bi ${icon} me-2"></i>
                     <strong class="me-auto">Notification</strong>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                    <button type="button" class="btn-close ${type === 'warning' ? '' : 'btn-close-white'}" data-bs-dismiss="toast" aria-label="Close"></button>
                 </div>
-                <div class="toast-body ${textColor}">
+                <div class="toast-body">
                     ${message}
                 </div>
             </div>
