@@ -982,7 +982,7 @@ async function createSession(sessionId, createdBy = null) {
         log(`Error registering session ${sessionId} in Redis: ${err.message}`, 'SYSTEM');
     }
     
-    const token = randomUUID();
+    const token = crypto.randomBytes(32).toString('hex');
     sessionTokens.set(sessionId, token);
     saveTokens();
     
@@ -1070,7 +1070,7 @@ async function regenerateSessionToken(sessionId) {
     if (!sessions.has(sessionId)) {
         throw new Error('Session not found');
     }
-    const newToken = randomUUID();
+    const newToken = crypto.randomBytes(32).toString('hex');
     sessionTokens.set(sessionId, newToken);
     saveTokens();
     log(`API Token regenerated for session ${sessionId}`, 'SYSTEM');

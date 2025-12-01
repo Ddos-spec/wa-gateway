@@ -142,7 +142,8 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     // router.use(csurf()); // Uncomment if you want CSRF for all POST/DELETE
 
     const validateToken = (req, res, next) => {
-        let token = req.headers['authorization'];
+        // Support 'apikey' header (User preference) OR 'authorization'
+        let token = req.headers['apikey'] || req.headers['authorization'];
         
         // Support "Bearer <token>" and raw "<token>"
         if (token && token.startsWith('Bearer ')) {
