@@ -142,26 +142,44 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     // router.use(csurf()); // Uncomment if you want CSRF for all POST/DELETE
 
     const validateToken = (req, res, next) => {
-        const authHeader = req.headers['authorization'];
-        const token = authHeader && authHeader.split(' ')[1];
+        let token = req.headers['authorization'];
+        
+        // Support "Bearer <token>" and raw "<token>"
+        if (token && token.startsWith('Bearer ')) {
+            token = token.slice(7).trim();
+        }
 
-        if (token == null) {
+        if (!token) {
             return res.status(401).json({ status: 'error', message: 'No token provided' });
         }
         
-        const sessionId = req.query.sessionId || req.body.sessionId || req.params.sessionId;
+        let sessionId = req.query.sessionId || req.body.sessionId || req.params.sessionId;
+        
+        // Infer sessionId from token if not provided
+        if (!sessionId) {
+            for (const [id, t] of sessionTokens.entries()) {
+                if (t === token) {
+                    sessionId = id;
+                    req.query.sessionId = id; // Inject for downstream use
+                    break;
+                }
+            }
+        }
+
+        // If still no sessionId (and it's required for the route), we can't validate specific ownership yet
+        // but we can check if the token exists globally.
+        
         if (sessionId) {
             const expectedToken = sessionTokens.get(sessionId);
             if (expectedToken && token === expectedToken) {
                 return next();
             }
+             return res.status(403).json({ status: 'error', message: `Invalid token for session ${sessionId}` });
         }
         
+        // Global token check (if session not targeted yet)
         const isAnyTokenValid = Array.from(sessionTokens.values()).includes(token);
         if (isAnyTokenValid) {
-            if (sessionId) {
-                 return res.status(403).json({ status: 'error', message: `Invalid token for session ${sessionId}` });
-            }
             return next();
         }
 
@@ -984,13 +1002,14 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         });
     });
 
-    // Main message sending endpoint
-    router.post('/messages', async (req, res) => {
+    // Main message sending endpoint handler
+    const handleSendMessage = async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, query: req.query });
-        const { sessionId } = req.query;
+        const { sessionId } = req.query; // Now securely injected by validateToken if missing
+        
         if (!sessionId) {
-            log('API error', 'SYSTEM', { event: 'api-error', error: 'sessionId query parameter is required', endpoint: req.originalUrl });
-            return res.status(400).json({ status: 'error', message: 'sessionId query parameter is required' });
+            log('API error', 'SYSTEM', { event: 'api-error', error: 'sessionId could not be determined', endpoint: req.originalUrl });
+            return res.status(400).json({ status: 'error', message: 'sessionId is required (in query, body, or implied by token)' });
         }
         const session = sessions.get(sessionId);
         if (!session || !session.sock || session.status !== 'CONNECTED') {
@@ -1002,8 +1021,23 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
         const phoneNumbers = []; // Track all phone numbers for logging
         const messageContents = []; // Track message contents with formatting
         
-        for (const msg of messages) {
-            const { recipient_type, to, type, text, image, document } = msg;
+        for (let msg of messages) {
+            // --- ALIAS MAPPING (User Friendly Mode) ---
+            // Map 'receiver'/'number' -> 'to'
+            if (!msg.to && (msg.receiver || msg.number)) {
+                msg.to = msg.receiver || msg.number;
+            }
+            // Map 'mtype' -> 'type'
+            if (!msg.type && msg.mtype) {
+                msg.type = msg.mtype;
+            }
+            // Map simple 'message' string -> text object
+            if (msg.type === 'text' && !msg.text && msg.message) {
+                msg.text = { body: msg.message };
+            }
+            // -------------------------------------------
+
+            const { recipient_type, to, type, text, image, document, video } = msg;
             // Input validation
             if (!to || !type) {
                 results.push({ status: 'error', message: 'Invalid message format. "to" and "type" are required.' });
@@ -1141,7 +1175,10 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             messages: messageContents 
         });
         res.status(200).json(results);
-    });
+    };
+
+    router.post('/messages', handleSendMessage);
+    router.post('/', handleSendMessage); // Alias for root URL convenience
 
     router.delete('/message', async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, body: req.body });

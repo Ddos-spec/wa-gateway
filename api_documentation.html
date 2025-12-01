@@ -367,6 +367,7 @@
             <h3>Contents</h3>
             <ul>
                 <li><a href="#overview" class="nav-link">Overview</a></li>
+                <li><a href="#quick-start" class="nav-link">⚡ Quick Start</a></li>
                 <li><a href="#authentication" class="nav-link">Authentication</a></li>
                 <li><a href="#v1-api" class="nav-link">V1 API Endpoints</a></li>
                 <li><a href="#session-management" class="nav-link">Session Management</a></li>
@@ -437,6 +438,51 @@
                 
                 <h4>Content-Type</h4>
                 <p>For most endpoints, you will be sending data in JSON format. Ensure your requests include the <code>Content-Type: application/json</code> header. For file uploads, the API expects <code>multipart/form-data</code>.</p>
+            </section>
+
+            <!-- Quick Start Section -->
+            <section class="section" id="quick-start">
+                <h2>⚡ Quick Start (Simple Mode)</h2>
+                <p>We've simplified the API to make it easier to use with tools like n8n, Postman, or simple scripts.</p>
+                
+                <div class="alert alert-success">
+                    <span class="alert-icon">✨</span>
+                    <div>
+                        <strong>New "Smart" Features:</strong>
+                        <ul style="margin-bottom: 0;">
+                            <li><strong>Direct Endpoint:</strong> You can now POST to <code>/api/v1</code> directly.</li>
+                            <li><strong>Smart Auth:</strong> <code>Bearer</code> prefix is optional. Just paste your API Key.</li>
+                            <li><strong>Auto-Session:</strong> No need for <code>?sessionId=...</code> if your API Key is unique.</li>
+                            <li><strong>Simple Fields:</strong> Use <code>receiver</code> and <code>message</code> instead of complex objects.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h4>Send Text Message (Copy & Paste)</h4>
+                <div class="code-block">
+curl -X POST 'https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1' \
+-H 'Authorization: YOUR_API_KEY_HERE' \
+-H 'Content-Type: application/json' \
+-d '{
+    "receiver": "6281234567890",
+    "message": "Hello from the new Simple API!"
+}'
+                </div>
+
+                <h4>Send Image (Simple)</h4>
+                <div class="code-block">
+curl -X POST 'https://projek-n8n-whatsappgateway.qk6yxt.easypanel.host/api/v1' \
+-H 'Authorization: YOUR_API_KEY_HERE' \
+-H 'Content-Type: application/json' \
+-d '{
+    "receiver": "6281234567890",
+    "mtype": "image",
+    "image": {
+        "link": "https://example.com/image.jpg",
+        "caption": "Look at this!"
+    }
+}'
+                </div>
             </section>
 
             <!-- Authentication Section -->
