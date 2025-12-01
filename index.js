@@ -764,8 +764,38 @@ async function connectToWhatsApp(sessionId) {
         }
         
         // --- If all filters pass, prepare and send the webhook ---
-        // Standardize phone number: use senderPn (for LID/privacy) if available, otherwise remoteJid
-        const standardizedPhoneNumber = msg.key.senderPn || msg.key.remoteJid;
+        
+        // Helper to extract clean number from JID
+        const getJidPhoneNumber = (jid) => {
+            if (!jid) return null;
+            const userPart = jid.split(':')[0].split('@')[0];
+            return userPart + '@s.whatsapp.net';
+        };
+
+        let standardizedPhoneNumber = null;
+
+        // 1. Try to use the specific phone number provided by Baileys (handles LID cases for incoming messages)
+        if (msg.key.senderPn) {
+            standardizedPhoneNumber = getJidPhoneNumber(msg.key.senderPn);
+        } 
+        // 2. If not available, check remoteJid. If it's NOT a LID, use it.
+        else if (msg.key.remoteJid && !msg.key.remoteJid.includes('@lid')) {
+            standardizedPhoneNumber = getJidPhoneNumber(msg.key.remoteJid);
+        }
+
+        // 3. Special Handling for "From Me" messages where remoteJid is a LID (Privacy ID).
+        // In this case, we can't easily resolve the recipient's number without a store.
+        // To avoid returning a confusing LID in 'phoneNumber', we fallback to the Bot's OWN number.
+        if (!standardizedPhoneNumber && fromMe) {
+             if (session && session.sock && session.sock.user && session.sock.user.id) {
+                 standardizedPhoneNumber = getJidPhoneNumber(session.sock.user.id);
+             }
+        }
+
+        // 4. Last resort: use whatever we have
+        if (!standardizedPhoneNumber) {
+            standardizedPhoneNumber = msg.key.remoteJid;
+        }
 
         const payload = {
             event: 'message',
