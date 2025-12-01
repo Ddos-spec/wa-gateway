@@ -215,19 +215,19 @@
     <!-- Pairing Code Modal -->
     <div class="modal fade" id="pairing-modal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Link with Phone Number</h5>
+            <div class="modal-content border-0 shadow-lg rounded-4" style="backdrop-filter: blur(10px); background-color: rgba(var(--bs-body-bg-rgb), 0.9);">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title fw-bold w-100 text-center">Link with Phone Number</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body p-4">
                     <form id="pairing-form">
                         <div class="form-floating mb-3">
-                            <input type="number" class="form-control" id="phone-number" placeholder="Enter phone number" required>
-                            <label for="phone-number">Phone number with country code</label>
+                            <input type="number" class="form-control rounded-3" id="phone-number" placeholder="Enter phone number" required>
+                            <label for="phone-number">Phone number (e.g. 628xxxxx)</label>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100 mb-3">Next</button>
-                        <div id="pairing-code-display" class="text-center fs-4 fw-bold"></div>
+                        <button type="submit" class="btn btn-primary w-100 mb-3 rounded-3 py-2 fw-medium">Get Pairing Code</button>
+                        <div id="pairing-code-display" class="d-flex justify-content-center align-items-center mt-3"></div>
                     </form>
                 </div>
             </div>
@@ -237,17 +237,17 @@
     <!-- Generic Confirmation Modal -->
     <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="confirmationModalTitle">Confirmation</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-content border-0 shadow-lg rounded-4" style="backdrop-filter: blur(10px); background-color: rgba(var(--bs-body-bg-rgb), 0.9);">
+                <div class="modal-header border-0 pb-0 justify-content-center position-relative">
+                    <h5 class="modal-title fw-bold" id="confirmationModalTitle">Confirmation</h5>
+                    <button type="button" class="btn-close position-absolute end-0 me-3 top-50 translate-middle-y" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body" id="confirmationModalBody">
+                <div class="modal-body text-center py-4 px-4" id="confirmationModalBody">
                     Are you sure?
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
-                    <button type="button" class="btn btn-primary" id="confirmationModalConfirmBtn">Yes</button>
+                <div class="modal-footer border-0 justify-content-center pb-4">
+                    <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary px-4 rounded-3" id="confirmationModalConfirmBtn">Confirm</button>
                 </div>
             </div>
         </div>

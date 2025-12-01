@@ -1,24 +1,24 @@
-<nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #25D366;">
-    <div class="container-fluid">
-        <a class="navbar-brand d-flex align-items-center" href="/admin/dashboard.html" style="gap: 0.5rem;">
-            <i class="bi bi-whatsapp" style="font-size: 1.4rem;"></i>
-            <span>WhatsApp Gateway</span>
+<nav class="navbar navbar-expand-lg navbar-glass mb-4 sticky-top">
+    <div class="container-fluid px-4">
+        <a class="navbar-brand d-flex align-items-center fw-bold" href="/admin/dashboard.html">
+            <i class="bi bi-whatsapp text-success me-2" style="font-size: 1.5rem;"></i>
+            <span style="background: linear-gradient(to right, #10b981, #059669); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">WA Gateway</span>
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
+        <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon" style="filter: invert(0.5);"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <ul class="navbar-nav me-auto ms-lg-4 mb-2 mb-lg-0">
                 <li class="nav-item">
-                    <a class="nav-link" href="/admin/dashboard.html">Dashboard</a>
+                    <a class="nav-link fw-medium px-3" href="/admin/dashboard.html"><i class="bi bi-speedometer2 me-1"></i> Dashboard</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="/admin/docs.html">Docs</a>
+                    <a class="nav-link fw-medium px-3" href="/api-documentation"><i class="bi bi-book me-1"></i> Docs</a>
                 </li>
             </ul>
-            <div class="d-flex">
-                <button class="btn btn-outline-light" id="theme-toggler" type="button">
-                    <i class="bi bi-sun-fill"></i> Toggle Theme
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-light rounded-circle shadow-sm d-flex align-items-center justify-content-center" id="theme-toggler" type="button" style="width: 38px; height: 38px;" title="Toggle Theme">
+                    <i class="bi bi-sun-fill fs-6"></i>
                 </button>
             </div>
         </div>
