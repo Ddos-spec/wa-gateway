@@ -1118,6 +1118,14 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
                 const result = await sendMessage(session.sock, destination, messagePayload);
                 results.push(result);
 
+                // --- HUMAN DELAY (Anti-Ban Protection) ---
+                // Pause for 1 to 3 seconds between messages to simulate human speed
+                // Only applied if sending multiple messages to prevent "Machine Gun" behavior
+                if (messages.length > 1) {
+                    const delay = Math.floor(Math.random() * 2000) + 1000; 
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+
             } catch (error) {
                 results.push({ status: 'error', message: `Failed to process message for ${to}: ${error.message}` });
             }
