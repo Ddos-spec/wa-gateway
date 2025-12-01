@@ -764,9 +764,13 @@ async function connectToWhatsApp(sessionId) {
         }
         
         // --- If all filters pass, prepare and send the webhook ---
+        // Standardize phone number: use senderPn (for LID/privacy) if available, otherwise remoteJid
+        const standardizedPhoneNumber = msg.key.senderPn || msg.key.remoteJid;
+
         const payload = {
             event: 'message',
             sessionId,
+            phoneNumber: standardizedPhoneNumber,
             from: msg.key.remoteJid,
             fromMe: fromMe,
             isGroup: isGroup,
