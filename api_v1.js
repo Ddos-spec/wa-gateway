@@ -1099,7 +1099,16 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
                              throw new Error('For "document" type, "document.link" or "document.id" is required.');
                         }
                         const docUrl = document.id ? path.join(mediaDir, document.id) : document.link;
-                        messagePayload = { document: { url: docUrl }, mimetype: document.mimetype, fileName: document.filename };
+                        messagePayload = { document: { url: docUrl }, mimetype: document.mimetype, fileName: document.filename, caption: document.caption };
+                        break;
+
+                    case 'video':
+                        const video = msg.video;
+                        if (!video || (!video.link && !video.id)) {
+                             throw new Error('For "video" type, "video.link" or "video.id" is required.');
+                        }
+                        const videoUrl = video.id ? path.join(mediaDir, video.id) : video.link;
+                        messagePayload = { video: { url: videoUrl }, caption: video.caption, gifPlayback: video.gifPlayback || false };
                         break;
 
                     default:

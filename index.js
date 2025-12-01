@@ -973,6 +973,13 @@ async function createSession(sessionId, createdBy = null) {
     if (sessions.size >= MAX_SESSIONS) {
         throw new Error(`Maximum session limit (${MAX_SESSIONS}) reached. Please delete unused sessions.`);
     }
+
+    // Register session in Redis for persistence tracking
+    try {
+        await redisClient.sAdd('wa:session_list', sessionId);
+    } catch (err) {
+        log(`Error registering session ${sessionId} in Redis: ${err.message}`, 'SYSTEM');
+    }
     
     const token = randomUUID();
     sessionTokens.set(sessionId, token);
@@ -1041,8 +1048,9 @@ async function deleteSession(sessionId) {
         if (keys.length > 0) {
             await redisClient.del(keys);
         }
-        // Also delete settings
+        // Also delete settings and remove from session list
         await redisClient.del(`wa:settings:${sessionId}`);
+        await redisClient.sRem('wa:session_list', sessionId); // Remove from tracking list
         log(`Cleared Redis session data for ${sessionId}`, 'SYSTEM');
     } catch (error) {
         log(`Error clearing Redis data for ${sessionId}: ${error.message}`, 'SYSTEM');
@@ -1085,16 +1093,53 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 async function initializeExistingSessions() {
+    const sessionIds = new Set();
+
+    // 1. Try to load from Redis List
+    try {
+        const redisSessions = await redisClient.sMembers('wa:session_list');
+        if (redisSessions && redisSessions.length > 0) {
+            log(`Found ${redisSessions.length} sessions in Redis list.`);
+            redisSessions.forEach(id => sessionIds.add(id));
+        } else {
+            // 2. Self-Healing: Scan for orphan sessions in Redis (Migration from pure keys)
+            log('Checking Redis for untracked sessions (Self-Healing)...');
+            const keys = await redisClient.keys('wa:sess:*:creds');
+            for (const key of keys) {
+                // Format: wa:sess:{sessionId}:creds
+                const parts = key.split(':');
+                if (parts.length >= 3) {
+                    const sessionId = parts[2];
+                    sessionIds.add(sessionId);
+                    await redisClient.sAdd('wa:session_list', sessionId); // Heal it
+                    log(`Recovered orphan session from Redis: ${sessionId}`);
+                }
+            }
+        }
+    } catch (err) {
+        log(`Error scanning Redis for sessions: ${err.message}`, 'SYSTEM');
+    }
+
+    // 3. Fallback: Check local filesystem (Legacy)
     const sessionsDir = path.join(__dirname, 'auth_info_baileys');
     if (fs.existsSync(sessionsDir)) {
         const sessionFolders = fs.readdirSync(sessionsDir);
-        log(`Found ${sessionFolders.length} existing session(s). Initializing...`);
         for (const sessionId of sessionFolders) {
             const sessionPath = path.join(sessionsDir, sessionId);
             if (fs.statSync(sessionPath).isDirectory()) {
-                log(`Re-initializing session: ${sessionId}`);
-                await createSession(sessionId); // Await creation to prevent race conditions
+                sessionIds.add(sessionId);
             }
+        }
+    }
+
+    log(`Found ${sessionIds.size} total unique session(s) to initialize.`);
+
+    // 4. Re-initialize
+    for (const sessionId of sessionIds) {
+        // Avoid re-initializing if already active (unlikely during startup but safe)
+        if (!sessions.has(sessionId)) {
+            log(`Re-initializing session: ${sessionId}`);
+            await createSession(sessionId); 
         }
     }
 }
@@ -1120,7 +1165,8 @@ const gracefulShutdown = (signal) => {
   for (const [sessionId, session] of sessions.entries()) {
     try {
       console.log(`[${sessionId}] Closing session...`);
-      session.sock?.logout();
+      // session.sock?.logout(); // DO NOT LOGOUT on shutdown, it kills the session!
+      session.sock?.ws?.close(); // Just close the connection
     } catch (err) {
       console.error(`[${sessionId}] Error during shutdown:`, err);
     }

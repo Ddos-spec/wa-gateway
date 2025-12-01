@@ -824,7 +824,21 @@ curl -X POST 'http://localhost:3000/api/v1/media' \
         "link": "https://example.com/document.pdf",  // OR
         "id": "mediaId-from-upload",
         "mimetype": "application/pdf",
-        "filename": "Optional_filename.pdf"
+        "filename": "Optional_filename.pdf",
+        "caption": "Document caption here"
+    }
+}
+                    </div>
+
+                    <h6>Video Message:</h6>
+                    <div class="code-block json">
+                        <span class="code-lang">JSON</span>
+{
+    "video": {
+        "link": "https://example.com/video.mp4",  // OR
+        "id": "mediaId-from-upload",
+        "caption": "Video caption here",
+        "gifPlayback": false // Optional: set true to play as GIF
     }
 }
                     </div>
