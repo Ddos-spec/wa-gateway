@@ -283,9 +283,9 @@ app.use(session({
 //     next();
 // });
 
-// Serve homepage
+// Redirect root to admin login
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.redirect('/admin/login.html');
 });
 
 // Serve API documentation
