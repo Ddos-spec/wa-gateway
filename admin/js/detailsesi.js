@@ -180,6 +180,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const result = await response.json();
                 throw new Error(result.message || 'Failed to get QR code');
             }
+            
+            // Fallback: Force refresh data after 3 seconds in case WebSocket is slow/disconnected
+            // This ensures the QR code appears even if the live stream misses a beat
+            setTimeout(() => {
+                fetchSessionData();
+            }, 3000);
+            
         } catch (error) {
             console.error('Error getting QR code:', error);
             alert('Error getting QR code: ' + error.message);
@@ -289,17 +296,63 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         const phone = phoneNumberInput.value;
         if (!phone) return;
-        pairingCodeDisplay.textContent = 'Requesting code...';
+        
+        pairingCodeDisplay.innerHTML = '<span class="text-primary spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Requesting code...';
+        
         try {
-            const response = await fetch(`/api/v1/sessions/${sessionId}/pairing-code?phone=${phone}`, { credentials: 'same-origin' });
-            const result = await response.json();
-            if (response.ok) {
-                pairingCodeDisplay.textContent = `Your Code: ${result.code}`;
-            } else {
-                throw new Error(result.message || 'Failed to get pairing code');
+            // Step 1: Initiate Pairing
+            const initResponse = await fetch('/api/v1/session/pair-phone', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                    // No Bearer token needed here if using session cookie (credentials: same-origin implied)
+                },
+                body: JSON.stringify({ phoneNumber: phone, sessionId: sessionId })
+            });
+            
+            const initResult = await initResponse.json();
+            if (!initResponse.ok) {
+                throw new Error(initResult.message || 'Failed to initiate pairing');
             }
+
+            // Step 2: Poll for Code
+            let attempts = 0;
+            const maxAttempts = 30; // 60 seconds timeout
+            
+            const pollInterval = setInterval(async () => {
+                attempts++;
+                try {
+                    const statusResponse = await fetch(`/api/v1/session/${sessionId}/pair-status`);
+                    const statusResult = await statusResponse.json();
+                    
+                    if (statusResult.status === 'success' && statusResult.pairingCode) {
+                        clearInterval(pollInterval);
+                        // Format code nicely (e.g. ABC-DEF)
+                        const code = statusResult.pairingCode;
+                        const formattedCode = code.match(/.{1,4}/g).join('-');
+                        
+                        pairingCodeDisplay.innerHTML = `
+                            <div class="alert alert-success text-center">
+                                <div class="fs-4 fw-bold font-monospace mb-2">${formattedCode}</div>
+                                <div class="small text-muted">Enter this code on your phone</div>
+                            </div>
+                        `;
+                    } else if (attempts >= maxAttempts) {
+                        clearInterval(pollInterval);
+                        pairingCodeDisplay.innerHTML = '<span class="text-danger">Timeout waiting for code. Please try again.</span>';
+                    } else if (statusResult.sessionStatus === 'CONNECTED') {
+                         clearInterval(pollInterval);
+                         pairingCodeDisplay.innerHTML = '<span class="text-success">Device already connected!</span>';
+                    }
+                } catch (err) {
+                    console.error('Polling error:', err);
+                    // Don't stop polling on transient network errors
+                }
+            }, 2000); // Poll every 2 seconds
+
         } catch (error) {
-            pairingCodeDisplay.textContent = `Error: ${error.message}`;
+            console.error('Pairing error:', error);
+            pairingCodeDisplay.innerHTML = `<span class="text-danger">Error: ${error.message}</span>`;
         }
     });
 
