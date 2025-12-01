@@ -698,7 +698,8 @@ async function connectToWhatsApp(sessionId) {
         },
         printQRInTerminal: false,
         logger,
-        browser: Browsers.windows('Chrome'),
+        // browser: Browsers.windows('Chrome'), // Windows identity sometimes causes 428 on VPS
+        browser: ['Ubuntu', 'Chrome', '20.0.04'], // Linux identity is often more stable for VPS
         virtualLinkPreviewEnabled: false,  // More aggressive optimization
         shouldIgnoreJid: (jid) => isJidBroadcast(jid),
         qrTimeout: 30000,
