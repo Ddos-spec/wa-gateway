@@ -1039,6 +1039,10 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
             if (!msg.type && msg.mtype) {
                 msg.type = msg.mtype;
             }
+            // Default to 'text' if type is missing but 'message' exists
+            if (!msg.type && msg.message) {
+                msg.type = 'text';
+            }
             // Map simple 'message' string -> text object
             if (msg.type === 'text' && !msg.text && msg.message) {
                 msg.text = { body: msg.message };
