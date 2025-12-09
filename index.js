@@ -70,6 +70,28 @@ const sessionTokens = new Map();
 const wsClients = new Map();
 const logger = pino({ level: 'info' });
 
+// --- Session & Messaging Controls ---
+const INSTANCE_ID = process.env.INSTANCE_ID || `wa-gateway-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+const SESSION_LOCK_TTL_SECONDS = parseInt(process.env.SESSION_LOCK_TTL_SECONDS || '120', 10);
+const MESSAGE_RATE_LIMIT = parseInt(process.env.MAX_MESSAGES_PER_MINUTE || '15', 10);
+const MESSAGE_RATE_WINDOW_MS = 60 * 1000;
+const MIN_SEND_DELAY_MS = parseInt(process.env.MIN_SEND_DELAY_MS || '3000', 10);
+const MAX_SEND_DELAY_MS = parseInt(process.env.MAX_SEND_DELAY_MS || '7000', 10);
+const WARMUP_MIN_DELAY_MS = parseInt(process.env.WARMUP_MIN_DELAY_MS || '6000', 10);
+const WARMUP_MAX_DELAY_MS = parseInt(process.env.WARMUP_MAX_DELAY_MS || '12000', 10);
+const WARMUP_WINDOW_HOURS = parseInt(process.env.WARMUP_WINDOW_HOURS || '72', 10);
+const MAX_MESSAGES_PER_BATCH = parseInt(process.env.MAX_MESSAGES_PER_BATCH || '50', 10);
+const RECIPIENT_CACHE_TTL_MS = parseInt(process.env.RECIPIENT_CACHE_TTL_MS || (60 * 60 * 1000).toString(), 10);
+
+const DISABLE_SESSION_LOCK = process.env.DISABLE_SESSION_LOCK === 'true';
+const STRICT_SESSION_LOCK = process.env.STRICT_SESSION_LOCK === 'true';
+
+const sessionSendQueues = new Map(); // Map<sessionId, QueueState>
+const recipientValidationCache = new Map(); // Map<jid, { timestamp, exists, data }>
+const sessionReconnectState = new Map(); // Map<sessionId, { attempts }>
+const sessionLockIntervals = new Map(); // Map<sessionId, Interval>
+// ------------------------------------
+
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '0000000000000000000000000000000000000000000000000000000000000000';
 const TOKENS_FILE = path.join(__dirname, 'session_tokens.json');
 const ENCRYPTED_TOKENS_FILE = path.join(__dirname, 'session_tokens.enc');
@@ -87,6 +109,220 @@ const userManager = {
     getSessionOwner: () => ({ email: 'admin@localhost' })
 };
 
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const randomBetween = (min, max) => {
+    if (max <= min) return min;
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+};
+
+function ensureSessionQueueState(sessionId) {
+    if (!sessionSendQueues.has(sessionId)) {
+        sessionSendQueues.set(sessionId, {
+            queue: [],
+            processing: false,
+            connectedAt: Date.now(),
+            windowStart: 0,
+            sentInWindow: 0,
+            lastSentAt: 0
+        });
+    }
+    return sessionSendQueues.get(sessionId);
+}
+
+async function processSessionQueue(sessionId) {
+    const state = sessionSendQueues.get(sessionId);
+    if (!state || state.processing) {
+        return;
+    }
+    state.processing = true;
+
+    while (state.queue.length > 0) {
+        const now = Date.now();
+        if (!state.windowStart || now - state.windowStart >= MESSAGE_RATE_WINDOW_MS) {
+            state.windowStart = now;
+            state.sentInWindow = 0;
+        }
+
+        if (MESSAGE_RATE_LIMIT > 0 && state.sentInWindow >= MESSAGE_RATE_LIMIT) {
+            const waitFor = Math.max((state.windowStart + MESSAGE_RATE_WINDOW_MS) - now, 0);
+            await sleep(waitFor || 500);
+            continue;
+        }
+
+        const job = state.queue.shift();
+        try {
+            const result = await job.operation();
+            state.sentInWindow += 1;
+            state.lastSentAt = Date.now();
+            job.resolve(result);
+        } catch (error) {
+            job.reject(error);
+        }
+
+        const delay = calculateHumanDelayMs(state);
+        await sleep(delay);
+    }
+
+    state.processing = false;
+}
+
+function calculateHumanDelayMs(state) {
+    const warmupWindowMs = WARMUP_WINDOW_HOURS * 60 * 60 * 1000;
+    const now = Date.now();
+    const connectedAt = state.connectedAt || now;
+    const isWarm = (now - connectedAt) > warmupWindowMs;
+    const minDelay = isWarm ? MIN_SEND_DELAY_MS : WARMUP_MIN_DELAY_MS;
+    const maxDelay = isWarm ? MAX_SEND_DELAY_MS : WARMUP_MAX_DELAY_MS;
+    return randomBetween(minDelay, maxDelay);
+}
+
+function registerSessionConnected(sessionId) {
+    const state = ensureSessionQueueState(sessionId);
+    state.connectedAt = Date.now();
+    state.windowStart = Date.now();
+    state.sentInWindow = 0;
+}
+
+function cleanupSessionResources(sessionId) {
+    if (sessionSendQueues.has(sessionId)) {
+        const state = sessionSendQueues.get(sessionId);
+        if (state && state.queue) {
+            state.queue.length = 0;
+        }
+        sessionSendQueues.delete(sessionId);
+    }
+    recipientValidationCache.forEach((entry, key) => {
+        if (entry.sessionId === sessionId) {
+            recipientValidationCache.delete(key);
+        }
+    });
+}
+
+function scheduleMessageSend(sessionId, operation) {
+    const state = ensureSessionQueueState(sessionId);
+    return new Promise((resolve, reject) => {
+        state.queue.push({ operation, resolve, reject });
+        processSessionQueue(sessionId);
+    });
+}
+
+async function validateWhatsAppRecipient(sock, destination, sessionId) {
+    const cacheKey = `${sessionId}:${destination}`;
+    const now = Date.now();
+    const cached = recipientValidationCache.get(cacheKey);
+    if (cached && (now - cached.timestamp) < RECIPIENT_CACHE_TTL_MS) {
+        if (!cached.exists) {
+            throw new Error('Nomor tidak terdaftar di WhatsApp');
+        }
+        return cached.data;
+    }
+
+    const lookup = await sock.onWhatsApp(destination);
+    const record = Array.isArray(lookup) ? lookup[0] : null;
+    if (!record || !record.exists) {
+        recipientValidationCache.set(cacheKey, { exists: false, timestamp: now, sessionId });
+        throw new Error('Nomor tidak terdaftar di WhatsApp');
+    }
+    recipientValidationCache.set(cacheKey, { exists: true, timestamp: now, data: record, sessionId });
+    return record;
+}
+
+const SESSION_LOCK_KEY_PREFIX = 'wa:session_lock:';
+
+async function acquireSessionLock(sessionId) {
+    if (DISABLE_SESSION_LOCK) {
+        return true;
+    }
+    try {
+        const result = await redisClient.set(
+            `${SESSION_LOCK_KEY_PREFIX}${sessionId}`,
+            INSTANCE_ID,
+            {
+                NX: true,
+                EX: SESSION_LOCK_TTL_SECONDS
+            }
+        );
+        if (result === 'OK') {
+            startSessionLockHeartbeat(sessionId);
+            return true;
+        }
+        const existingOwner = await redisClient.get(`${SESSION_LOCK_KEY_PREFIX}${sessionId}`);
+        if (existingOwner === INSTANCE_ID) {
+            startSessionLockHeartbeat(sessionId);
+            return true;
+        }
+    } catch (error) {
+        console.error(`Failed to acquire session lock for ${sessionId}:`, error.message);
+        return !STRICT_SESSION_LOCK;
+    }
+    return false;
+}
+
+function startSessionLockHeartbeat(sessionId) {
+    if (DISABLE_SESSION_LOCK) return;
+    stopSessionLockHeartbeat(sessionId);
+    const intervalMs = Math.max(Math.floor((SESSION_LOCK_TTL_SECONDS * 1000) / 2), 30000);
+    const interval = setInterval(async () => {
+        try {
+            const lockKey = `${SESSION_LOCK_KEY_PREFIX}${sessionId}`;
+            const owner = await redisClient.get(lockKey);
+            if (owner === INSTANCE_ID) {
+                await redisClient.expire(lockKey, SESSION_LOCK_TTL_SECONDS);
+            } else {
+                stopSessionLockHeartbeat(sessionId);
+            }
+        } catch (error) {
+            console.error(`Session lock heartbeat failed for ${sessionId}:`, error.message);
+        }
+    }, intervalMs);
+    sessionLockIntervals.set(sessionId, interval);
+}
+
+function stopSessionLockHeartbeat(sessionId) {
+    if (sessionLockIntervals.has(sessionId)) {
+        clearInterval(sessionLockIntervals.get(sessionId));
+        sessionLockIntervals.delete(sessionId);
+    }
+}
+
+async function releaseSessionLock(sessionId) {
+    if (DISABLE_SESSION_LOCK) return;
+    stopSessionLockHeartbeat(sessionId);
+    try {
+        const lockKey = `${SESSION_LOCK_KEY_PREFIX}${sessionId}`;
+        const owner = await redisClient.get(lockKey);
+        if (owner === INSTANCE_ID) {
+            await redisClient.del(lockKey);
+        }
+    } catch (error) {
+        console.error(`Failed to release session lock for ${sessionId}:`, error.message);
+    }
+}
+
+function scheduleReconnectWithBackoff(sessionId, baseDelayMs = 5000) {
+    const state = sessionReconnectState.get(sessionId) || { attempts: 0, timer: null };
+    if (state.timer) {
+        clearTimeout(state.timer);
+    }
+    state.attempts += 1;
+    const cappedDelay = Math.min(baseDelayMs * Math.pow(2, state.attempts - 1), 60000);
+    const delay = cappedDelay + randomBetween(500, 2000);
+    state.timer = setTimeout(() => {
+        state.timer = null;
+        connectToWhatsApp(sessionId);
+    }, delay);
+    sessionReconnectState.set(sessionId, state);
+    return delay;
+}
+
+function resetReconnectBackoff(sessionId) {
+    const state = sessionReconnectState.get(sessionId);
+    if (state && state.timer) {
+        clearTimeout(state.timer);
+    }
+    sessionReconnectState.delete(sessionId);
+}
 
 // Encryption functions
 function encrypt(text) {
@@ -209,6 +445,10 @@ app.use(rateLimit({
     standardHeaders: true,
     legacyHeaders: false
 }));
+
+app.get('/ping', (req, res) => {
+    res.status(200).send('pong');
+});
 
 const ADMIN_PASSWORD = process.env.ADMIN_DASHBOARD_PASSWORD;
 
@@ -542,8 +782,26 @@ function log(message, sessionId = 'SYSTEM', details = {}) {
 
 const phonePairing = new PhonePairing(log);
 
-const v1ApiRouter = initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, phonePairing, saveSessionSettings, regenerateSessionToken, redisClient);
-const legacyApiRouter = initializeLegacyApi(sessions, sessionTokens);
+const v1ApiRouter = initializeApi(
+    sessions,
+    sessionTokens,
+    createSession,
+    getSessionsDetails,
+    deleteSession,
+    log,
+    phonePairing,
+    saveSessionSettings,
+    regenerateSessionToken,
+    redisClient,
+    scheduleMessageSend,
+    validateWhatsAppRecipient
+);
+const legacyApiRouter = initializeLegacyApi(
+    sessions,
+    sessionTokens,
+    scheduleMessageSend,
+    validateWhatsAppRecipient
+);
 app.use('/api/v1', v1ApiRouter);
 app.use('/api', legacyApiRouter); // Mount legacy routes at /api
 
@@ -615,10 +873,23 @@ async function postToWebhook(data) {
     const sessionId = data.sessionId || 'SYSTEM';
     const webhookUrl = await getWebhookUrl(sessionId); // Changed to await since it's now async
     if (!webhookUrl) return;
+    const payload = {
+        ...data,
+        meta: {
+            ...(data.meta || {}),
+            source: 'wa-gateway',
+            sessionId
+        }
+    };
 
     try {
-        await axios.post(webhookUrl, data, {
-            headers: { 'Content-Type': 'application/json' }
+        await axios.post(webhookUrl, payload, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-WA-Gateway-Source': 'wa-gateway',
+                'X-WA-Session-Id': sessionId
+            },
+            timeout: parseInt(process.env.WEBHOOK_TIMEOUT_MS || '10000', 10)
         });
         log(`Successfully posted to webhook: ${webhookUrl}`);
     } catch (error) {
@@ -698,8 +969,7 @@ async function connectToWhatsApp(sessionId) {
         },
         printQRInTerminal: false,
         logger,
-        // browser: Browsers.windows('Chrome'), // Windows identity sometimes causes 428 on VPS
-        browser: ['Ubuntu', 'Chrome', '20.0.04'], // Linux identity is often more stable for VPS
+        browser: Browsers.macOS('Chrome'),
         virtualLinkPreviewEnabled: false,  // More aggressive optimization
         shouldIgnoreJid: (jid) => isJidBroadcast(jid),
         qrTimeout: 30000,
@@ -710,8 +980,8 @@ async function connectToWhatsApp(sessionId) {
         emitOwnEvents: false,
         markOnlineOnConnect: false,
         syncFullHistory: false,
-        retryRequestDelayMs: 3000,  // Increased from 2000 to reduce retry frequency
-        maxMsgRetryCount: 3,
+        retryRequestDelayMs: 5000,
+        maxMsgRetryCount: 1,
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -893,6 +1163,8 @@ async function connectToWhatsApp(sessionId) {
         if (connection === 'open') {
             log(`Connection is now open for ${sessionId}.`);
             lastQr = ''; // Reset last QR on success
+            registerSessionConnected(sessionId);
+            resetReconnectBackoff(sessionId);
             
             let detailMessage = `Connected as ${sock.user?.name || 'Unknown'}`;
             if (pairingInfo && pairingInfo.status.includes('AWAITING')) {
@@ -926,23 +1198,23 @@ async function connectToWhatsApp(sessionId) {
             // Special handling for restartRequired (515)
             if (statusCode === DisconnectReason.restartRequired) {
                 log(`Session ${sessionId} requires restart (normal during sync). Reconnecting immediately...`, sessionId);
-                // Don't update status to DISCONNECTED to prevent UI flicker/panic
-                // updateStatus('RECONNECTING', 'Restarting session for sync...'); 
-                setTimeout(() => connectToWhatsApp(sessionId), 1000); // Reconnect faster
+                resetReconnectBackoff(sessionId);
+                setTimeout(() => connectToWhatsApp(sessionId), 1000);
                 return;
             }
             
             // Special handling for 428 (Precondition Required)
             if (statusCode === 428) {
-                 log(`Session ${sessionId} encountered 428 (Precondition Required). This is often temporary. Reconnecting...`, sessionId);
-                 setTimeout(() => connectToWhatsApp(sessionId), 1000); // Reconnect faster
+                 const delay = scheduleReconnectWithBackoff(sessionId, 2000);
+                 log(`Session ${sessionId} encountered 428 (Precondition Required). Retrying in ${delay}ms`, sessionId);
                  return;
             }
 
             updateStatus('DISCONNECTED', 'Connection closed.', '', reason);
 
             if (shouldReconnect) {
-                setTimeout(() => connectToWhatsApp(sessionId), 5000);
+                const delay = scheduleReconnectWithBackoff(sessionId);
+                log(`Scheduling reconnect for session ${sessionId} in ${delay}ms`, sessionId);
             } else {
                 log(`Not reconnecting for session ${sessionId} due to fatal error.`, sessionId);
                 if (pairingInfo) {
@@ -956,6 +1228,9 @@ async function connectToWhatsApp(sessionId) {
                     fs.rmSync(sessionDir, { recursive: true, force: true });
                     log(`Cleared session data for ${sessionId}`, sessionId);
                 }
+                cleanupSessionResources(sessionId);
+                await releaseSessionLock(sessionId);
+                resetReconnectBackoff(sessionId);
             }
         }
     });
@@ -1009,6 +1284,11 @@ async function createSession(sessionId, createdBy = null) {
         throw new Error(`Maximum session limit (${MAX_SESSIONS}) reached. Please delete unused sessions.`);
     }
 
+    const lockAcquired = await acquireSessionLock(sessionId);
+    if (!lockAcquired) {
+        throw new Error(`Session ${sessionId} is locked by another instance. Try again from the owning server.`);
+    }
+
     // Register session in Redis for persistence tracking
     try {
         await redisClient.sAdd('wa:session_list', sessionId);
@@ -1016,39 +1296,41 @@ async function createSession(sessionId, createdBy = null) {
         log(`Error registering session ${sessionId} in Redis: ${err.message}`, 'SYSTEM');
     }
     
-    const token = crypto.randomBytes(32).toString('hex');
-    sessionTokens.set(sessionId, token);
-    saveTokens();
-    
-    // Set a placeholder before async connection with owner info
-    sessions.set(sessionId, { 
-        sessionId: sessionId, 
-        status: 'CREATING', 
-        detail: 'Session is being created.',
-        owner: createdBy // Track who created this session
-    });
-    
-    // Track session ownership in user manager
-    if (createdBy) {
-        await userManager.addSessionToUser(createdBy, sessionId);
-    }
-    
-    // Auto-cleanup inactive sessions after timeout
-    // Fix for timeout overflow on 32-bit systems - cap at 24 hours max
-    const timeoutMs = Math.min(SESSION_TIMEOUT_HOURS * 60 * 60 * 1000, 24 * 60 * 60 * 1000);
-    setTimeout(async () => {
-        const session = sessions.get(sessionId);
-        if (session && session.status !== 'CONNECTED') {
-            await deleteSession(sessionId);
-            log(`Auto-deleted inactive session after ${SESSION_TIMEOUT_HOURS} hours: ${sessionId}`, 'SYSTEM');
+    try {
+        const token = crypto.randomBytes(32).toString('hex');
+        sessionTokens.set(sessionId, token);
+        saveTokens();
+        
+        sessions.set(sessionId, { 
+            sessionId: sessionId, 
+            status: 'CREATING', 
+            detail: 'Session is being created.',
+            owner: createdBy
+        });
+        
+        if (createdBy) {
+            await userManager.addSessionToUser(createdBy, sessionId);
         }
-    }, timeoutMs);
-    
-    connectToWhatsApp(sessionId);
-    return { status: 'success', message: `Session ${sessionId} created.`, token };
+        
+        const timeoutMs = Math.min(SESSION_TIMEOUT_HOURS * 60 * 60 * 1000, 24 * 60 * 60 * 1000);
+        setTimeout(async () => {
+            const session = sessions.get(sessionId);
+            if (session && session.status !== 'CONNECTED') {
+                await deleteSession(sessionId);
+                log(`Auto-deleted inactive session after ${SESSION_TIMEOUT_HOURS} hours: ${sessionId}`, 'SYSTEM');
+            }
+        }, timeoutMs);
+        
+        connectToWhatsApp(sessionId);
+        return { status: 'success', message: `Session ${sessionId} created.`, token };
+    } catch (error) {
+        await releaseSessionLock(sessionId);
+        throw error;
+    }
 }
 
 async function deleteSession(sessionId) {
+    resetReconnectBackoff(sessionId);
     const session = sessions.get(sessionId);
     if (session && session.sock) {
         try {
@@ -1095,6 +1377,10 @@ async function deleteSession(sessionId) {
     // if (fs.existsSync(sessionDir)) {
     //     fs.rmSync(sessionDir, { recursive: true, force: true });
     // }
+
+    cleanupSessionResources(sessionId);
+    await releaseSessionLock(sessionId);
+
     log(`Session ${sessionId} deleted and data cleared.`, 'SYSTEM');
     broadcast({ type: 'session-update', data: getSessionsDetails() });
 }
@@ -1174,7 +1460,11 @@ async function initializeExistingSessions() {
         // Avoid re-initializing if already active (unlikely during startup but safe)
         if (!sessions.has(sessionId)) {
             log(`Re-initializing session: ${sessionId}`);
-            await createSession(sessionId); 
+            try {
+                await createSession(sessionId); 
+            } catch (error) {
+                log(`Skipped session ${sessionId} during bootstrap: ${error.message}`, 'SYSTEM');
+            }
         }
     }
 }
@@ -1222,3 +1512,5 @@ const gracefulShutdown = (signal) => {
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+module.exports = { app, server };

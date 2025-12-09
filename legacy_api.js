@@ -32,7 +32,7 @@ const legacyLimiter = rateLimit({
     legacyHeaders: false
 });
 
-function initializeLegacyApi(sessions, sessionTokens) {
+function initializeLegacyApi(sessions, sessionTokens, scheduleMessageSend, validateWhatsAppRecipient) {
     // Enable parsing of URL-encoded bodies (for x-www-form-urlencoded)
     router.use(express.urlencoded({ extended: true }));
     router.use(express.json());
@@ -97,30 +97,41 @@ function initializeLegacyApi(sessions, sessionTokens) {
             return res.status(404).json({ status: 'error', message: `Session ${targetSessionId} not found or not connected.` });
         }
 
-        // Input validation
         const formattedNumber = formatPhoneNumber(targetNumber);
         if (!/^\d+$/.test(formattedNumber)) {
             return res.status(400).json({ status: 'error', message: 'Invalid phone number format.' });
         }
-
         const destination = toWhatsAppFormat(formattedNumber);
-        let result;
 
-        // Handle Media Types
-        if (mtype === 'image' && url) {
-             result = await sendLegacyMessage(session.sock, destination, { 
-                 image: { url: url },
-                 caption: targetMessage || ''
-             });
-        } else {
-            // Default to text
-            if (!targetMessage) {
-                 return res.status(400).json({ status: 'error', message: 'Message content is required for text type.' });
-            }
-            result = await sendLegacyMessage(session.sock, destination, { text: targetMessage });
+        try {
+            await validateWhatsAppRecipient(session.sock, destination, targetSessionId);
+        } catch (error) {
+            return res.status(400).json({ status: 'error', message: 'Recipient is not a valid WhatsApp user.' });
         }
 
-        res.status(200).json(result);
+        const sendPromise = scheduleMessageSend(targetSessionId, async () => {
+            const activeSession = sessions.get(targetSessionId);
+            if (!activeSession || !activeSession.sock || activeSession.status !== 'CONNECTED') {
+                throw new Error('Session not available during send process.');
+            }
+            if (mtype === 'image' && url) {
+                return sendLegacyMessage(activeSession.sock, destination, { 
+                    image: { url: url },
+                    caption: targetMessage || ''
+                });
+            }
+            if (!targetMessage) {
+                throw new Error('Message content is required for text type.');
+            }
+            return sendLegacyMessage(activeSession.sock, destination, { text: targetMessage });
+        });
+
+        try {
+            const result = await sendPromise;
+            res.status(200).json(result);
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
     });
 
     // Legacy form-data endpoint
@@ -145,8 +156,25 @@ function initializeLegacyApi(sessions, sessionTokens) {
         }
 
         const destination = toWhatsAppFormat(formattedPhone);
-        const result = await sendLegacyMessage(session.sock, destination, { text: message });
-        res.status(200).json(result);
+
+        try {
+            await validateWhatsAppRecipient(session.sock, destination, targetSessionId);
+        } catch (error) {
+            return res.status(400).json({ status: 'error', message: 'Recipient is not a valid WhatsApp user.' });
+        }
+
+        try {
+            const result = await scheduleMessageSend(targetSessionId, async () => {
+                const activeSession = sessions.get(targetSessionId);
+                if (!activeSession || !activeSession.sock || activeSession.status !== 'CONNECTED') {
+                    throw new Error('Session not available during send process.');
+                }
+                return sendLegacyMessage(activeSession.sock, destination, { text: message });
+            });
+            res.status(200).json(result);
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
     });
 
     return router;

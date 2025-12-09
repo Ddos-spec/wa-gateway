@@ -12,6 +12,7 @@ const { formatPhoneNumber, toWhatsAppFormat, isValidPhoneNumber } = require('./p
 // Remove: const { log } = require('./index');
 
 const router = express.Router();
+const MAX_MESSAGES_PER_BATCH = parseInt(process.env.MAX_MESSAGES_PER_BATCH || '50', 10);
 
 // Webhook URLs will be stored in Redis by default
 let redisClient = null;
@@ -84,7 +85,20 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-function initializeApi(sessions, sessionTokens, createSession, getSessionsDetails, deleteSession, log, phonePairing, saveSessionSettings, regenerateSessionToken, redisClient) {
+function initializeApi(
+    sessions,
+    sessionTokens,
+    createSession,
+    getSessionsDetails,
+    deleteSession,
+    log,
+    phonePairing,
+    saveSessionSettings,
+    regenerateSessionToken,
+    redisClient,
+    scheduleMessageSend,
+    validateWhatsAppRecipient
+) {
     // Mocks for removed functionality
     const checkAndStartScheduledCampaigns = async () => ({ status: 'success', message: 'Campaigns disabled' });
     const campaignManager = {
@@ -1011,195 +1025,218 @@ function initializeApi(sessions, sessionTokens, createSession, getSessionsDetail
     // Main message sending endpoint handler
     const handleSendMessage = async (req, res) => {
         log('API request', 'SYSTEM', { event: 'api-request', method: req.method, endpoint: req.originalUrl, query: req.query });
-        
-        // Check injected sessionId first
+
         const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
-        
         if (!sessionId) {
             log('API error', 'SYSTEM', { event: 'api-error', error: 'sessionId could not be determined', endpoint: req.originalUrl });
             return res.status(400).json({ status: 'error', message: 'sessionId is required (in query, body, or implied by token)' });
         }
+
         const session = sessions.get(sessionId);
         if (!session || !session.sock || session.status !== 'CONNECTED') {
             log('API error', 'SYSTEM', { event: 'api-error', error: `Session ${sessionId} not found or not connected.`, endpoint: req.originalUrl });
             return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
         }
-        const messages = Array.isArray(req.body) ? req.body : [req.body];
-        const results = [];
-        const phoneNumbers = []; // Track all phone numbers for logging
-        const messageContents = []; // Track message contents with formatting
-        
-        for (let msg of messages) {
-            // --- ALIAS MAPPING (User Friendly Mode) ---
-            // Map 'receiver'/'number' -> 'to'
+
+        let payload = [];
+        if (Array.isArray(req.body)) {
+            payload = req.body;
+        } else if (Array.isArray(req.body.messages)) {
+            payload = req.body.messages;
+        } else {
+            payload = [req.body];
+        }
+        const messages = payload.filter((msg) => msg && typeof msg === 'object');
+
+        if (messages.length === 0) {
+            return res.status(400).json({ status: 'error', message: 'No message payload provided.' });
+        }
+        if (messages.length > MAX_MESSAGES_PER_BATCH) {
+            return res.status(400).json({
+                status: 'error',
+                message: `Batch limit exceeded. Max ${MAX_MESSAGES_PER_BATCH} messages per request.`
+            });
+        }
+
+        const responseSlots = [];
+        const phoneNumbers = [];
+        const messageContents = [];
+
+        for (const rawMessage of messages) {
+            const msg = { ...rawMessage };
             if (!msg.to && (msg.receiver || msg.number)) {
                 msg.to = msg.receiver || msg.number;
             }
-            // Map 'mtype' -> 'type'
             if (!msg.type && msg.mtype) {
                 msg.type = msg.mtype;
             }
-            // Default to 'text' if type is missing but 'message' exists
             if (!msg.type && msg.message) {
                 msg.type = 'text';
             }
-            // Map simple 'message' string -> text object
             if (msg.type === 'text' && !msg.text && msg.message) {
                 msg.text = { body: msg.message };
             }
-            // -------------------------------------------
 
-            const { recipient_type, to, type, text, image, document, video } = msg;
-            // Input validation
+            const { recipient_type, to, type, text, image, document } = msg;
             if (!to || !type) {
-                results.push({ status: 'error', message: 'Invalid message format. "to" and "type" are required.' });
+                responseSlots.push(Promise.resolve({ status: 'error', message: 'Invalid message format. "to" and "type" are required.' }));
                 continue;
             }
-            if (!to.endsWith('@g.us')) {
-                // Validate phone number format
-                const formattedTo = formatPhoneNumber(to);
-                if (!/^\d+$/.test(formattedTo)) {
-                    results.push({ status: 'error', message: 'Invalid recipient format.' });
+
+            let formattedNumber = to;
+            let destination = to;
+            const isGroup = recipient_type === 'group' || to.endsWith('@g.us');
+            if (!isGroup) {
+                formattedNumber = formatPhoneNumber(to);
+                if (!/^\d+$/.test(formattedNumber)) {
+                    responseSlots.push(Promise.resolve({ status: 'error', message: 'Invalid recipient format.' }));
                     continue;
                 }
+                destination = toWhatsAppFormat(formattedNumber);
+            } else {
+                destination = to.endsWith('@g.us') ? to : `${to}@g.us`;
             }
-            
-            // Add phone number to the list for logging
-            phoneNumbers.push(to);
-            
-            // Track message content based on type
-            let messageContent = {
-                type: type,
-                to: to
-            };
-            
+
+            const messageContent = { type, to };
             if (type === 'text') {
                 if (!text || typeof text.body !== 'string' || text.body.length === 0 || text.body.length > 4096) {
-                    results.push({ status: 'error', message: 'Invalid text message content.' });
+                    responseSlots.push(Promise.resolve({ status: 'error', message: 'Invalid text message content.' }));
                     continue;
                 }
-                messageContent.text = text.body; // Preserve formatting
+                messageContent.text = text.body;
             }
             if (type === 'image' && image) {
                 if (image.id && !validator.isAlphanumeric(image.id.replace(/[\.\-]/g, ''))) {
-                    results.push({ status: 'error', message: 'Invalid image ID.' });
+                    responseSlots.push(Promise.resolve({ status: 'error', message: 'Invalid image ID.' }));
                     continue;
                 }
                 if (image.link && !validator.isURL(image.link)) {
-                    results.push({ status: 'error', message: 'Invalid image URL.' });
+                    responseSlots.push(Promise.resolve({ status: 'error', message: 'Invalid image URL.' }));
                     continue;
                 }
                 messageContent.image = {
                     caption: image.caption || '',
-                    url: image.link || `/media/${image.id}` // Convert media ID to URL for display
+                    url: image.link || `/media/${image.id}`
                 };
             }
             if (type === 'document' && document) {
                 if (document.id && !validator.isAlphanumeric(document.id.replace(/[\.\-]/g, ''))) {
-                    results.push({ status: 'error', message: 'Invalid document ID.' });
+                    responseSlots.push(Promise.resolve({ status: 'error', message: 'Invalid document ID.' }));
                     continue;
                 }
                 if (document.link && !validator.isURL(document.link)) {
-                    results.push({ status: 'error', message: 'Invalid document URL.' });
+                    responseSlots.push(Promise.resolve({ status: 'error', message: 'Invalid document URL.' }));
                     continue;
                 }
                 messageContent.document = {
                     filename: document.filename || 'document',
-                    url: document.link || `/media/${document.id}` // Convert media ID to URL for display
+                    url: document.link || `/media/${document.id}`
                 };
             }
-            
-            messageContents.push(messageContent);
-
-            let destination;
-            if (recipient_type === 'group') {
-                destination = to.endsWith('@g.us') ? to : `${to}@g.us`;
-            } else {
-                // Format the phone number for individual recipients
-                const formattedTo = formatPhoneNumber(to);
-                destination = toWhatsAppFormat(formattedTo);
+            if (type === 'video' && msg.video) {
+                messageContent.video = {
+                    caption: msg.video.caption || '',
+                    url: msg.video.link || (msg.video.id ? `/media/${msg.video.id}` : null)
+                };
             }
 
             let messagePayload;
-            let options = {};
-
             try {
                 switch (type) {
-                    case 'text':
+                    case 'text': {
                         if (!text || !text.body) {
-                             throw new Error('For "text" type, "text.body" is required.');
+                            throw new Error('For "text" type, "text.body" is required.');
                         }
                         messagePayload = { text: text.body };
                         break;
-
-                    case 'image':
-                        if (!image || (!image.link && !image.id)) {
-                             throw new Error('For "image" type, "image.link" or "image.id" is required.');
+                    }
+                    case 'image': {
+                        const img = msg.image;
+                        if (!img || (!img.link && !img.id)) {
+                            throw new Error('For "image" type, "image.link" or "image.id" is required.');
                         }
-                        const imageUrl = image.id ? path.join(mediaDir, image.id) : image.link;
-                        messagePayload = { image: { url: imageUrl }, caption: image.caption };
+                        const imageUrl = img.id ? path.join(mediaDir, img.id) : img.link;
+                        messagePayload = { image: { url: imageUrl }, caption: img.caption };
                         break;
-
-                    case 'document':
-                         if (!document || (!document.link && !document.id)) {
-                             throw new Error('For "document" type, "document.link" or "document.id" is required.');
+                    }
+                    case 'document': {
+                        const doc = msg.document;
+                        if (!doc || (!doc.link && !doc.id)) {
+                            throw new Error('For "document" type, "document.link" or "document.id" is required.');
                         }
-                        const docUrl = document.id ? path.join(mediaDir, document.id) : document.link;
-                        messagePayload = { document: { url: docUrl }, mimetype: document.mimetype, fileName: document.filename, caption: document.caption };
+                        const docUrl = doc.id ? path.join(mediaDir, doc.id) : doc.link;
+                        messagePayload = {
+                            document: { url: docUrl },
+                            mimetype: doc.mimetype,
+                            fileName: doc.filename,
+                            caption: doc.caption
+                        };
                         break;
-
-                    case 'video':
-                        const video = msg.video;
-                        if (!video || (!video.link && !video.id)) {
-                             throw new Error('For "video" type, "video.link" or "video.id" is required.');
+                    }
+                    case 'video': {
+                        const vid = msg.video;
+                        if (!vid || (!vid.link && !vid.id)) {
+                            throw new Error('For "video" type, "video.link" or "video.id" is required.');
                         }
-                        const videoUrl = video.id ? path.join(mediaDir, video.id) : video.link;
-                        messagePayload = { video: { url: videoUrl }, caption: video.caption, gifPlayback: video.gifPlayback || false };
+                        const videoUrl = vid.id ? path.join(mediaDir, vid.id) : vid.link;
+                        messagePayload = {
+                            video: { url: videoUrl },
+                            caption: vid.caption,
+                            gifPlayback: vid.gifPlayback || false
+                        };
                         break;
-
+                    }
                     default:
                         throw new Error(`Unsupported message type: ${type}`);
                 }
-
-                // --- HUMANIZATION: Simulate Typing ---
-                // 1. Send "Typing..." status
-                await session.sock.sendPresenceUpdate('composing', destination);
-                
-                // 2. Wait for "typing time" (Random 0.5s - 1.5s)
-                const typingDelay = Math.floor(Math.random() * 1000) + 500;
-                await new Promise(resolve => setTimeout(resolve, typingDelay));
-                
-                // 3. Send Message
-                const result = await sendMessage(session.sock, destination, messagePayload);
-                
-                // 4. Stop Typing status
-                await session.sock.sendPresenceUpdate('paused', destination);
-                
-                results.push(result);
-
-                // --- HUMAN DELAY (Anti-Ban Protection) ---
-                // Pause for 1 to 3 seconds between messages to simulate human speed
-                // Only applied if sending multiple messages to prevent "Machine Gun" behavior
-                if (messages.length > 1) {
-                    const delay = Math.floor(Math.random() * 2000) + 1000; 
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-
             } catch (error) {
-                results.push({ status: 'error', message: `Failed to process message for ${to}: ${error.message}` });
+                responseSlots.push(Promise.resolve({ status: 'error', message: `Failed to prepare message for ${to}: ${error.message}` }));
+                continue;
             }
+
+            if (!isGroup) {
+                try {
+                    await validateWhatsAppRecipient(session.sock, destination, sessionId);
+                } catch (error) {
+                    responseSlots.push(Promise.resolve({
+                        status: 'error',
+                        message: `Nomor ${to} tidak terdaftar di WhatsApp.`
+                    }));
+                    continue;
+                }
+            }
+
+            phoneNumbers.push(to);
+            messageContents.push(messageContent);
+
+            const sendPromise = scheduleMessageSend(sessionId, async () => {
+                const targetSession = sessions.get(sessionId);
+                if (!targetSession || !targetSession.sock || targetSession.status !== 'CONNECTED') {
+                    throw new Error('Session tidak tersedia saat pengiriman berlangsung.');
+                }
+                await targetSession.sock.sendPresenceUpdate('composing', destination);
+                const typingDelay = Math.floor(Math.random() * 1000) + 500;
+                await new Promise((resolve) => setTimeout(resolve, typingDelay));
+                const result = await sendMessage(targetSession.sock, destination, messagePayload);
+                await targetSession.sock.sendPresenceUpdate('paused', destination);
+                return result;
+            }).catch((error) => ({
+                status: 'error',
+                message: `Failed to process message for ${to}: ${error.message}`
+            }));
+
+            responseSlots.push(sendPromise);
         }
 
-        // Activity logging removed
-        
-        log('Messages sent', sessionId, { 
-            event: 'messages-sent', 
-            sessionId, 
-            count: results.length, 
-            phoneNumbers: phoneNumbers,
-            messages: messageContents 
+        const resolvedResults = await Promise.all(responseSlots);
+        log('Messages sent', sessionId, {
+            event: 'messages-sent',
+            sessionId,
+            count: resolvedResults.length,
+            phoneNumbers,
+            messages: messageContents
         });
-        res.status(200).json(results);
+        res.status(200).json(resolvedResults);
     };
 
     router.post('/messages', handleSendMessage);
