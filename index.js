@@ -34,6 +34,7 @@ const { createClient } = require('redis'); // Redis Import
 const useRedisAuthState = require('./redis-auth'); // Redis Auth Strategy
 const { initializeApi, apiToken, getWebhookUrl } = require('./api_v1');
 const { initializeLegacyApi } = require('./legacy_api');
+const { formatPhoneNumber, toWhatsAppFormat } = require('./phone-utils');
 const { randomUUID } = require('crypto');
 const crypto = require('crypto'); // Add crypto for encryption
 const helmet = require('helmet');
@@ -82,6 +83,7 @@ const WARMUP_MAX_DELAY_MS = parseInt(process.env.WARMUP_MAX_DELAY_MS || '12000',
 const WARMUP_WINDOW_HOURS = parseInt(process.env.WARMUP_WINDOW_HOURS || '72', 10);
 const MAX_MESSAGES_PER_BATCH = parseInt(process.env.MAX_MESSAGES_PER_BATCH || '50', 10);
 const RECIPIENT_CACHE_TTL_MS = parseInt(process.env.RECIPIENT_CACHE_TTL_MS || (60 * 60 * 1000).toString(), 10);
+const CALL_RESPONSE_TTL_MS = parseInt(process.env.CALL_RESPONSE_TTL_MS || '300000', 10);
 
 const DISABLE_SESSION_LOCK = process.env.DISABLE_SESSION_LOCK === 'true';
 const STRICT_SESSION_LOCK = process.env.STRICT_SESSION_LOCK === 'true';
@@ -90,6 +92,7 @@ const sessionSendQueues = new Map(); // Map<sessionId, QueueState>
 const recipientValidationCache = new Map(); // Map<jid, { timestamp, exists, data }>
 const sessionReconnectState = new Map(); // Map<sessionId, { attempts }>
 const sessionLockIntervals = new Map(); // Map<sessionId, Interval>
+const callResponseTracker = new Map(); // Map<sessionId:callId, { rejectHandled, replyHandled, timer }>
 // ------------------------------------
 
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '0000000000000000000000000000000000000000000000000000000000000000';
@@ -184,7 +187,7 @@ function registerSessionConnected(sessionId) {
     state.sentInWindow = 0;
 }
 
-function cleanupSessionResources(sessionId) {
+async function cleanupSessionResources(sessionId) {
     if (sessionSendQueues.has(sessionId)) {
         const state = sessionSendQueues.get(sessionId);
         if (state && state.queue) {
@@ -197,6 +200,7 @@ function cleanupSessionResources(sessionId) {
             recipientValidationCache.delete(key);
         }
     });
+    await clearSessionContacts(sessionId);
 }
 
 function scheduleMessageSend(sessionId, operation) {
@@ -228,7 +232,102 @@ async function validateWhatsAppRecipient(sock, destination, sessionId) {
     return record;
 }
 
+function hasCallResponseHandled(sessionId, callId, type) {
+    const key = `${sessionId}:${callId}`;
+    const entry = callResponseTracker.get(key);
+    if (!entry) {
+        return false;
+    }
+    return !!entry[`${type}Handled`];
+}
+
+function markCallResponseHandled(sessionId, callId, type) {
+    const key = `${sessionId}:${callId}`;
+    const entry = callResponseTracker.get(key) || { rejectHandled: false, replyHandled: false, timeout: null };
+    if (entry.timeout) {
+        clearTimeout(entry.timeout);
+    }
+    entry[`${type}Handled`] = true;
+    entry.timeout = setTimeout(() => {
+        const existing = callResponseTracker.get(key);
+        if (existing && existing.timeout) {
+            clearTimeout(existing.timeout);
+        }
+        callResponseTracker.delete(key);
+    }, CALL_RESPONSE_TTL_MS);
+    callResponseTracker.set(key, entry);
+}
+
+function normalizeContactId(value) {
+    if (!value) return '';
+    if (value.includes('@')) {
+        return value.split('@')[0].replace(/\D/g, '');
+    }
+    return formatPhoneNumber(value);
+}
+
+async function getSessionContacts(sessionId) {
+    try {
+        const raw = await redisClient.get(`${CONTACTS_KEY_PREFIX}${sessionId}`);
+        if (!raw) {
+            return [];
+        }
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+        log(`Error loading contacts for ${sessionId}: ${error.message}`, 'SYSTEM');
+        return [];
+    }
+}
+
+async function saveSessionContacts(sessionId, contacts) {
+    try {
+        await redisClient.set(`${CONTACTS_KEY_PREFIX}${sessionId}`, JSON.stringify(contacts));
+    } catch (error) {
+        log(`Error saving contacts for ${sessionId}: ${error.message}`, 'SYSTEM');
+    }
+}
+
+async function upsertSessionContact(sessionId, contact) {
+    const contacts = await getSessionContacts(sessionId);
+    const now = Date.now();
+    const normalized = {
+        ...contact,
+        updatedAt: now
+    };
+    const index = contacts.findIndex((item) => item.contactId === contact.contactId);
+    if (index >= 0) {
+        normalized.createdAt = contacts[index].createdAt || now;
+        contacts[index] = { ...contacts[index], ...normalized };
+    } else {
+        normalized.createdAt = now;
+        contacts.push(normalized);
+    }
+    await saveSessionContacts(sessionId, contacts);
+    return normalized;
+}
+
+async function removeSessionContact(sessionId, contactId) {
+    const contacts = await getSessionContacts(sessionId);
+    const index = contacts.findIndex((contact) => contact.contactId === contactId);
+    if (index === -1) {
+        return false;
+    }
+    contacts.splice(index, 1);
+    await saveSessionContacts(sessionId, contacts);
+    return true;
+}
+
+async function clearSessionContacts(sessionId) {
+    try {
+        await redisClient.del(`${CONTACTS_KEY_PREFIX}${sessionId}`);
+    } catch (error) {
+        log(`Error clearing contacts for ${sessionId}: ${error.message}`, 'SYSTEM');
+    }
+}
+
 const SESSION_LOCK_KEY_PREFIX = 'wa:session_lock:';
+const CONTACTS_KEY_PREFIX = 'wa:contacts:';
 
 async function acquireSessionLock(sessionId) {
     if (DISABLE_SESSION_LOCK) {
@@ -794,7 +893,11 @@ const v1ApiRouter = initializeApi(
     regenerateSessionToken,
     redisClient,
     scheduleMessageSend,
-    validateWhatsAppRecipient
+    validateWhatsAppRecipient,
+    getSessionContacts,
+    upsertSessionContact,
+    removeSessionContact,
+    postToWebhook
 );
 const legacyApiRouter = initializeLegacyApi(
     sessions,
@@ -1117,6 +1220,74 @@ async function connectToWhatsApp(sessionId) {
         await handleWebhookForMessage(m, sessionId);
     });
 
+    sock.ev.on('call', async (callEvents) => {
+        if (!Array.isArray(callEvents)) {
+            return;
+        }
+        const sessionState = sessions.get(sessionId) || {};
+        const sessionSettings = sessionState.settings || {};
+
+        for (const callEvent of callEvents) {
+            const payload = {
+                id: callEvent.id,
+                from: callEvent.from,
+                chatId: callEvent.chatId,
+                groupJid: callEvent.groupJid || null,
+                isGroup: !!callEvent.isGroup,
+                isVideo: !!callEvent.isVideo,
+                status: callEvent.status,
+                offline: !!callEvent.offline,
+                latencyMs: callEvent.latencyMs || null,
+                timestamp: callEvent.date ? callEvent.date.getTime() : Date.now()
+            };
+
+            log('Call event received', sessionId, { event: 'call-event', ...payload });
+            try {
+                await postToWebhook({
+                    event: 'call-event',
+                    sessionId,
+                    call: payload
+                });
+            } catch (error) {
+                log('Failed to post call event to webhook', sessionId, { error: error.message });
+            }
+
+            const isOffer = callEvent.status === 'offer';
+
+            if (sessionSettings.auto_reject_calls && isOffer && !hasCallResponseHandled(sessionId, callEvent.id, 'reject')) {
+                try {
+                    await sock.rejectCall(callEvent.id, callEvent.from);
+                    markCallResponseHandled(sessionId, callEvent.id, 'reject');
+                    log('Incoming call auto-rejected', sessionId, { callId: callEvent.id, from: callEvent.from });
+                } catch (error) {
+                    log('Failed to auto-reject call', sessionId, { error: error.message, callId: callEvent.id });
+                }
+            }
+
+            const replyTemplate = typeof sessionSettings.auto_reply_call_message === 'string'
+                ? sessionSettings.auto_reply_call_message.trim()
+                : '';
+
+            if (replyTemplate && isOffer && !hasCallResponseHandled(sessionId, callEvent.id, 'reply')) {
+                try {
+                    await scheduleMessageSend(sessionId, async () => {
+                        const activeSession = sessions.get(sessionId);
+                        if (!activeSession || !activeSession.sock || activeSession.status !== 'CONNECTED') {
+                            throw new Error('Session tidak tersedia saat auto-reply call.');
+                        }
+                        await activeSession.sock.sendMessage(callEvent.chatId || callEvent.from, {
+                            text: replyTemplate
+                        });
+                    });
+                    markCallResponseHandled(sessionId, callEvent.id, 'reply');
+                    log('Auto reply sent for call', sessionId, { callId: callEvent.id, to: callEvent.from });
+                } catch (error) {
+                    log('Failed to send auto reply for call', sessionId, { error: error.message, callId: callEvent.id });
+                }
+            }
+        }
+    });
+
     let lastQr = '';
 
     sock.ev.on('connection.update', async (update) => {
@@ -1228,7 +1399,7 @@ async function connectToWhatsApp(sessionId) {
                     fs.rmSync(sessionDir, { recursive: true, force: true });
                     log(`Cleared session data for ${sessionId}`, sessionId);
                 }
-                cleanupSessionResources(sessionId);
+                await cleanupSessionResources(sessionId);
                 await releaseSessionLock(sessionId);
                 resetReconnectBackoff(sessionId);
             }
@@ -1378,7 +1549,7 @@ async function deleteSession(sessionId) {
     //     fs.rmSync(sessionDir, { recursive: true, force: true });
     // }
 
-    cleanupSessionResources(sessionId);
+    await cleanupSessionResources(sessionId);
     await releaseSessionLock(sessionId);
 
     log(`Session ${sessionId} deleted and data cleared.`, 'SYSTEM');
