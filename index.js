@@ -93,6 +93,13 @@ const WARMUP_WINDOW_HOURS = parseInt(process.env.WARMUP_WINDOW_HOURS || '72', 10
 const MAX_MESSAGES_PER_BATCH = parseInt(process.env.MAX_MESSAGES_PER_BATCH || '50', 10);
 const RECIPIENT_CACHE_TTL_MS = parseInt(process.env.RECIPIENT_CACHE_TTL_MS || (60 * 60 * 1000).toString(), 10);
 const CALL_RESPONSE_TTL_MS = parseInt(process.env.CALL_RESPONSE_TTL_MS || '300000', 10);
+const MESSAGE_HOURLY_LIMIT = parseInt(process.env.MESSAGE_HOURLY_LIMIT || '200', 10);
+const MESSAGE_COOLDOWN_MINUTES = parseInt(process.env.MESSAGE_COOLDOWN_MINUTES || '10', 10);
+const MESSAGE_COOLDOWN_JITTER_MS = parseInt(process.env.MESSAGE_COOLDOWN_JITTER_MS || '15000', 10);
+const MESSAGE_BURST_LIMIT = parseInt(process.env.MESSAGE_BURST_LIMIT || '12', 10);
+const MESSAGE_BURST_WINDOW_SECONDS = parseInt(process.env.MESSAGE_BURST_WINDOW_SECONDS || '25', 10);
+const BURST_DELAY_MIN_MS = parseInt(process.env.BURST_DELAY_MIN_MS || '5000', 10);
+const BURST_DELAY_MAX_MS = parseInt(process.env.BURST_DELAY_MAX_MS || '11000', 10);
 
 const DISABLE_SESSION_LOCK = process.env.DISABLE_SESSION_LOCK === 'true';
 const STRICT_SESSION_LOCK = process.env.STRICT_SESSION_LOCK === 'true';
@@ -136,7 +143,10 @@ function ensureSessionQueueState(sessionId) {
             connectedAt: Date.now(),
             windowStart: 0,
             sentInWindow: 0,
-            lastSentAt: 0
+            lastSentAt: 0,
+            recentMessages: [],
+            cooldownUntil: null,
+            lastThrottleLog: 0
         });
     }
     return sessionSendQueues.get(sessionId);
@@ -162,11 +172,18 @@ async function processSessionQueue(sessionId) {
             continue;
         }
 
+        const throttled = await applyAdvancedThrottle(sessionId, state);
+        if (throttled) {
+            continue;
+        }
+
         const job = state.queue.shift();
         try {
             const result = await job.operation();
             state.sentInWindow += 1;
-            state.lastSentAt = Date.now();
+            const sentAt = Date.now();
+            state.lastSentAt = sentAt;
+            trackRecentMessage(state, sentAt);
             job.resolve(result);
         } catch (error) {
             job.reject(error);
@@ -177,6 +194,84 @@ async function processSessionQueue(sessionId) {
     }
 
     state.processing = false;
+}
+
+function trackRecentMessage(state, ts) {
+    if (!state.recentMessages) {
+        state.recentMessages = [];
+    }
+    state.recentMessages.push(ts);
+    pruneRecentMessages(state, ts);
+}
+
+function pruneRecentMessages(state, now) {
+    const hourWindowMs = 60 * 60 * 1000;
+    state.recentMessages = (state.recentMessages || []).filter((timestamp) => {
+        return (now - timestamp) <= hourWindowMs;
+    });
+}
+
+async function applyAdvancedThrottle(sessionId, state) {
+    const now = Date.now();
+
+    if (state.cooldownUntil && now < state.cooldownUntil) {
+        if (!state.lastThrottleLog || (now - state.lastThrottleLog) > 5000) {
+            emitThrottleEvent(sessionId, 'cooldown-active', {
+                remainingMs: state.cooldownUntil - now
+            });
+            state.lastThrottleLog = now;
+        }
+        await sleep(Math.min(state.cooldownUntil - now, 5000));
+        return true;
+    }
+
+    pruneRecentMessages(state, now);
+
+    if (MESSAGE_HOURLY_LIMIT > 0 && state.recentMessages.length >= MESSAGE_HOURLY_LIMIT) {
+        const jitter = randomBetween(0, MESSAGE_COOLDOWN_JITTER_MS);
+        const cooldownMs = (MESSAGE_COOLDOWN_MINUTES * 60 * 1000) + jitter;
+        state.cooldownUntil = now + cooldownMs;
+        emitThrottleEvent(sessionId, 'cooldown-start', {
+            hourlyCount: state.recentMessages.length,
+            cooldownMs
+        });
+        return true;
+    }
+
+    if (MESSAGE_BURST_LIMIT > 0 && MESSAGE_BURST_WINDOW_SECONDS > 0) {
+        const burstWindowMs = MESSAGE_BURST_WINDOW_SECONDS * 1000;
+        const burstCount = state.recentMessages.filter((timestamp) => {
+            return (now - timestamp) <= burstWindowMs;
+        }).length;
+
+        if (burstCount >= MESSAGE_BURST_LIMIT) {
+            const burstDelay = randomBetween(BURST_DELAY_MIN_MS, BURST_DELAY_MAX_MS);
+            emitThrottleEvent(sessionId, 'burst-delay', {
+                burstCount,
+                burstWindowMs,
+                delayMs: burstDelay
+            });
+            await sleep(burstDelay);
+        }
+    }
+
+    return false;
+}
+
+function emitThrottleEvent(sessionId, status, metrics = {}) {
+    log(`[Throttle] ${status} - session ${sessionId}`, sessionId, {
+        status,
+        ...metrics
+    });
+    broadcast({
+        type: 'throttle-event',
+        data: {
+            sessionId,
+            status,
+            metrics,
+            timestamp: Date.now()
+        }
+    });
 }
 
 function calculateHumanDelayMs(state) {
@@ -194,6 +289,9 @@ function registerSessionConnected(sessionId) {
     state.connectedAt = Date.now();
     state.windowStart = Date.now();
     state.sentInWindow = 0;
+    state.cooldownUntil = null;
+    state.lastThrottleLog = 0;
+    state.recentMessages = [];
 }
 
 async function cleanupSessionResources(sessionId) {
@@ -638,6 +736,21 @@ app.get('/', (req, res) => {
 // Serve API documentation
 app.get('/api-documentation', (req, res) => {
     res.sendFile(path.join(__dirname, 'api_documentation.html'));
+});
+
+app.get('/healthz', async (req, res) => {
+    const redisStatus = redisClient.isReady ? 'up' : 'down';
+    const redisSessionStatus = redisSessionClient.isReady ? 'up' : 'down';
+    const healthy = redisStatus === 'up' && redisSessionStatus === 'up';
+    res.status(healthy ? 200 : 503).json({
+        status: healthy ? 'ok' : 'degraded',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        dependencies: {
+            redis: redisStatus,
+            redisSessionStore: redisSessionStatus
+        }
+    });
 });
 
 // Redirect old URL to new one

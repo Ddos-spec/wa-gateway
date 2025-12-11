@@ -44,6 +44,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const pairingForm = document.getElementById('pairing-form');
     const phoneNumberInput = document.getElementById('phone-number');
     const pairingCodeDisplay = document.getElementById('pairing-code-display');
+    const settingsFeedback = document.getElementById('settings-feedback');
+    let feedbackTimer = null;
 
     let sessionToken = null;
 
@@ -105,6 +107,19 @@ document.addEventListener('DOMContentLoaded', function() {
         else if (state === 'connected') displayConnected.classList.remove('d-none');
         else if (state === 'loading') displayLoading.classList.remove('d-none');
         else if (state === 'error') displayError.classList.remove('d-none');
+    }
+
+    function showSettingsFeedback(message, variant = 'success') {
+        if (!settingsFeedback) return;
+        settingsFeedback.textContent = message;
+        settingsFeedback.className = `alert alert-${variant}`;
+        settingsFeedback.classList.remove('d-none');
+        if (feedbackTimer) {
+            clearTimeout(feedbackTimer);
+        }
+        feedbackTimer = setTimeout(() => {
+            settingsFeedback.classList.add('d-none');
+        }, 4000);
     }
 
     async function fetchSessionData() {
@@ -251,13 +266,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 const result = await response.json();
                 if (response.ok) {
-                    alert('Settings saved successfully!');
+                    showSettingsFeedback('Settings saved successfully!', 'success');
                     fetchSessionData();
                 } else {
                     throw new Error(result.message || 'Failed to save settings');
                 }
             } catch (error) {
-                alert(`Error saving settings: ${error.message}`);
+                showSettingsFeedback(`Error saving settings: ${error.message}`, 'danger');
             }
         });
     });
