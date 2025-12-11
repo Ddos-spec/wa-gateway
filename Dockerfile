@@ -9,12 +9,11 @@ RUN apk add --no-cache python3 make g++ git vips-dev font-noto
 WORKDIR /app
 
 # --- Tahap 2: Dependencies ---
-# Copy package.json saja dulu untuk memanfaatkan layer caching Docker
-COPY package.json ./
+# Copy package.json dan package-lock.json untuk memanfaatkan layer caching Docker
+COPY package*.json ./
 
-# Install dependencies (gunakan --production jika ingin lebih hemat, tapi terkadang devDeps dibutuhkan untuk build script)
-# Kita gunakan 'npm install' standar untuk memastikan kompatibilitas maksimal
-RUN npm install
+# Install dependencies memakai lockfile jika tersedia untuk konsistensi
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
 
 # --- Tahap 3: Source Code ---
 # Copy seluruh kode aplikasi (yang tidak di-ignore .dockerignore)
