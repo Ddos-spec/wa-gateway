@@ -42,7 +42,7 @@ const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const session = require('express-session');
 const PhonePairing = require('./phone-pairing'); // Add PhonePairing import
-const FileStore = require('session-file-store')(session); // Keep for express-session for now (or move to RedisStore later if requested)
+const RedisStore = require('connect-redis').default;
 
 // User Manager & Activity Logger removed for performance
 // const UserManager = require('./users');
@@ -56,13 +56,22 @@ const wss = new WebSocketServer({ server });
 // --- REDIS SETUP ---
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379'; // Default to localhost if not set
 const redisClient = createClient({ url: REDIS_URL });
+const redisSessionClient = createClient({
+    url: REDIS_URL,
+    legacyMode: true
+});
 
 redisClient.on('error', (err) => console.error('❌ Redis Client Error', err));
 redisClient.on('connect', () => console.log('✅ Connected to Redis'));
+redisSessionClient.on('error', (err) => console.error('❌ Redis Session Store Error', err));
+redisSessionClient.on('connect', () => console.log('✅ Connected to Redis Session Store'));
 
 // Connect to Redis immediately
 (async () => {
-    await redisClient.connect();
+    await Promise.all([
+        redisClient.connect(),
+        redisSessionClient.connect()
+    ]);
 })();
 // -------------------
 
@@ -592,12 +601,11 @@ wss.on('connection', (ws, req) => {
     });
 });
 
-// Use file-based session store for production
-const sessionStore = new FileStore({
-    path: './sessions',
-    ttl: 86400, // 1 day
-    retries: 3,
-    secret: process.env.SESSION_SECRET || 'change_this_secret'
+// Gunakan Redis sebagai session store agar stateless antar instance
+const sessionStore = new RedisStore({
+    client: redisSessionClient,
+    prefix: 'wa:express-session:',
+    disableTouch: false
 });
 
 app.use(session({
@@ -607,7 +615,7 @@ app.use(session({
     saveUninitialized: false,
     cookie: { 
         httpOnly: true, 
-        secure: false, // Set secure: true if using HTTPS
+        secure: process.env.NODE_ENV === 'production',
         maxAge: 86400000 // 1 day
     }
 }));
