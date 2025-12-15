@@ -1,5 +1,5 @@
 const express = require('express');
-const { jidNormalizedUser } = require('@whiskeysockets/baileys');
+const { jidNormalizedUser, downloadMediaMessage, getContentType } = require('@whiskeysockets/baileys');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -997,15 +997,22 @@ function initializeApi(
         // Restrict file type and size
         const allowedTypes = [
             'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-            'application/pdf', 'application/msword', 
+            'application/pdf', 'application/msword',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            // Audio types
+            'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/ogg', 'audio/wav',
+            'audio/x-wav', 'audio/webm', 'audio/aac', 'audio/opus',
+            // Video types
+            'video/mp4', 'video/3gpp', 'video/quicktime', 'video/webm',
+            // Sticker types
+            'image/webp'
         ];
         if (!allowedTypes.includes(req.file.mimetype)) {
             fs.unlinkSync(req.file.path);
             log('API error', 'SYSTEM', { event: 'api-error', error: 'Invalid file type.', endpoint: req.originalUrl });
-            return res.status(400).json({ status: 'error', message: 'Invalid file type. Allowed: JPEG, PNG, GIF, WebP, PDF, DOC, DOCX, XLS, XLSX.' });
+            return res.status(400).json({ status: 'error', message: 'Invalid file type. Allowed: Images (JPEG, PNG, GIF, WebP), Audio (MP3, MP4, OGG, WAV, WebM, AAC, Opus), Video (MP4, 3GPP, QuickTime, WebM), Documents (PDF, DOC, DOCX, XLS, XLSX).' });
         }
         if (req.file.size > 25 * 1024 * 1024) { // 25MB
             fs.unlinkSync(req.file.path);
@@ -1186,6 +1193,185 @@ function initializeApi(
                         };
                         break;
                     }
+                    case 'audio': {
+                        const aud = msg.audio;
+                        if (!aud || (!aud.link && !aud.id)) {
+                            throw new Error('For "audio" type, "audio.link" or "audio.id" is required.');
+                        }
+                        const audioUrl = aud.id ? path.join(mediaDir, aud.id) : aud.link;
+                        messagePayload = {
+                            audio: { url: audioUrl },
+                            mimetype: aud.mimetype || 'audio/mp4',
+                            ptt: aud.ptt || false // Voice note if true
+                        };
+                        break;
+                    }
+                    case 'sticker': {
+                        const stk = msg.sticker;
+                        if (!stk || (!stk.link && !stk.id)) {
+                            throw new Error('For "sticker" type, "sticker.link" or "sticker.id" is required.');
+                        }
+                        const stickerUrl = stk.id ? path.join(mediaDir, stk.id) : stk.link;
+                        messagePayload = {
+                            sticker: { url: stickerUrl }
+                        };
+                        break;
+                    }
+                    case 'location': {
+                        const loc = msg.location;
+                        if (!loc || typeof loc.latitude !== 'number' || typeof loc.longitude !== 'number') {
+                            throw new Error('For "location" type, "location.latitude" and "location.longitude" (numbers) are required.');
+                        }
+                        messagePayload = {
+                            location: {
+                                degreesLatitude: loc.latitude,
+                                degreesLongitude: loc.longitude,
+                                name: loc.name || '',
+                                address: loc.address || ''
+                            }
+                        };
+                        break;
+                    }
+                    case 'contact': {
+                        const cnt = msg.contact;
+                        if (!cnt || !cnt.name || !cnt.phone) {
+                            throw new Error('For "contact" type, "contact.name" and "contact.phone" are required.');
+                        }
+                        const vcard = `BEGIN:VCARD\nVERSION:3.0\nFN:${cnt.name}\nTEL;type=CELL;type=VOICE;waid=${cnt.phone.replace(/\D/g, '')}:${cnt.phone}\nEND:VCARD`;
+                        messagePayload = {
+                            contacts: {
+                                displayName: cnt.name,
+                                contacts: [{
+                                    vcard: vcard
+                                }]
+                            }
+                        };
+                        break;
+                    }
+                    case 'contacts': {
+                        const cnts = msg.contacts;
+                        if (!cnts || !Array.isArray(cnts) || cnts.length === 0) {
+                            throw new Error('For "contacts" type, "contacts" array with at least one contact is required.');
+                        }
+                        const vcards = cnts.map(c => ({
+                            vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${c.name}\nTEL;type=CELL;type=VOICE;waid=${c.phone.replace(/\D/g, '')}:${c.phone}\nEND:VCARD`
+                        }));
+                        messagePayload = {
+                            contacts: {
+                                displayName: cnts.length > 1 ? `${cnts.length} contacts` : cnts[0].name,
+                                contacts: vcards
+                            }
+                        };
+                        break;
+                    }
+                    case 'reaction': {
+                        const react = msg.reaction;
+                        if (!react || !react.messageId || !react.emoji) {
+                            throw new Error('For "reaction" type, "reaction.messageId" and "reaction.emoji" are required.');
+                        }
+                        messagePayload = {
+                            react: {
+                                text: react.emoji,
+                                key: {
+                                    remoteJid: destination,
+                                    id: react.messageId,
+                                    fromMe: react.fromMe || false
+                                }
+                            }
+                        };
+                        break;
+                    }
+                    case 'poll': {
+                        const poll = msg.poll;
+                        if (!poll || !poll.name || !poll.options || !Array.isArray(poll.options) || poll.options.length < 2) {
+                            throw new Error('For "poll" type, "poll.name" and "poll.options" (array with at least 2 options) are required.');
+                        }
+                        messagePayload = {
+                            poll: {
+                                name: poll.name,
+                                values: poll.options,
+                                selectableCount: poll.selectableCount || 1
+                            }
+                        };
+                        break;
+                    }
+                    case 'button': {
+                        const btn = msg.button;
+                        if (!btn || !btn.text || !btn.buttons || !Array.isArray(btn.buttons)) {
+                            throw new Error('For "button" type, "button.text" and "button.buttons" array are required.');
+                        }
+                        messagePayload = {
+                            text: btn.text,
+                            footer: btn.footer || '',
+                            buttons: btn.buttons.map((b, i) => ({
+                                buttonId: b.id || `btn_${i}`,
+                                buttonText: { displayText: b.text },
+                                type: 1
+                            })),
+                            headerType: 1
+                        };
+                        break;
+                    }
+                    case 'list': {
+                        const lst = msg.list;
+                        if (!lst || !lst.text || !lst.buttonText || !lst.sections || !Array.isArray(lst.sections)) {
+                            throw new Error('For "list" type, "list.text", "list.buttonText", and "list.sections" array are required.');
+                        }
+                        messagePayload = {
+                            text: lst.text,
+                            footer: lst.footer || '',
+                            title: lst.title || '',
+                            buttonText: lst.buttonText,
+                            sections: lst.sections.map(section => ({
+                                title: section.title || '',
+                                rows: (section.rows || []).map((row, i) => ({
+                                    rowId: row.id || `row_${i}`,
+                                    title: row.title,
+                                    description: row.description || ''
+                                }))
+                            }))
+                        };
+                        break;
+                    }
+                    case 'template': {
+                        const tpl = msg.template;
+                        if (!tpl || !tpl.text || !tpl.buttons || !Array.isArray(tpl.buttons)) {
+                            throw new Error('For "template" type, "template.text" and "template.buttons" array are required.');
+                        }
+                        const templateButtons = tpl.buttons.map((b, i) => {
+                            if (b.type === 'url') {
+                                return {
+                                    index: i + 1,
+                                    urlButton: {
+                                        displayText: b.text,
+                                        url: b.url
+                                    }
+                                };
+                            } else if (b.type === 'call') {
+                                return {
+                                    index: i + 1,
+                                    callButton: {
+                                        displayText: b.text,
+                                        phoneNumber: b.phone
+                                    }
+                                };
+                            } else {
+                                return {
+                                    index: i + 1,
+                                    quickReplyButton: {
+                                        displayText: b.text,
+                                        id: b.id || `quick_${i}`
+                                    }
+                                };
+                            }
+                        });
+                        messagePayload = {
+                            text: tpl.text,
+                            footer: tpl.footer || '',
+                            templateButtons: templateButtons
+                        };
+                        break;
+                    }
                     default:
                         throw new Error(`Unsupported message type: ${type}`);
                 }
@@ -1261,7 +1447,7 @@ function initializeApi(
             await session.sock.chatModify({
                 clear: { messages: [{ id: messageId, fromMe: true, timestamp: 0 }] }
             }, remoteJid);
-            
+
             // The above is for clearing. For actual deletion:
             await session.sock.sendMessage(remoteJid, { delete: { remoteJid: remoteJid, fromMe: true, id: messageId } });
 
@@ -1271,6 +1457,1384 @@ function initializeApi(
             log('API error', 'SYSTEM', { event: 'api-error', error: error.message, endpoint: req.originalUrl });
             console.error(`Failed to delete message ${messageId}:`, error);
             res.status(500).json({ status: 'error', message: `Failed to delete message. Reason: ${error.message}` });
+        }
+    });
+
+    // ==================== ALBUM (Multiple Images) ====================
+    router.post('/album', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { to, images, caption } = req.body;
+
+        if (!sessionId || !to || !images || !Array.isArray(images) || images.length < 2) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'sessionId, to, and images array (min 2 images) are required.'
+            });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const destination = to.includes('@') ? to : `${formatPhoneNumber(to)}@s.whatsapp.net`;
+            const results = [];
+
+            // Send first image with caption
+            for (let i = 0; i < images.length; i++) {
+                const img = images[i];
+                const imageUrl = img.id ? path.join(mediaDir, img.id) : img.link;
+                const messagePayload = {
+                    image: { url: imageUrl },
+                    caption: i === 0 ? (caption || img.caption || '') : (img.caption || '')
+                };
+
+                const result = await session.sock.sendMessage(destination, messagePayload);
+                results.push({ index: i, messageId: result.key.id, status: 'sent' });
+
+                // Small delay between images for album grouping
+                if (i < images.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+            }
+
+            res.status(200).json({ status: 'success', message: 'Album sent', results });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== GROUP OPERATIONS ====================
+
+    // Create Group
+    router.post('/groups', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { name, participants } = req.body;
+
+        if (!sessionId || !name || !participants || !Array.isArray(participants)) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'sessionId, name, and participants array are required.'
+            });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const participantJids = participants.map(p =>
+                p.includes('@') ? p : `${formatPhoneNumber(p)}@s.whatsapp.net`
+            );
+
+            const group = await session.sock.groupCreate(name, participantJids);
+
+            res.status(201).json({
+                status: 'success',
+                message: 'Group created',
+                group: {
+                    id: group.id,
+                    gid: group.gid,
+                    name: name
+                }
+            });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Get Group Metadata
+    router.get('/groups/:groupId', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId;
+        const { groupId } = req.params;
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groupJid = groupId.includes('@') ? groupId : `${groupId}@g.us`;
+            const metadata = await session.sock.groupMetadata(groupJid);
+
+            res.status(200).json({ status: 'success', group: metadata });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Update Group Subject (Name)
+    router.put('/groups/:groupId/subject', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { groupId } = req.params;
+        const { subject } = req.body;
+
+        if (!subject) {
+            return res.status(400).json({ status: 'error', message: 'subject is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groupJid = groupId.includes('@') ? groupId : `${groupId}@g.us`;
+            await session.sock.groupUpdateSubject(groupJid, subject);
+
+            res.status(200).json({ status: 'success', message: 'Group subject updated' });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Update Group Description
+    router.put('/groups/:groupId/description', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { groupId } = req.params;
+        const { description } = req.body;
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groupJid = groupId.includes('@') ? groupId : `${groupId}@g.us`;
+            await session.sock.groupUpdateDescription(groupJid, description || '');
+
+            res.status(200).json({ status: 'success', message: 'Group description updated' });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Update Group Picture
+    router.put('/groups/:groupId/picture', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { groupId } = req.params;
+        const { image } = req.body; // { id: 'mediaId' } or { link: 'url' }
+
+        if (!image || (!image.id && !image.link)) {
+            return res.status(400).json({ status: 'error', message: 'image.id or image.link is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groupJid = groupId.includes('@') ? groupId : `${groupId}@g.us`;
+            const imageUrl = image.id ? path.join(mediaDir, image.id) : image.link;
+
+            await session.sock.updateProfilePicture(groupJid, { url: imageUrl });
+
+            res.status(200).json({ status: 'success', message: 'Group picture updated' });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Add Participants to Group
+    router.post('/groups/:groupId/participants', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { groupId } = req.params;
+        const { participants } = req.body;
+
+        if (!participants || !Array.isArray(participants) || participants.length === 0) {
+            return res.status(400).json({ status: 'error', message: 'participants array is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groupJid = groupId.includes('@') ? groupId : `${groupId}@g.us`;
+            const participantJids = participants.map(p =>
+                p.includes('@') ? p : `${formatPhoneNumber(p)}@s.whatsapp.net`
+            );
+
+            const result = await session.sock.groupParticipantsUpdate(groupJid, participantJids, 'add');
+
+            res.status(200).json({ status: 'success', message: 'Participants added', result });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Remove Participants from Group
+    router.delete('/groups/:groupId/participants', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { groupId } = req.params;
+        const { participants } = req.body;
+
+        if (!participants || !Array.isArray(participants) || participants.length === 0) {
+            return res.status(400).json({ status: 'error', message: 'participants array is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groupJid = groupId.includes('@') ? groupId : `${groupId}@g.us`;
+            const participantJids = participants.map(p =>
+                p.includes('@') ? p : `${formatPhoneNumber(p)}@s.whatsapp.net`
+            );
+
+            const result = await session.sock.groupParticipantsUpdate(groupJid, participantJids, 'remove');
+
+            res.status(200).json({ status: 'success', message: 'Participants removed', result });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Promote Participants to Admin
+    router.post('/groups/:groupId/admins', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { groupId } = req.params;
+        const { participants } = req.body;
+
+        if (!participants || !Array.isArray(participants) || participants.length === 0) {
+            return res.status(400).json({ status: 'error', message: 'participants array is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groupJid = groupId.includes('@') ? groupId : `${groupId}@g.us`;
+            const participantJids = participants.map(p =>
+                p.includes('@') ? p : `${formatPhoneNumber(p)}@s.whatsapp.net`
+            );
+
+            const result = await session.sock.groupParticipantsUpdate(groupJid, participantJids, 'promote');
+
+            res.status(200).json({ status: 'success', message: 'Participants promoted to admin', result });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Demote Admins to Participants
+    router.delete('/groups/:groupId/admins', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { groupId } = req.params;
+        const { participants } = req.body;
+
+        if (!participants || !Array.isArray(participants) || participants.length === 0) {
+            return res.status(400).json({ status: 'error', message: 'participants array is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groupJid = groupId.includes('@') ? groupId : `${groupId}@g.us`;
+            const participantJids = participants.map(p =>
+                p.includes('@') ? p : `${formatPhoneNumber(p)}@s.whatsapp.net`
+            );
+
+            const result = await session.sock.groupParticipantsUpdate(groupJid, participantJids, 'demote');
+
+            res.status(200).json({ status: 'success', message: 'Admins demoted', result });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Update Group Settings
+    router.put('/groups/:groupId/settings', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { groupId } = req.params;
+        const { setting, value } = req.body; // setting: 'announcement' | 'not_announcement' | 'locked' | 'unlocked'
+
+        if (!setting) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'setting is required. Options: announcement, not_announcement, locked, unlocked'
+            });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groupJid = groupId.includes('@') ? groupId : `${groupId}@g.us`;
+            await session.sock.groupSettingUpdate(groupJid, setting);
+
+            res.status(200).json({ status: 'success', message: `Group setting updated to ${setting}` });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Leave Group
+    router.post('/groups/:groupId/leave', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { groupId } = req.params;
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groupJid = groupId.includes('@') ? groupId : `${groupId}@g.us`;
+            await session.sock.groupLeave(groupJid);
+
+            res.status(200).json({ status: 'success', message: 'Left the group' });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Get Group Invite Code
+    router.get('/groups/:groupId/invite-code', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId;
+        const { groupId } = req.params;
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groupJid = groupId.includes('@') ? groupId : `${groupId}@g.us`;
+            const code = await session.sock.groupInviteCode(groupJid);
+
+            res.status(200).json({
+                status: 'success',
+                inviteCode: code,
+                inviteLink: `https://chat.whatsapp.com/${code}`
+            });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Revoke Group Invite Code
+    router.post('/groups/:groupId/revoke-invite', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { groupId } = req.params;
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groupJid = groupId.includes('@') ? groupId : `${groupId}@g.us`;
+            const newCode = await session.sock.groupRevokeInvite(groupJid);
+
+            res.status(200).json({
+                status: 'success',
+                message: 'Invite code revoked',
+                newInviteCode: newCode,
+                newInviteLink: `https://chat.whatsapp.com/${newCode}`
+            });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Accept Group Invite
+    router.post('/groups/accept-invite', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { inviteCode } = req.body;
+
+        if (!inviteCode) {
+            return res.status(400).json({ status: 'error', message: 'inviteCode is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            // Extract code if full link was provided
+            const code = inviteCode.includes('chat.whatsapp.com/')
+                ? inviteCode.split('chat.whatsapp.com/')[1]
+                : inviteCode;
+
+            const groupId = await session.sock.groupAcceptInvite(code);
+
+            res.status(200).json({
+                status: 'success',
+                message: 'Joined group via invite',
+                groupId: groupId
+            });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== PROFILE OPERATIONS ====================
+
+    // Get Profile Info
+    router.get('/profile', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId;
+        const { number } = req.query; // Optional: get another user's profile
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            let jid;
+            if (number) {
+                jid = number.includes('@') ? number : `${formatPhoneNumber(number)}@s.whatsapp.net`;
+            } else {
+                jid = session.sock.user.id;
+            }
+
+            const [status, profilePic] = await Promise.allSettled([
+                session.sock.fetchStatus(jid),
+                session.sock.profilePictureUrl(jid, 'image')
+            ]);
+
+            res.status(200).json({
+                status: 'success',
+                profile: {
+                    jid: jid,
+                    name: session.sock.user?.name || null,
+                    status: status.status === 'fulfilled' ? status.value?.status : null,
+                    setAt: status.status === 'fulfilled' ? status.value?.setAt : null,
+                    profilePicture: profilePic.status === 'fulfilled' ? profilePic.value : null
+                }
+            });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Update Profile Name
+    router.put('/profile/name', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { name } = req.body;
+
+        if (!name) {
+            return res.status(400).json({ status: 'error', message: 'name is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            await session.sock.updateProfileName(name);
+            res.status(200).json({ status: 'success', message: 'Profile name updated' });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Update Profile Status (About)
+    router.put('/profile/status', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { status: statusText } = req.body;
+
+        if (statusText === undefined) {
+            return res.status(400).json({ status: 'error', message: 'status is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            await session.sock.updateProfileStatus(statusText);
+            res.status(200).json({ status: 'success', message: 'Profile status updated' });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Update Profile Picture
+    router.put('/profile/picture', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { image } = req.body; // { id: 'mediaId' } or { link: 'url' }
+
+        if (!image || (!image.id && !image.link)) {
+            return res.status(400).json({ status: 'error', message: 'image.id or image.link is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const imageUrl = image.id ? path.join(mediaDir, image.id) : image.link;
+            await session.sock.updateProfilePicture(session.sock.user.id, { url: imageUrl });
+            res.status(200).json({ status: 'success', message: 'Profile picture updated' });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Remove Profile Picture
+    router.delete('/profile/picture', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            await session.sock.removeProfilePicture(session.sock.user.id);
+            res.status(200).json({ status: 'success', message: 'Profile picture removed' });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== PRESENCE & READ RECEIPTS ====================
+
+    // Update Presence (Online/Offline/Typing)
+    router.post('/presence', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { to, presence } = req.body; // presence: 'available' | 'unavailable' | 'composing' | 'recording' | 'paused'
+
+        if (!presence) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'presence is required. Options: available, unavailable, composing, recording, paused'
+            });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            if (to) {
+                const destination = to.includes('@') ? to : `${formatPhoneNumber(to)}@s.whatsapp.net`;
+                await session.sock.sendPresenceUpdate(presence, destination);
+            } else {
+                await session.sock.sendPresenceUpdate(presence);
+            }
+            res.status(200).json({ status: 'success', message: `Presence updated to ${presence}` });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Mark Messages as Read
+    router.post('/read', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { messages } = req.body; // Array of { remoteJid, id, participant? }
+
+        if (!messages || !Array.isArray(messages) || messages.length === 0) {
+            return res.status(400).json({ status: 'error', message: 'messages array is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const keys = messages.map(m => ({
+                remoteJid: m.remoteJid,
+                id: m.id,
+                participant: m.participant
+            }));
+
+            await session.sock.readMessages(keys);
+            res.status(200).json({ status: 'success', message: 'Messages marked as read' });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // Get Last Seen / Presence
+    router.get('/presence/:number', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId;
+        const { number } = req.params;
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const jid = number.includes('@') ? number : `${formatPhoneNumber(number)}@s.whatsapp.net`;
+
+            // Subscribe to presence updates
+            await session.sock.presenceSubscribe(jid);
+
+            res.status(200).json({
+                status: 'success',
+                message: 'Subscribed to presence updates. Listen for presence events via webhook.'
+            });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== BROADCAST ====================
+
+    // Send Broadcast Message (to multiple contacts)
+    router.post('/broadcast', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { recipients, message } = req.body;
+
+        if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+            return res.status(400).json({ status: 'error', message: 'recipients array is required.' });
+        }
+
+        if (!message || !message.type) {
+            return res.status(400).json({ status: 'error', message: 'message with type is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        const results = [];
+
+        for (const recipient of recipients) {
+            try {
+                const destination = recipient.includes('@')
+                    ? recipient
+                    : `${formatPhoneNumber(recipient)}@s.whatsapp.net`;
+
+                // Build message payload based on type
+                let messagePayload;
+                switch (message.type) {
+                    case 'text':
+                        messagePayload = { text: message.text };
+                        break;
+                    case 'image':
+                        const imgUrl = message.image.id ? path.join(mediaDir, message.image.id) : message.image.link;
+                        messagePayload = { image: { url: imgUrl }, caption: message.image.caption || '' };
+                        break;
+                    case 'document':
+                        const docUrl = message.document.id ? path.join(mediaDir, message.document.id) : message.document.link;
+                        messagePayload = { document: { url: docUrl }, fileName: message.document.filename };
+                        break;
+                    default:
+                        messagePayload = { text: message.text || 'Broadcast message' };
+                }
+
+                const result = await session.sock.sendMessage(destination, messagePayload);
+                results.push({ recipient, status: 'sent', messageId: result.key.id });
+
+                // Add delay between messages to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+            } catch (error) {
+                results.push({ recipient, status: 'failed', error: error.message });
+            }
+        }
+
+        res.status(200).json({
+            status: 'success',
+            message: `Broadcast sent to ${results.filter(r => r.status === 'sent').length}/${recipients.length} recipients`,
+            results
+        });
+    });
+
+    // ==================== FORWARD MESSAGE ====================
+
+    router.post('/forward', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { to, messageId, fromJid } = req.body;
+
+        if (!to || !messageId || !fromJid) {
+            return res.status(400).json({ status: 'error', message: 'to, messageId, and fromJid are required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const destination = to.includes('@') ? to : `${formatPhoneNumber(to)}@s.whatsapp.net`;
+
+            // Forward message
+            await session.sock.sendMessage(destination, {
+                forward: {
+                    key: {
+                        remoteJid: fromJid,
+                        id: messageId
+                    }
+                }
+            });
+
+            res.status(200).json({ status: 'success', message: 'Message forwarded' });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== STARRED MESSAGES ====================
+
+    router.post('/star', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { messages, star } = req.body; // messages: [{ remoteJid, id }], star: true/false
+
+        if (!messages || !Array.isArray(messages) || messages.length === 0) {
+            return res.status(400).json({ status: 'error', message: 'messages array is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            for (const msg of messages) {
+                await session.sock.chatModify({
+                    star: {
+                        messages: [{ id: msg.id, fromMe: msg.fromMe || false }],
+                        star: star !== false
+                    }
+                }, msg.remoteJid);
+            }
+
+            res.status(200).json({ status: 'success', message: `Messages ${star !== false ? 'starred' : 'unstarred'}` });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== CHANNEL MESSAGING ====================
+
+    // Get Newsletters/Channels
+    router.get('/channels', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId;
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const newsletters = await session.sock.newsletterMetadata('subscribed');
+            res.status(200).json({ status: 'success', channels: newsletters });
+        } catch (error) {
+            // Channels may not be supported on all accounts
+            res.status(200).json({ status: 'success', channels: [], note: 'Channels feature may not be available' });
+        }
+    });
+
+    // Send Message to Channel
+    router.post('/channels/:channelId/messages', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { channelId } = req.params;
+        const { type, text, image, video, document } = req.body;
+
+        if (!type) {
+            return res.status(400).json({ status: 'error', message: 'type is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const channelJid = channelId.includes('@') ? channelId : `${channelId}@newsletter`;
+
+            let messagePayload;
+            switch (type) {
+                case 'text':
+                    messagePayload = { text: text };
+                    break;
+                case 'image':
+                    const imgUrl = image.id ? path.join(mediaDir, image.id) : image.link;
+                    messagePayload = { image: { url: imgUrl }, caption: image.caption || '' };
+                    break;
+                case 'video':
+                    const vidUrl = video.id ? path.join(mediaDir, video.id) : video.link;
+                    messagePayload = { video: { url: vidUrl }, caption: video.caption || '' };
+                    break;
+                case 'document':
+                    const docUrl = document.id ? path.join(mediaDir, document.id) : document.link;
+                    messagePayload = { document: { url: docUrl }, fileName: document.filename };
+                    break;
+                default:
+                    return res.status(400).json({ status: 'error', message: 'Unsupported message type for channel.' });
+            }
+
+            const result = await session.sock.sendMessage(channelJid, messagePayload);
+            res.status(200).json({ status: 'success', message: 'Message sent to channel', messageId: result.key.id });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== CHECK NUMBER ON WHATSAPP ====================
+
+    router.post('/check-number', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { numbers } = req.body;
+
+        if (!numbers || !Array.isArray(numbers) || numbers.length === 0) {
+            return res.status(400).json({ status: 'error', message: 'numbers array is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const results = [];
+
+            for (const number of numbers) {
+                const jid = number.includes('@') ? number : `${formatPhoneNumber(number)}@s.whatsapp.net`;
+                const [result] = await session.sock.onWhatsApp(jid);
+
+                results.push({
+                    number: number,
+                    exists: result?.exists || false,
+                    jid: result?.jid || null
+                });
+            }
+
+            res.status(200).json({ status: 'success', results });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== GET CONTACTS ====================
+
+    router.get('/contacts', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId;
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            // Get contacts from store if available
+            const contacts = session.sock.store?.contacts || {};
+            res.status(200).json({ status: 'success', contacts });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== ARCHIVE/UNARCHIVE CHAT ====================
+
+    router.post('/archive', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { chatId, archive } = req.body;
+
+        if (!chatId) {
+            return res.status(400).json({ status: 'error', message: 'chatId is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const jid = chatId.includes('@') ? chatId : `${formatPhoneNumber(chatId)}@s.whatsapp.net`;
+
+            await session.sock.chatModify({
+                archive: archive !== false
+            }, jid);
+
+            res.status(200).json({ status: 'success', message: `Chat ${archive !== false ? 'archived' : 'unarchived'}` });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== MUTE/UNMUTE CHAT ====================
+
+    router.post('/mute', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { chatId, mute, duration } = req.body; // duration in seconds (null = forever)
+
+        if (!chatId) {
+            return res.status(400).json({ status: 'error', message: 'chatId is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const jid = chatId.includes('@') ? chatId : `${formatPhoneNumber(chatId)}@s.whatsapp.net`;
+
+            if (mute !== false) {
+                const muteExpiration = duration ? Date.now() + (duration * 1000) : null;
+                await session.sock.chatModify({
+                    mute: muteExpiration
+                }, jid);
+            } else {
+                await session.sock.chatModify({
+                    mute: null
+                }, jid);
+            }
+
+            res.status(200).json({ status: 'success', message: `Chat ${mute !== false ? 'muted' : 'unmuted'}` });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== PIN/UNPIN CHAT ====================
+
+    router.post('/pin', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { chatId, pin } = req.body;
+
+        if (!chatId) {
+            return res.status(400).json({ status: 'error', message: 'chatId is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const jid = chatId.includes('@') ? chatId : `${formatPhoneNumber(chatId)}@s.whatsapp.net`;
+
+            await session.sock.chatModify({
+                pin: pin !== false
+            }, jid);
+
+            res.status(200).json({ status: 'success', message: `Chat ${pin !== false ? 'pinned' : 'unpinned'}` });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== CLEAR CHAT ====================
+
+    router.post('/clear', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { chatId } = req.body;
+
+        if (!chatId) {
+            return res.status(400).json({ status: 'error', message: 'chatId is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const jid = chatId.includes('@') ? chatId : `${formatPhoneNumber(chatId)}@s.whatsapp.net`;
+
+            await session.sock.chatModify({
+                delete: true,
+                lastMessages: [{ key: { remoteJid: jid }, messageTimestamp: 0 }]
+            }, jid);
+
+            res.status(200).json({ status: 'success', message: 'Chat cleared' });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== BLOCK/UNBLOCK CONTACT ====================
+
+    router.post('/block', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { number, block } = req.body;
+
+        if (!number) {
+            return res.status(400).json({ status: 'error', message: 'number is required.' });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const jid = number.includes('@') ? number : `${formatPhoneNumber(number)}@s.whatsapp.net`;
+
+            if (block !== false) {
+                await session.sock.updateBlockStatus(jid, 'block');
+            } else {
+                await session.sock.updateBlockStatus(jid, 'unblock');
+            }
+
+            res.status(200).json({ status: 'success', message: `Contact ${block !== false ? 'blocked' : 'unblocked'}` });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== GET BUSINESS PROFILE ====================
+
+    router.get('/business-profile/:number', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId;
+        const { number } = req.params;
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const jid = number.includes('@') ? number : `${formatPhoneNumber(number)}@s.whatsapp.net`;
+            const profile = await session.sock.getBusinessProfile(jid);
+
+            res.status(200).json({ status: 'success', profile });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== DOWNLOAD MEDIA FROM MESSAGE ====================
+
+    router.post('/download-media', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { message } = req.body; // The full message object from webhook
+
+        if (!message || !message.message) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'message object with message content is required.'
+            });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            // Determine message type
+            const messageContent = message.message;
+            const contentType = getContentType(messageContent);
+
+            if (!contentType) {
+                return res.status(400).json({ status: 'error', message: 'Unable to determine message content type.' });
+            }
+
+            // Check if it's a media type
+            const mediaTypes = ['imageMessage', 'videoMessage', 'audioMessage', 'stickerMessage', 'documentMessage', 'documentWithCaptionMessage'];
+            const actualType = contentType === 'documentWithCaptionMessage'
+                ? 'documentMessage'
+                : contentType;
+
+            if (!mediaTypes.includes(contentType) && !mediaTypes.includes(actualType)) {
+                return res.status(400).json({
+                    status: 'error',
+                    message: `Message type "${contentType}" is not a downloadable media type.`
+                });
+            }
+
+            // Download media
+            const buffer = await downloadMediaMessage(
+                message,
+                'buffer',
+                {},
+                {
+                    logger: console,
+                    reuploadRequest: session.sock.updateMediaMessage
+                }
+            );
+
+            // Get media info
+            const mediaMessage = messageContent[actualType] || messageContent[contentType];
+            const mimetype = mediaMessage?.mimetype || 'application/octet-stream';
+            const filename = mediaMessage?.fileName || `media_${Date.now()}`;
+
+            // Option 1: Return as base64
+            if (req.body.format === 'base64') {
+                return res.status(200).json({
+                    status: 'success',
+                    mediaType: actualType,
+                    mimetype,
+                    filename,
+                    data: buffer.toString('base64'),
+                    size: buffer.length
+                });
+            }
+
+            // Option 2: Save to server and return URL
+            if (req.body.format === 'file' || !req.body.format) {
+                const ext = mimetype.split('/')[1] || 'bin';
+                const savedFilename = `${randomUUID()}.${ext}`;
+                const filePath = path.join(mediaDir, savedFilename);
+
+                fs.writeFileSync(filePath, buffer);
+
+                return res.status(200).json({
+                    status: 'success',
+                    mediaType: actualType,
+                    mimetype,
+                    filename,
+                    savedAs: savedFilename,
+                    url: `/media/${savedFilename}`,
+                    size: buffer.length
+                });
+            }
+
+            // Option 3: Stream directly
+            if (req.body.format === 'stream') {
+                res.setHeader('Content-Type', mimetype);
+                res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+                res.setHeader('Content-Length', buffer.length);
+                return res.send(buffer);
+            }
+
+        } catch (error) {
+            console.error('Media download error:', error);
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== GET PROFILE PICTURE URL ====================
+
+    router.get('/profile-picture/:jid', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId;
+        const { jid } = req.params;
+        const { type } = req.query; // 'preview' or 'image' (full)
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const targetJid = jid.includes('@') ? jid : `${formatPhoneNumber(jid)}@s.whatsapp.net`;
+            const pictureUrl = await session.sock.profilePictureUrl(targetJid, type || 'image');
+
+            res.status(200).json({
+                status: 'success',
+                jid: targetJid,
+                profilePictureUrl: pictureUrl
+            });
+        } catch (error) {
+            // User may not have profile picture
+            res.status(200).json({
+                status: 'success',
+                jid: jid,
+                profilePictureUrl: null,
+                note: 'Profile picture not available or privacy settings prevent access'
+            });
+        }
+    });
+
+    // ==================== QUOTED/REPLY MESSAGE ====================
+
+    router.post('/reply', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { to, text, quotedMessageId, quotedMessage } = req.body;
+
+        if (!to || !text || (!quotedMessageId && !quotedMessage)) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'to, text, and quotedMessageId (or quotedMessage) are required.'
+            });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const destination = to.includes('@') ? to : `${formatPhoneNumber(to)}@s.whatsapp.net`;
+
+            let messagePayload = { text };
+
+            // If full quoted message object provided
+            if (quotedMessage) {
+                messagePayload.quoted = quotedMessage;
+            } else {
+                // Build minimal quoted reference
+                messagePayload.quoted = {
+                    key: {
+                        remoteJid: destination,
+                        id: quotedMessageId
+                    }
+                };
+            }
+
+            const result = await session.sock.sendMessage(destination, messagePayload);
+
+            res.status(200).json({
+                status: 'success',
+                message: 'Reply sent',
+                messageId: result.key.id
+            });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== SEND MESSAGE WITH MENTION ====================
+
+    router.post('/mention', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { to, text, mentions } = req.body;
+
+        if (!to || !text || !mentions || !Array.isArray(mentions)) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'to, text, and mentions array are required.'
+            });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const destination = to.includes('@') ? to : `${to}@g.us`;
+            const mentionJids = mentions.map(m =>
+                m.includes('@') ? m : `${formatPhoneNumber(m)}@s.whatsapp.net`
+            );
+
+            const result = await session.sock.sendMessage(destination, {
+                text,
+                mentions: mentionJids
+            });
+
+            res.status(200).json({
+                status: 'success',
+                message: 'Message with mentions sent',
+                messageId: result.key.id
+            });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== SEND LINK WITH PREVIEW ====================
+
+    router.post('/link-preview', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { to, text, title, description, thumbnailUrl } = req.body;
+
+        if (!to || !text) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'to and text are required.'
+            });
+        }
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const destination = to.includes('@') ? to : `${formatPhoneNumber(to)}@s.whatsapp.net`;
+
+            // Extract URL from text
+            const urlMatch = text.match(/https?:\/\/[^\s]+/);
+            const matchedUrl = urlMatch ? urlMatch[0] : null;
+
+            const messagePayload = {
+                text,
+                linkPreview: title && matchedUrl ? {
+                    title: title,
+                    description: description || '',
+                    canonicalUrl: matchedUrl,
+                    matchedText: matchedUrl,
+                    thumbnailUrl: thumbnailUrl
+                } : undefined
+            };
+
+            const result = await session.sock.sendMessage(destination, messagePayload);
+
+            res.status(200).json({
+                status: 'success',
+                message: 'Message sent',
+                messageId: result.key.id
+            });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== GET JOINED GROUPS ====================
+
+    router.get('/groups', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId;
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            const groups = await session.sock.groupFetchAllParticipating();
+            const groupList = Object.values(groups).map(g => ({
+                id: g.id,
+                subject: g.subject,
+                owner: g.owner,
+                creation: g.creation,
+                desc: g.desc,
+                descId: g.descId,
+                restrict: g.restrict,
+                announce: g.announce,
+                size: g.size,
+                participants: g.participants?.length || 0
+            }));
+
+            res.status(200).json({
+                status: 'success',
+                count: groupList.length,
+                groups: groupList
+            });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
+        }
+    });
+
+    // ==================== SEARCH MESSAGES (requires store) ====================
+
+    router.post('/search', async (req, res) => {
+        const sessionId = req.sessionId || req.query.sessionId || req.body.sessionId;
+        const { jid, query, limit } = req.body;
+
+        const session = sessions.get(sessionId);
+        if (!session || !session.sock || session.status !== 'CONNECTED') {
+            return res.status(404).json({ status: 'error', message: `Session ${sessionId} not found or not connected.` });
+        }
+
+        try {
+            // Note: Search requires message store to be enabled
+            // This is a placeholder - actual implementation depends on store configuration
+            res.status(200).json({
+                status: 'success',
+                note: 'Message search requires store to be enabled. Currently not available.',
+                results: []
+            });
+        } catch (error) {
+            res.status(500).json({ status: 'error', message: error.message });
         }
     });
 

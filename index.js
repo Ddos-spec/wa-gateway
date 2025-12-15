@@ -1409,6 +1409,222 @@ async function connectToWhatsApp(sessionId) {
         }
     });
 
+    // --- Message Reactions Handler ---
+    sock.ev.on('messages.reaction', async (reactions) => {
+        const session = sessions.get(sessionId);
+        if (!session) return;
+
+        const defaultWebhookUrl = await getWebhookUrl(sessionId);
+        const settings = session.settings || {};
+        const hasWebhooks = settings.webhooks && settings.webhooks.length > 0;
+
+        if (!hasWebhooks && !defaultWebhookUrl) return;
+
+        for (const reaction of reactions) {
+            const payload = {
+                event: 'reaction',
+                sessionId,
+                messageId: reaction.key.id,
+                remoteJid: reaction.key.remoteJid,
+                participant: reaction.key.participant,
+                emoji: reaction.reaction?.text || null,
+                removed: !reaction.reaction?.text, // empty text means reaction removed
+                timestamp: Date.now()
+            };
+
+            log(`Reaction event: ${payload.emoji || 'removed'} on message ${payload.messageId}`, sessionId);
+
+            const allWebhookUrls = [];
+            if (settings.webhooks && Array.isArray(settings.webhooks)) {
+                allWebhookUrls.push(...settings.webhooks);
+            }
+            if (defaultWebhookUrl && !allWebhookUrls.includes(defaultWebhookUrl)) {
+                allWebhookUrls.push(defaultWebhookUrl);
+            }
+
+            for (const url of allWebhookUrls) {
+                try {
+                    await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' } });
+                } catch (error) {
+                    log(`Failed to send reaction webhook: ${error.message}`, sessionId);
+                }
+            }
+        }
+    });
+
+    // --- Presence Updates Handler ---
+    sock.ev.on('presence.update', async (presenceData) => {
+        const session = sessions.get(sessionId);
+        if (!session) return;
+
+        const defaultWebhookUrl = await getWebhookUrl(sessionId);
+        const settings = session.settings || {};
+        const hasWebhooks = settings.webhooks && settings.webhooks.length > 0;
+
+        if (!hasWebhooks && !defaultWebhookUrl) return;
+
+        const payload = {
+            event: 'presence',
+            sessionId,
+            jid: presenceData.id,
+            presences: presenceData.presences,
+            timestamp: Date.now()
+        };
+
+        log(`Presence update for ${presenceData.id}`, sessionId);
+
+        const allWebhookUrls = [];
+        if (settings.webhooks && Array.isArray(settings.webhooks)) {
+            allWebhookUrls.push(...settings.webhooks);
+        }
+        if (defaultWebhookUrl && !allWebhookUrls.includes(defaultWebhookUrl)) {
+            allWebhookUrls.push(defaultWebhookUrl);
+        }
+
+        for (const url of allWebhookUrls) {
+            try {
+                await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' } });
+            } catch (error) {
+                log(`Failed to send presence webhook: ${error.message}`, sessionId);
+            }
+        }
+    });
+
+    // --- Message Updates Handler (edits, deletes, poll votes) ---
+    sock.ev.on('messages.update', async (updates) => {
+        const session = sessions.get(sessionId);
+        if (!session) return;
+
+        const defaultWebhookUrl = await getWebhookUrl(sessionId);
+        const settings = session.settings || {};
+        const hasWebhooks = settings.webhooks && settings.webhooks.length > 0;
+
+        if (!hasWebhooks && !defaultWebhookUrl) return;
+
+        for (const update of updates) {
+            // Determine update type
+            let updateType = 'unknown';
+            if (update.update?.pollUpdates) {
+                updateType = 'poll_vote';
+            } else if (update.update?.message) {
+                updateType = 'message_edit';
+            } else if (update.update?.status === 5) {
+                updateType = 'message_delete';
+            }
+
+            const payload = {
+                event: 'message_update',
+                sessionId,
+                updateType,
+                messageId: update.key.id,
+                remoteJid: update.key.remoteJid,
+                participant: update.key.participant,
+                update: update.update,
+                timestamp: Date.now()
+            };
+
+            log(`Message update: ${updateType} for ${update.key.id}`, sessionId);
+
+            const allWebhookUrls = [];
+            if (settings.webhooks && Array.isArray(settings.webhooks)) {
+                allWebhookUrls.push(...settings.webhooks);
+            }
+            if (defaultWebhookUrl && !allWebhookUrls.includes(defaultWebhookUrl)) {
+                allWebhookUrls.push(defaultWebhookUrl);
+            }
+
+            for (const url of allWebhookUrls) {
+                try {
+                    await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' } });
+                } catch (error) {
+                    log(`Failed to send message update webhook: ${error.message}`, sessionId);
+                }
+            }
+        }
+    });
+
+    // --- Group Updates Handler ---
+    sock.ev.on('groups.update', async (updates) => {
+        const session = sessions.get(sessionId);
+        if (!session) return;
+
+        const defaultWebhookUrl = await getWebhookUrl(sessionId);
+        const settings = session.settings || {};
+        const hasWebhooks = settings.webhooks && settings.webhooks.length > 0;
+
+        if (!hasWebhooks && !defaultWebhookUrl) return;
+
+        for (const update of updates) {
+            const payload = {
+                event: 'group_update',
+                sessionId,
+                groupId: update.id,
+                subject: update.subject,
+                description: update.desc,
+                restrict: update.restrict,
+                announce: update.announce,
+                timestamp: Date.now()
+            };
+
+            log(`Group update for ${update.id}`, sessionId);
+
+            const allWebhookUrls = [];
+            if (settings.webhooks && Array.isArray(settings.webhooks)) {
+                allWebhookUrls.push(...settings.webhooks);
+            }
+            if (defaultWebhookUrl && !allWebhookUrls.includes(defaultWebhookUrl)) {
+                allWebhookUrls.push(defaultWebhookUrl);
+            }
+
+            for (const url of allWebhookUrls) {
+                try {
+                    await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' } });
+                } catch (error) {
+                    log(`Failed to send group update webhook: ${error.message}`, sessionId);
+                }
+            }
+        }
+    });
+
+    // --- Group Participants Update Handler ---
+    sock.ev.on('group-participants.update', async (update) => {
+        const session = sessions.get(sessionId);
+        if (!session) return;
+
+        const defaultWebhookUrl = await getWebhookUrl(sessionId);
+        const settings = session.settings || {};
+        const hasWebhooks = settings.webhooks && settings.webhooks.length > 0;
+
+        if (!hasWebhooks && !defaultWebhookUrl) return;
+
+        const payload = {
+            event: 'group_participants_update',
+            sessionId,
+            groupId: update.id,
+            participants: update.participants,
+            action: update.action, // 'add', 'remove', 'promote', 'demote'
+            timestamp: Date.now()
+        };
+
+        log(`Group participants update: ${update.action} in ${update.id}`, sessionId);
+
+        const allWebhookUrls = [];
+        if (settings.webhooks && Array.isArray(settings.webhooks)) {
+            allWebhookUrls.push(...settings.webhooks);
+        }
+        if (defaultWebhookUrl && !allWebhookUrls.includes(defaultWebhookUrl)) {
+            allWebhookUrls.push(defaultWebhookUrl);
+        }
+
+        for (const url of allWebhookUrls) {
+            try {
+                await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' } });
+            } catch (error) {
+                log(`Failed to send group participants webhook: ${error.message}`, sessionId);
+            }
+        }
+    });
+
     let lastQr = '';
 
     sock.ev.on('connection.update', async (update) => {
