@@ -26,7 +26,6 @@ system.log
 # Dependencies & Build
 node_modules/
 npm-debug.log
-package-lock.json
 
 # Media Files (user uploads)
 media/
